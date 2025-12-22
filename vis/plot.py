@@ -42,6 +42,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+from IPython.display import display
+from adjustText import adjust_text
+
 
 # -----------------------
 # Defaults / constants
@@ -160,6 +163,8 @@ def add_num_training_patches_mean(
             return xen_mean_num_patches * 44
         elif ds == "XeniumR":
             return xen_mean_num_patches * 43
+        elif ds =='VisiumR1-6':
+            return xen_mean_num_patches * 33
         elif ds == "broad":
             return brd_mean_num_patches * 6
         elif ds == "XeniumPR1_broad":
@@ -175,98 +180,6 @@ def add_num_training_patches_mean(
 
     out["num_training_patches_mean"] = out.apply(_compute, axis=1)
     return out
-
-# def add_num_training_patches(
-#     df_summary: pd.DataFrame,
-#     xenium_csv: str = "/project/simmons_hts/kxu/hest/hest_directory.csv",
-#     broad_csv: str = "/project/simmons_hts/kxu/hest/broad_directory.csv",
-# ) -> pd.DataFrame:
-#     """
-#     Compute num_training_patches_mean per dataset using only the sample IDs
-#     that belong to that dataset (case-insensitive substring match).
-
-#     Uses:
-#       - XeniumPR2/PR3 -> num_patches_100um
-#       - XeniumPR1 -> num_patches_100um_unfiltered
-#       - Segger, 50um, 25um variants use their matching columns
-#     """
-#     out = df_summary.copy()
-
-#     # ---- read metadata ----
-#     try:
-#         xen = pd.read_csv(xenium_csv)
-#     except Exception:
-#         xen = pd.DataFrame()
-
-#     try:
-#         brd = pd.read_csv(broad_csv)
-#     except Exception:
-#         brd = pd.DataFrame()
-
-#     # ---- helpers ----
-#     def _find_col_ci(df, target):
-#         if df.empty:
-#             return None
-#         lowmap = {c.lower(): c for c in df.columns}
-#         return lowmap.get(target.lower())
-
-#     def _find_any_col_ci(df, targets):
-#         for t in targets:
-#             col = _find_col_ci(df, t)
-#             if col is not None:
-#                 return col
-#         return None
-
-#     def _mean_for_dataset_substring(df, substring, col_candidates):
-#         """Compute mean only for rows whose sample_id contains substring."""
-#         if df.empty:
-#             return np.nan
-#         col = _find_any_col_ci(df, col_candidates)
-#         sample_col = _find_col_ci(df, "sample_id")
-#         if col is None or sample_col is None:
-#             return np.nan
-#         mask = df[sample_col].astype(str).str.contains(substring, case=False, na=False)
-#         vals = pd.to_numeric(df.loc[mask, col], errors="coerce").dropna()
-#         return vals.mean() if not vals.empty else np.nan
-
-#     # ---- compute per dataset ----
-#     def _compute(row):
-#         ds = str(row.get("dataset", "")).strip()
-#         # if ds == "pilot":
-#         #     return _mean_for_dataset_substring(xen,{"XeniumPR1S1ROI2", "XeniumPR1S1ROI3"}, ["num_patches_100um_unfiltered"])
-#         if ds == "XeniumPR1":
-#             return _mean_for_dataset_substring(xen, "XeniumPR1", ["num_patches_100um_unfiltered"]) * 14
-#         elif ds == "XeniumPR1_segger":
-#             return _mean_for_dataset_substring(xen, "XeniumPR1_segger", ["num_patches_100um"])
-#         elif ds == "XeniumPR1_50um":
-#             return _mean_for_dataset_substring(xen, "XeniumPR1", ["num_patches_50um"]) * 14
-#         elif ds == "XeniumPR1_25um":
-#             return _mean_for_dataset_substring(xen, "XeniumPR1", ["num_patches_25um"]) * 14
-#         elif ds == "XeniumPR2":
-#             return _mean_for_dataset_substring(xen, "XeniumPR2", ["num_patches_100um"]) * 7
-#         elif ds == "XeniumPR3":
-#             return _mean_for_dataset_substring(xen, "XeniumPR3", ["num_patches_100um"]) * 7
-#         elif ds == "XeniumPR":
-#             return _mean_for_dataset_substring(xen, "XeniumPR", ["num_patches_100um"]) * 28 # 31 sample, 3 test sets 
-#         elif ds == "broad":
-#             return _mean_for_dataset_substring(brd, "broad", ["num_patches_100um"]) * 6
-#         elif ds == "XeniumPR1_broad":
-#             a = _mean_for_dataset_substring(brd, "broad", ["num_patches_100um"]) * 7
-#             b = _mean_for_dataset_substring(xen, "XeniumPR1", ["num_patches_100um"]) * 15
-#             if pd.isna(a) and pd.isna(b):
-#                 return np.nan
-#             if pd.isna(b):
-#                 return a
-#             if pd.isna(a):
-#                 return b
-#             return (a + b) / 2
-#         elif ds == "broad_cell_centered":
-#             return _mean_for_dataset_substring(brd, "broad", ["num_patches_cell_centered"]) * 6
-#         else:
-#             return np.nan
-
-#     out["num_training_patches_mean"] = out.apply(_compute, axis=1)
-#     return out
 
 
 
@@ -389,12 +302,7 @@ def summarize_runs(root_dir):
     return df
 
 
-from pathlib import Path
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from IPython.display import display
-from adjustText import adjust_text
+
 
 
 def _default_outdir(outdir: str | None) -> Path:
@@ -428,7 +336,7 @@ def plot_summary_bar(best_df: pd.DataFrame,
     df["dataset"] = df["dataset"].astype(str).fillna("Unknown")
 
     datasets = sorted(df["dataset"].unique().tolist())
-    palette = plt.get_cmap("tab10", len(datasets))
+    palette = plt.get_cmap("tab20", len(datasets))
     color_map = {ds: palette(i) for i, ds in enumerate(datasets)}
 
     # Order: dataset then mean desc
@@ -503,7 +411,7 @@ def plot_summary_genes_vs_mean(best_df: pd.DataFrame,
         return None
 
     datasets = sorted(df["dataset"].dropna().unique().tolist())
-    cmap = plt.get_cmap("tab10", len(datasets))
+    cmap = plt.get_cmap("tab20", len(datasets))
     color_map = {ds: cmap(i) for i, ds in enumerate(datasets)}
 
     fig, ax = plt.subplots(figsize=(8, 6))
@@ -575,7 +483,7 @@ def plot_summary_patches_vs_mean(best_df: pd.DataFrame,
         return None
 
     datasets = sorted(df["dataset"].unique().tolist())
-    cmap = plt.get_cmap("tab10", len(datasets))
+    cmap = plt.get_cmap("tab20", len(datasets))
     color_map = {ds: cmap(i) for i, ds in enumerate(datasets)}
 
     fig, ax = plt.subplots(figsize=figsize)
@@ -747,10 +655,9 @@ def extract_best_model_gene_corrs(run: str,
 
 
 # -----------------------
-# Curated gene list (optional)
+# Curated gene list 
 # -----------------------
 
-import pandas as pd
 
 def annotate_genes_with_curated(df_genes: pd.DataFrame, path_meta = "/project/simmons_hts/kxu/hest/curated_gene_list.xlsx", case_insensitive: bool = True) -> pd.DataFrame:
     """
@@ -928,12 +835,6 @@ def merge_kfold_gene_corrs_with_test_metadata(df_genes: pd.DataFrame,
 def _format_title(prefix, dataset_name, encoder_name):
     return f"{prefix} | Data: {dataset_name} | Model: {encoder_name}"
 
-from pathlib import Path
-import json
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from IPython.display import display
 
 def compare_models(
     run: str,
@@ -1160,9 +1061,6 @@ def plot_corrs_by_sample(
     Returns:
         matplotlib.figure.Figure
     """
-    import pandas as pd
-    import seaborn as sns
-    import matplotlib.pyplot as plt
 
     df = df.copy()
 
