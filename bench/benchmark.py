@@ -319,7 +319,7 @@ def predict_single_split(train_split, test_split, args, save_dir, dataset_name, 
     probe_summary = {}
     probe_summary.update({'n_train': len(y_train), 'n_test': len(y_test)})
     probe_summary.update({key: val for key, val in probe_results.items()})
-    logger.info(probe_summary)
+    #logger.info(probe_summary)
     with open(os.path.join(save_dir, f'results.json'), 'w') as f:
         json.dump(probe_results, f, sort_keys=True, indent=4)
     with open(os.path.join(save_dir, f'summary.json'), 'w') as f:

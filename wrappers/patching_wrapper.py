@@ -5,14 +5,20 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 from PIL import Image
 import dask
-import hest
-from hest.HESTData import read_HESTData
-from hest import iter_hest
+
 
 import numpy as np
 import math
 
 import scanpy as sc
+
+# import monkeypatch for qc
+from gutdecoder.utils.patch.qc_patch import apply_qc_patch
+apply_qc_patch(fallback=5) 
+
+import hest
+from hest.HESTData import read_HESTData
+from hest import iter_hest
 
 def load_hest_sample(sample_dir: Path):
     """
@@ -60,7 +66,7 @@ def load_hest_sample(sample_dir: Path):
     return st
 
 def patch_hest_samples(
-    broad_root: Path = Path("/project/simmons_hts/kxu/hest/xenium_data/broad/"),
+    root: Path = Path("/project/simmons_hts/kxu/hest/xenium_data/broad/"),
     ids=None,
     target_patch_size: int = 224,
     target_pixel_size: float = 0.5,
@@ -79,11 +85,11 @@ def patch_hest_samples(
           metrics.json (optional)
           tissue_seg/                 (optional; used as mask if present)
     """
-    broad_root = Path(broad_root)
+    root = Path(root)
 
     # auto-detect sample IDs (folder names)
     if ids is None:
-        ids = sorted([p.name for p in broad_root.iterdir() if p.is_dir()])
+        ids = sorted([p.name for p in root.iterdir() if p.is_dir()])
         if verbose:
             print(f"[INFO] Auto-detected {len(ids)} sample folders: {ids}")
 
@@ -91,7 +97,7 @@ def patch_hest_samples(
         raise ValueError("No sample folders found to patch under the specified root.")
 
     for sample_id in ids:
-        sample_dir = broad_root / sample_id
+        sample_dir = root / sample_id
         if not sample_dir.exists():
             print(f"[WARN] Skipping {sample_id}: folder does not exist at {sample_dir}")
             continue
