@@ -107,7 +107,7 @@ class CTransPathInferenceEncoder(InferenceEncoder):
     def _build(self, weights_path):
         from torch import nn
 
-        from .ctranspath.ctran import ctranspath
+        from hest.bench.cpath_model_zoo.ctranspath.ctran import ctranspath
         
         model = ctranspath(img_size=224)
         model.head = nn.Identity()
@@ -207,7 +207,7 @@ class H0MiniInferenceEncoder(InferenceEncoder):
 
 class RemedisInferenceEncoder(InferenceEncoder):
     def _build(self, weights_path):
-        from .remedis.remedis_models import resnet152_remedis
+        from hest.bench.cpath_model_zoo.ctranspath.remedis.remedis_models import resnet152_remedis
         ckpt_path = weights_path
         model = resnet152_remedis(ckpt_path=ckpt_path, pretrained=True)
         precision = torch.float32
@@ -443,7 +443,6 @@ class VirchowInferenceEncoder(InferenceEncoder):
         
 
 class Virchow2InferenceEncoder(InferenceEncoder):
-    import timm
     
     def _build(
         self,

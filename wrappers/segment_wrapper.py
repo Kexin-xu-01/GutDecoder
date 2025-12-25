@@ -4,18 +4,60 @@ from PIL import Image
 import matplotlib.pyplot as plt
 
 import dask
-import hest
-from hest.HESTData import read_HESTData
-from pathlib import Path
 import torch
 
 import warnings
 import numpy as np
 import tifffile as tiff
 
-from hestcore.wsi import NumpyWSI
+
 import scanpy as sc
 
+
+# Monkey patch calculate_qc_metrics so that it won't fail even if very few features
+_original_calculate_qc_metrics = sc.pp.calculate_qc_metrics
+
+
+def _patched_calculate_qc_metrics(
+    adata,
+    *args,
+    percent_top=(10),
+    **kwargs,
+):
+    """
+    Patch scanpy.pp.calculate_qc_metrics so it works with small n_vars.
+    """
+
+    # Number of features (genes)
+    n_vars = adata.n_vars if hasattr(adata, "n_vars") else adata.shape[1]
+
+    if percent_top is not None:
+        # Filter percent_top to valid values
+        percent_top = [p for p in percent_top if p <= n_vars]
+
+        # If nothing valid remains, choose a safe fallback
+        if not percent_top:
+            # Option 1: disable percent_top entirely
+            percent_top = None
+
+            # Option 2 (alternative): force a small value
+            # percent_top = [min(5, n_vars)]
+
+    return _original_calculate_qc_metrics(
+        adata,
+        *args,
+        percent_top=percent_top,
+        **kwargs,
+    )
+
+
+# Monkey-patch Scanpy
+sc.pp.calculate_qc_metrics = _patched_calculate_qc_metrics
+
+import hest
+from hest import HESTData
+from hest.HESTData import read_HESTData
+from hestcore.wsi import NumpyWSI
 
 def load_hest_sample(sample_dir: Path):
     """
@@ -47,6 +89,8 @@ def load_hest_sample(sample_dir: Path):
 
     # load AnnData
     adata = sc.read_h5ad(adata_path)
+
+    print('reading HESTData')
 
     # construct HEST object (assuming HESTSample or similar API exists)
     st = read_HESTData(
@@ -91,7 +135,8 @@ def segment_hest_tissue(hest_root: Path, ids=None, method="deep",target_pxl_size
 
         try:
             # load the HEST object (using aligned_adata.h5ad + associated files)
-            st = load_hest_sample(sample_dir)  # <-- replace with your loader
+            st = load_hest_sample(sample_dir)  
+            print('hest sample loaded')
 
             with warnings.catch_warnings():
                 warnings.filterwarnings(
@@ -101,8 +146,11 @@ def segment_hest_tissue(hest_root: Path, ids=None, method="deep",target_pxl_size
                 )
 
                 st.segment_tissue(method=method,target_pxl_size=target_pxl_size)
+                print('tissue segmentation completed')
                 st.save_tissue_contours(tissue_dir, sample_id)
+                print('tissue contour saved')
                 st.save_tissue_vis(tissue_dir, sample_id)
+                print('tissue visualisation saved')
 
             print(f"[INFO] Segmentation complete for {sample_id} → {tissue_dir}")
         except Exception as e:
