@@ -1,4 +1,4 @@
-# HEST-Wrapper
+# GutDecoder
 
 A lightweight wrapper and extension around the **HEST** codebase (Mahmood Lab) that fixes practical bugs, adds support for new H&E foundation models, and provides utilities for visualisation, evaluation, and summary table generation.
 
