@@ -113,6 +113,7 @@ def add_num_training_patches_mean(
     xen_mean_num_patches_segger = _safe_mean_ci(xen, ["num_patches_100um"])
     xen_mean_num_patches_50um = _safe_mean_ci(xen, ["num_patches_50um"])
     xen_mean_num_patches_25um = _safe_mean_ci(xen, ["num_patches_25um"])
+    num_patches_cell_100um = _safe_mean_ci(xen, ["num_patches_cell_100um"])
 
     # pilot subset (two sample IDs)
     pilot_ids = {"XeniumPR1S1ROI2", "XeniumPR1S1ROI3"}
@@ -131,8 +132,10 @@ def add_num_training_patches_mean(
         ds = str(row.get("dataset", "")).strip()
         if ds == "pilot":
             return xen_pilot_mean
-        elif ds == "XeniumPR1":
+        elif ds == "XeniumPR1_deprecated":
             return xen_mean_num_patches * 14
+        elif ds == "XeniumPR1":
+            return xen_mean_num_patches_segger * 14
         elif ds == "XeniumPR1_segger":
             return xen_mean_num_patches_segger * 14
         elif ds == "XeniumPR1_50um":
@@ -175,6 +178,8 @@ def add_num_training_patches_mean(
             return (0 if pd.isna(a) else a + 0) / 2 if pd.isna(b) else ((a + b) / 2)
         elif ds == "broad_cell_centered":
             return brd_mean_cell_centered * 6
+        elif ds == "XeniumPR1-3_cell":
+            return num_patches_cell_100um * 6
         else:
             return np.nan
 
@@ -268,6 +273,36 @@ def summarize_runs(root_dir):
                     highest_std = best_entry["pearson_std"]
                     best_model = best_entry["encoder_name"]
 
+        # -------------------
+        # Discover encoders from enc_results.json files under run_path/<dataset>/
+        # -------------------
+        encoders_set = set()
+        for dirpath, dirnames, filenames in os.walk(run_path):
+            # only consider enc_results.json files (case-sensitive as provided)
+            if "enc_results.json" in filenames:
+                enc_results_path = os.path.join(dirpath, "enc_results.json")
+                try:
+                    with open(enc_results_path, "r") as ef:
+                        payload = json.load(ef)
+                    # payload expected to have top-level "results": [ { "encoder_name": ... }, ... ]
+                    if isinstance(payload, dict):
+                        results = payload.get("results", [])
+                        if isinstance(results, list):
+                            for entry in results:
+                                if isinstance(entry, dict):
+                                    enc_name = entry.get("encoder_name") or entry.get("name")
+                                    if enc_name:
+                                        encoders_set.add(str(enc_name))
+                                # if the entry is a plain string, include it directly
+                                elif isinstance(entry, str):
+                                    encoders_set.add(entry)
+                except Exception:
+                    # ignore malformed enc_results.json and continue
+                    pass
+
+        encoders_list = sorted(encoders_set) if encoders_set else None
+        encoders_str = ", ".join(encoders_list) if encoders_list else None
+
         summary.append({
             "run": run,
             "gene_list": gene_list,
@@ -275,7 +310,8 @@ def summarize_runs(root_dir):
             "alpha": config_data.get("alpha"),
             "batch_size": config_data.get("batch_size"),
             "dimreduce": config_data.get("dimreduce"),
-            "encoders": ", ".join(config_data.get("encoders", [])) if config_found else None,
+            #"encoders": ", ".join(config_data.get("encoders", [])) if config_found else None,
+            "encoders": encoders_str,
             "normalize": config_data.get("normalize"),
             "library_size_normalize": config_data.get("library_size_normalize", False), # ensure library_size_normalize defaults to False if missing 
             "latent_dim": config_data.get("latent_dim"),
@@ -300,9 +336,6 @@ def summarize_runs(root_dir):
         df = df.sort_values(by=["dataset", 'gene_list', "highest_pearson_mean"], ascending=[True, True, False]).reset_index(drop=True)
 
     return df
-
-
-
 
 
 def _default_outdir(outdir: str | None) -> Path:
@@ -975,8 +1008,8 @@ def plot_gene_correlation_barplot_grouped(df_genes, group_by='cell_type', show_m
     Returns:
         matplotlib.figure.Figure: Figure object for further saving or manipulation.
     """
-    if group_by not in ['cell_type', 'condition', 'panel','tcr','coeliac']:
-        raise ValueError("group_by must be 'cell_type' or 'condition' or 'panel' or 'tcr' or'coeliac'")
+    if group_by not in ['cell_type', 'condition', 'panel','tcr','coeliac','run_id']:
+        raise ValueError("group_by must be 'cell_type' or 'condition' or 'panel' or 'tcr' or'coeliac' or 'run_id'")
     
     # Filter out rows where grouping column is NA
     df_plot = df_genes[df_genes[group_by].notna()].copy()

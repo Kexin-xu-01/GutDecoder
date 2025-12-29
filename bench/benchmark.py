@@ -29,7 +29,7 @@ from hestcore.datasets import H5HESTDataset
 from huggingface_hub import snapshot_download
 
 from gutdecoder.bench.st_dataset import load_adata
-from hest.bench.trainer import train_test_reg
+from gutdecoder.bench.trainer import train_test_reg
 from hest.bench.utils.file_utils import (read_assets_from_h5, save_hdf5,
                                          save_pkl)
 from hest.bench.utils.utils import merge_dict, get_current_time
