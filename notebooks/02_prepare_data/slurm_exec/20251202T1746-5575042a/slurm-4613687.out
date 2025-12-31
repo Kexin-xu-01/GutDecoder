@@ -1,0 +1,183 @@
+0.0.1
+🚀 Running segmentation for: /project/simmons_hts/kxu/hest/visium_data/VisiumR1/slide1
+[INFO] Auto-detected 4 samples from /project/simmons_hts/kxu/hest/visium_data/VisiumR1/slide1: ['ROI4', 'ROI1', 'ROI2', 'ROI3']
+[ERROR] Failed segmentation for ROI4: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR1/slide1/ROI4/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI1: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR1/slide1/ROI1/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI2: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR1/slide1/ROI2/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI3: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR1/slide1/ROI3/aligned_cells.h5ad
+🚀 Running segmentation for: /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide1
+[INFO] Auto-detected 4 samples from /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide1: ['ROI4', 'ROI1', 'ROI2', 'ROI3']
+[ERROR] Failed segmentation for ROI4: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide1/ROI4/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI1: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide1/ROI1/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI2: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide1/ROI2/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI3: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide1/ROI3/aligned_cells.h5ad
+🚀 Running segmentation for: /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide2
+[INFO] Auto-detected 4 samples from /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide2: ['ROI4', 'ROI1', 'ROI2', 'ROI3']
+[ERROR] Failed segmentation for ROI4: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide2/ROI4/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI1: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide2/ROI1/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI2: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide2/ROI2/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI3: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide2/ROI3/aligned_cells.h5ad
+🚀 Running segmentation for: /project/simmons_hts/kxu/hest/visium_data/VisiumR3/slide1
+[INFO] Auto-detected 4 samples from /project/simmons_hts/kxu/hest/visium_data/VisiumR3/slide1: ['ROI4', 'ROI1', 'ROI2', 'ROI3']
+[ERROR] Failed segmentation for ROI4: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR3/slide1/ROI4/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI1: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR3/slide1/ROI1/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI2: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR3/slide1/ROI2/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI3: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR3/slide1/ROI3/aligned_cells.h5ad
+🚀 Running segmentation for: /project/simmons_hts/kxu/hest/visium_data/VisiumR4/slide1
+[INFO] Auto-detected 4 samples from /project/simmons_hts/kxu/hest/visium_data/VisiumR4/slide1: ['ROI4', 'ROI1', 'ROI2', 'ROI3']
+[ERROR] Failed segmentation for ROI4: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR4/slide1/ROI4/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI1: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR4/slide1/ROI1/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI2: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR4/slide1/ROI2/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI3: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR4/slide1/ROI3/aligned_cells.h5ad
+🚀 Running segmentation for: /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide1
+[INFO] Auto-detected 4 samples from /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide1: ['ROI4', 'ROI1', 'ROI2', 'ROI3']
+[ERROR] Failed segmentation for ROI4: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide1/ROI4/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI1: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide1/ROI1/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI2: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide1/ROI2/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI3: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide1/ROI3/aligned_cells.h5ad
+🚀 Running segmentation for: /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide2
+[INFO] Auto-detected 3 samples from /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide2: ['ROI1', 'ROI2', 'ROI3']
+[ERROR] Failed segmentation for ROI1: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide2/ROI1/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI2: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide2/ROI2/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI3: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide2/ROI3/aligned_cells.h5ad
+🚀 Running segmentation for: /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide1
+[INFO] Auto-detected 4 samples from /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide1: ['ROI4', 'ROI1', 'ROI2', 'ROI3']
+[ERROR] Failed segmentation for ROI4: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide1/ROI4/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI1: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide1/ROI1/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI2: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide1/ROI2/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI3: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide1/ROI3/aligned_cells.h5ad
+🚀 Running segmentation for: /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide2
+[INFO] Auto-detected 4 samples from /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide2: ['ROI4', 'ROI1', 'ROI2', 'ROI3']
+[ERROR] Failed segmentation for ROI4: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide2/ROI4/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI1: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide2/ROI1/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI2: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide2/ROI2/aligned_cells.h5ad
+[ERROR] Failed segmentation for ROI3: Missing /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide2/ROI3/aligned_cells.h5ad
+CBB Profiling started Tue Dec  2 17:46:10 2025
+SLURM_JOB_ID		4613687
+REQ_CPU_CORES		10
+REQ_MEMORY_GB		5.000000
+Starting profiling...
+
+                                                                                
+                                                                                
+                                   CPU (cores)                                  
+  10 +----------------------------------------------------------------------+   
+     |         +         +         +          +         +         +         |   
+     |                                                                      |   
+     |                                                                      |   
+     |                                                                      |   
+   8 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+     |                                                                      |   
+   6 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+     |                                                                      |   
+     |                                                                      |   
+   4 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+     |                                                                      |   
+   2 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+     | #                                                                    |   
+     |# #################################################################   |   
+   0 +----------------------------------------------------------------------+   
+     0         5         10        15         20        25        30        35  
+                               Job profiling step                               
+                                                                                
+
+                                                                                
+                                                                                
+                                    Memory (GB)                                 
+    5 +---------------------------------------------------------------------+   
+      |         +         +         +         +         +         +         |   
+  4.5 |-+                                                                 +-|   
+      |                                                                     |   
+      |                                                                     |   
+    4 |-+                                                                 +-|   
+      |                                                                     |   
+  3.5 |-+                                                                 +-|   
+      |                                                                     |   
+    3 |-+                                                                 +-|   
+      |                                                                     |   
+  2.5 |-+                                                                 +-|   
+      |                                                                     |   
+      |                                                                     |   
+    2 |-+                                                                 +-|   
+      |                                                                     |   
+  1.5 |-+                                                                 +-|   
+      |                                                                     |   
+    1 |-+                                                                 +-|   
+      |                                                                     |   
+      |                            ######################################   |   
+  0.5 |-+                  ########                                       +-|   
+      |        ############         +         +         +         +         |   
+    0 +---------------------------------------------------------------------+   
+      0         5         10        15        20        25        30        35  
+                                Job profiling step                              
+                                                                                
+
+                                                                                
+                                                                                
+                                  Data read (GB)                                
+    1 +---------------------------------------------------------------------+   
+      |         +         +         +         +         +         +         |   
+      |                                                                     |   
+      |                                                                     |   
+      |                                                                     |   
+      |                                                                     |   
+  0.5 |-+                                                                 +-|   
+      |                                                                     |   
+      |                                                                     |   
+      |                                                                     |   
+      |                                                                     |   
+    0 |################################################################## +-|   
+      |                                                                     |   
+      |                                                                     |   
+      |                                                                     |   
+      |                                                                     |   
+      |                                                                     |   
+ -0.5 |-+                                                                 +-|   
+      |                                                                     |   
+      |                                                                     |   
+      |                                                                     |   
+      |                                                                     |   
+      |         +         +         +         +         +         +         |   
+   -1 +---------------------------------------------------------------------+   
+      0         5         10        15        20        25        30        35  
+                                Job profiling step                              
+                                                                                
+
+                                                                                
+                                                                                
+                                   Data written (GB)                            
+  0.00016 +-----------------------------------------------------------------+   
+          |        +         +        +         +        +         +    #   |   
+          |                                                            #    |   
+  0.00014 |-+                                                         #   +-|   
+          |                                                          #      |   
+          |                                                ##########       |   
+  0.00012 |-+                                             #               +-|   
+          |                                     ##########                  |   
+          |                                    #                            |   
+   0.0001 |-+                         #########                           +-|   
+          |                          #                                      |   
+    8e-05 |-+                   #####                                     +-|   
+          |                #####                                            |   
+          |               #                                                 |   
+    6e-05 |-+   ##########                                                +-|   
+          |    #                                                            |   
+          |   #                                                             |   
+    4e-05 |-+#                                                            +-|   
+          |  #                                                              |   
+          | #                                                               |   
+    2e-05 |-#                                                             +-|   
+          |#                                                                |   
+          |#       +         +        +         +        +         +        |   
+        0 +-----------------------------------------------------------------+   
+          0        5         10       15        20       25        30       35  
+                                  Job profiling step                            
+                                                                                

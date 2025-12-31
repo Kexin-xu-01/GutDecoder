@@ -1,0 +1,207 @@
+Loading python-cbrg/current
+  Loading requirement: python-base/3.11.13
+/package/python-cbrg/current/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:117: ImplicitModificationWarning: Transforming to str index.
+  warnings.warn("Transforming to str index.", ImplicitModificationWarning)
+/package/python-cbrg/current/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:117: ImplicitModificationWarning: Transforming to str index.
+  warnings.warn("Transforming to str index.", ImplicitModificationWarning)
+/package/python-cbrg/current/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+/package/python-cbrg/current/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:117: ImplicitModificationWarning: Transforming to str index.
+  warnings.warn("Transforming to str index.", ImplicitModificationWarning)
+/package/python-cbrg/current/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+/package/python-cbrg/current/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:117: ImplicitModificationWarning: Transforming to str index.
+  warnings.warn("Transforming to str index.", ImplicitModificationWarning)
+/package/python-cbrg/current/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+/package/python-cbrg/current/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:117: ImplicitModificationWarning: Transforming to str index.
+  warnings.warn("Transforming to str index.", ImplicitModificationWarning)
+/package/python-cbrg/current/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+/package/python-cbrg/current/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:117: ImplicitModificationWarning: Transforming to str index.
+  warnings.warn("Transforming to str index.", ImplicitModificationWarning)
+/package/python-cbrg/current/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+/package/python-cbrg/current/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:117: ImplicitModificationWarning: Transforming to str index.
+  warnings.warn("Transforming to str index.", ImplicitModificationWarning)
+/package/python-cbrg/current/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+/package/python-cbrg/current/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:117: ImplicitModificationWarning: Transforming to str index.
+  warnings.warn("Transforming to str index.", ImplicitModificationWarning)
+/package/python-cbrg/current/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+[INFO] Processing DC1.zarr...
+[ERROR] Failed on DC1.zarr: 'transcripts'
+[INFO] Processing DC5.zarr...
+[INFO] Pixel size (um): 0.2125
+saving to pyramidal tiff... can be slow
+[INFO] Saved results to /project/simmons_hts/kxu/hest/xenium_data/broad/DC5
+[INFO] Processing UC1_I.zarr...
+[INFO] Pixel size (um): 0.2125
+saving to pyramidal tiff... can be slow
+[INFO] Saved results to /project/simmons_hts/kxu/hest/xenium_data/broad/UC1_I
+[INFO] Processing UC1_NI.zarr...
+[INFO] Pixel size (um): 0.2125
+saving to pyramidal tiff... can be slow
+[INFO] Saved results to /project/simmons_hts/kxu/hest/xenium_data/broad/UC1_NI
+[INFO] Processing UC6_I.zarr...
+[INFO] Pixel size (um): 0.2125
+saving to pyramidal tiff... can be slow
+[INFO] Saved results to /project/simmons_hts/kxu/hest/xenium_data/broad/UC6_I
+[INFO] Processing UC6_NI.zarr...
+[INFO] Pixel size (um): 0.2125
+saving to pyramidal tiff... can be slow
+[INFO] Saved results to /project/simmons_hts/kxu/hest/xenium_data/broad/UC6_NI
+[INFO] Processing UC7_I.zarr...
+[INFO] Pixel size (um): 0.2125
+saving to pyramidal tiff... can be slow
+[INFO] Saved results to /project/simmons_hts/kxu/hest/xenium_data/broad/UC7_I
+[INFO] Processing UC9_I.zarr...
+[INFO] Pixel size (um): 0.2125
+saving to pyramidal tiff... can be slow
+[INFO] Saved results to /project/simmons_hts/kxu/hest/xenium_data/broad/UC9_I
+CBB Profiling started Thu Sep 18 00:37:35 2025
+SLURM_JOB_ID		4085037
+REQ_CPU_CORES		10
+REQ_MEMORY_GB		50.000000
+Starting profiling...
+
+                                                                                
+                                                                                
+                                   CPU (cores)                                  
+  10 +----------------------------------------------------------------------+   
+     |      +      +      +      +       +      +      +      +      +      |   
+     |                                                                      |   
+     |                                                                      |   
+     |                                                                      |   
+   8 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+     |                                                                      |   
+   6 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+     |                                                                      |   
+     |                                                                      |   
+   4 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+     |                                                                      |   
+   2 |#+                                                                  +-|   
+     |##                                                                    |   
+     | ################################################################     |   
+     |                                                     ##               |   
+     |      +      +      +      +       +      +      +      +      +      |   
+   0 +----------------------------------------------------------------------+   
+     0     200    400    600    800     1000   1200   1400   1600   1800   2000 
+                               Job profiling step                               
+                                                                                
+
+                                                                                
+                                                                                
+                                   Memory (GB)                                  
+  50 +----------------------------------------------------------------------+   
+     |      +      +      +      +       +      +      +      +      +      |   
+  45 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+  40 |-+       ##       #        ##                          ##           +-|   
+     |         ##      ##        ##         #                ##             |   
+  35 |-+       ##      ##        ##        ##                ##           +-|   
+     |         ##      ##        ##        ##                ##             |   
+  30 |-+       ##      ##        ##        ##       ##       ##           +-|   
+     |        ###      ##        ##        ##       ##       ## #######     |   
+  25 |-+      ###########       #############       ##       ###      #   +-|   
+     |        # ##    ### ##########      ###       ##      ####      #     |   
+     | ######## ##    ### #    #####      ### ##################      #     |   
+  20 |###    ## ##    #####    ## #       #####    ####    ## #       #   +-|   
+     |###    ##          #     ## #       # ##     ####    ##         #     |   
+  15 |##     ##          #     ##           ##     # #     ##         #   +-|   
+     |#                                     #      # #     #          #     |   
+  10 |#+                                                              #   +-|   
+     |#                                                               #     |   
+     |                                                                #     |   
+   5 |-+                                                              #   +-|   
+     |      +      +      +      +       +      +      +      +      +#     |   
+   0 +----------------------------------------------------------------------+   
+     0     200    400    600    800     1000   1200   1400   1600   1800   2000 
+                               Job profiling step                               
+                                                                                
+
+                                                                                
+                                                                                
+                                    Data read (GB)                              
+  0.00045 +-----------------------------------------------------------------+   
+          |      +     +      +     +      +      +     +      +     +      |   
+          |                                                            #    |   
+   0.0004 |-+                                                          #  +-|   
+          |                                          ###################    |   
+  0.00035 |-+                                        #                    +-|   
+          |                                  #########                      |   
+          |                                  #                              |   
+   0.0003 |-+                                #                            +-|   
+          |                          #########                              |   
+  0.00025 |-+                     ####                                    +-|   
+          |                       #                                         |   
+          |                       #                                         |   
+   0.0002 |-+                     #                                       +-|   
+          |                       #                                         |   
+  0.00015 |-+                     #                                       +-|   
+          |               #########                                         |   
+          |               #                                                 |   
+   0.0001 |-+        ######                                               +-|   
+          |       ####                                                      |   
+    5e-05 |-+     #                                                       +-|   
+          |       #                                                         |   
+          |      +#    +      +     +      +      +     +      +     +      |   
+        0 +-----------------------------------------------------------------+   
+          0     200   400    600   800    1000   1200  1400   1600  1800   2000 
+                                  Job profiling step                            
+                                                                                
+
+                                                                                
+                                                                                
+                                Data written (GB)                               
+  40 +----------------------------------------------------------------------+   
+     |      +      +      +      +       +      +      +      +      +#     |   
+     |                                                               ##     |   
+  35 |-+                                                          ####    +-|   
+     |                                                          ###         |   
+     |                                                     ######           |   
+  30 |-+                                                 ###              +-|   
+     |                                                 ###                  |   
+     |                                             #####                    |   
+  25 |-+                                        ####                      +-|   
+     |                                        ###                           |   
+  20 |-+                                  #####                           +-|   
+     |                                   ##                                 |   
+     |                                ####                                  |   
+  15 |-+                       ########                                   +-|   
+     |                         #                                            |   
+     |                      ####                                            |   
+  10 |-+              #######                                             +-|   
+     |                #                                                     |   
+     |              ###                                                     |   
+   5 |-+     ########                                                     +-|   
+     |       #                                                              |   
+     |    ####     +      +      +       +      +      +      +      +      |   
+   0 +----------------------------------------------------------------------+   
+     0     200    400    600    800     1000   1200   1400   1600   1800   2000 
+                               Job profiling step                               
+                                                                                

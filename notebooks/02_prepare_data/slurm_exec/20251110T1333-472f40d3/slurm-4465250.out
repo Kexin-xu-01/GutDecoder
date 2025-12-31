@@ -1,0 +1,358 @@
+0.0.1
+Processing /project/simmons_hts/kxu/hest/xenium_data/XeniumR3/slide1...
+[INFO] Auto-detected 5 sample folders: ['ROI3', 'ROI4', 'ROI5', 'ROI6', 'ROI7']
+<hest.HESTData.HESTData object at 0x7758be68c6d0>
+        'pixel_size' is 0.22046495683352338
+        'wsi' is <width=41886, height=42170, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI3: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI3: /project/simmons_hts/kxu/hest/xenium_data/XeniumR3/slide1/ROI3/patches/ROI3.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR3/slide1/ROI3/patches_vis/ROI3_patch_vis.png
+<hest.HESTData.HESTData object at 0x7758be0bd190>
+        'pixel_size' is 0.22047010793284733
+        'wsi' is <width=11699, height=19533, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI4: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI4: /project/simmons_hts/kxu/hest/xenium_data/XeniumR3/slide1/ROI4/patches/ROI4.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR3/slide1/ROI4/patches_vis/ROI4_patch_vis.png
+<hest.HESTData.HESTData object at 0x7758be1a6410>
+        'pixel_size' is 0.22044514473987345
+        'wsi' is <width=33258, height=15199, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI5: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI5: /project/simmons_hts/kxu/hest/xenium_data/XeniumR3/slide1/ROI5/patches/ROI5.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR3/slide1/ROI5/patches_vis/ROI5_patch_vis.png
+<hest.HESTData.HESTData object at 0x7758be1265d0>
+        'pixel_size' is 0.2205360200734809
+        'wsi' is <width=39014, height=24936, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI6: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI6: /project/simmons_hts/kxu/hest/xenium_data/XeniumR3/slide1/ROI6/patches/ROI6.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR3/slide1/ROI6/patches_vis/ROI6_patch_vis.png
+<hest.HESTData.HESTData object at 0x7758be261a10>
+        'pixel_size' is 0.2203766031671107
+        'wsi' is <width=21749, height=15239, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI7: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI7: /project/simmons_hts/kxu/hest/xenium_data/XeniumR3/slide1/ROI7/patches/ROI7.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR3/slide1/ROI7/patches_vis/ROI7_patch_vis.png
+Processing /project/simmons_hts/kxu/hest/xenium_data/XeniumR3/slide2...
+[INFO] Auto-detected 3 sample folders: ['ROI10', 'ROI11', 'ROI12']
+<hest.HESTData.HESTData object at 0x7758be1c2dd0>
+        'pixel_size' is 0.22056590099053444
+        'wsi' is <width=34677, height=22756, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI10: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI10: /project/simmons_hts/kxu/hest/xenium_data/XeniumR3/slide2/ROI10/patches/ROI10.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR3/slide2/ROI10/patches_vis/ROI10_patch_vis.png
+<hest.HESTData.HESTData object at 0x7758be289290>
+        'pixel_size' is 0.22060630352127744
+        'wsi' is <width=37566, height=32485, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI11: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI11: /project/simmons_hts/kxu/hest/xenium_data/XeniumR3/slide2/ROI11/patches/ROI11.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR3/slide2/ROI11/patches_vis/ROI11_patch_vis.png
+[ERROR] Missing required file(s) for ROI12: Missing /project/simmons_hts/kxu/hest/xenium_data/XeniumR3/slide2/ROI12/aligned_adata.h5ad
+Skipping /project/simmons_hts/kxu/hest/xenium_data/XeniumR4/slide1 (not found)
+Skipping /project/simmons_hts/kxu/hest/xenium_data/XeniumR4/slide2 (not found)
+Processing /project/simmons_hts/kxu/hest/xenium_data/XeniumR5/slide1...
+[INFO] Auto-detected 6 sample folders: ['ROI1', 'ROI2', 'ROI3', 'ROI4', 'ROI5', 'ROI6']
+<hest.HESTData.HESTData object at 0x7758bb08d4d0>
+        'pixel_size' is 0.22047873952147562
+        'wsi' is <width=38992, height=40048, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI1: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI1: /project/simmons_hts/kxu/hest/xenium_data/XeniumR5/slide1/ROI1/patches/ROI1.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR5/slide1/ROI1/patches_vis/ROI1_patch_vis.png
+<hest.HESTData.HESTData object at 0x7758be055d90>
+        'pixel_size' is 0.22048030613236622
+        'wsi' is <width=31820, height=30346, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI2: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI2: /project/simmons_hts/kxu/hest/xenium_data/XeniumR5/slide1/ROI2/patches/ROI2.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR5/slide1/ROI2/patches_vis/ROI2_patch_vis.png
+<hest.HESTData.HESTData object at 0x7758be05fb50>
+        'pixel_size' is 0.22046137763722476
+        'wsi' is <width=15995, height=21678, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI3: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI3: /project/simmons_hts/kxu/hest/xenium_data/XeniumR5/slide1/ROI3/patches/ROI3.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR5/slide1/ROI3/patches_vis/ROI3_patch_vis.png
+<hest.HESTData.HESTData object at 0x7758ba2e83d0>
+        'pixel_size' is 0.22041625228967074
+        'wsi' is <width=17443, height=23838, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI4: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI4: /project/simmons_hts/kxu/hest/xenium_data/XeniumR5/slide1/ROI4/patches/ROI4.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR5/slide1/ROI4/patches_vis/ROI4_patch_vis.png
+<hest.HESTData.HESTData object at 0x7758be359590>
+        'pixel_size' is 0.22050261155464984
+        'wsi' is <width=39005, height=35712, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI5: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI5: /project/simmons_hts/kxu/hest/xenium_data/XeniumR5/slide1/ROI5/patches/ROI5.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR5/slide1/ROI5/patches_vis/ROI5_patch_vis.png
+<hest.HESTData.HESTData object at 0x7758be41ee90>
+        'pixel_size' is 0.22042553260473574
+        'wsi' is <width=31858, height=20586, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI6: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI6: /project/simmons_hts/kxu/hest/xenium_data/XeniumR5/slide1/ROI6/patches/ROI6.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR5/slide1/ROI6/patches_vis/ROI6_patch_vis.png
+Processing /project/simmons_hts/kxu/hest/xenium_data/XeniumR5/slide2...
+[INFO] Auto-detected 5 sample folders: ['ROI10', 'ROI11', 'ROI7', 'ROI8', 'ROI9']
+<hest.HESTData.HESTData object at 0x7758be387d10>
+        'pixel_size' is 0.2205301350158302
+        'wsi' is <width=26071, height=42174, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI10: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI10: /project/simmons_hts/kxu/hest/xenium_data/XeniumR5/slide2/ROI10/patches/ROI10.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR5/slide2/ROI10/patches_vis/ROI10_patch_vis.png
+<hest.HESTData.HESTData object at 0x7758bae6e350>
+        'pixel_size' is 0.2220180075056782
+        'wsi' is <width=21816, height=44335, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI11: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI11: /project/simmons_hts/kxu/hest/xenium_data/XeniumR5/slide2/ROI11/patches/ROI11.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR5/slide2/ROI11/patches_vis/ROI11_patch_vis.png
+<hest.HESTData.HESTData object at 0x7758be389190>
+        'pixel_size' is 0.2204906203139773
+        'wsi' is <width=30364, height=44348, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI7: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI7: /project/simmons_hts/kxu/hest/xenium_data/XeniumR5/slide2/ROI7/patches/ROI7.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR5/slide2/ROI7/patches_vis/ROI7_patch_vis.png
+<hest.HESTData.HESTData object at 0x7758be684890>
+        'pixel_size' is 0.22050955029388286
+        'wsi' is <width=26059, height=29207, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI8: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI8: /project/simmons_hts/kxu/hest/xenium_data/XeniumR5/slide2/ROI8/patches/ROI8.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR5/slide2/ROI8/patches_vis/ROI8_patch_vis.png
+<hest.HESTData.HESTData object at 0x7758be5696d0>
+        'pixel_size' is 0.22120765892026445
+        'wsi' is <width=17449, height=19529, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI9: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI9: /project/simmons_hts/kxu/hest/xenium_data/XeniumR5/slide2/ROI9/patches/ROI9.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR5/slide2/ROI9/patches_vis/ROI9_patch_vis.png
+Processing /project/simmons_hts/kxu/hest/xenium_data/XeniumR6/slide1...
+[INFO] Auto-detected 6 sample folders: ['ROI1', 'ROI2', 'ROI3', 'ROI4', 'ROI5', 'ROI6']
+<hest.HESTData.HESTData object at 0x7758b8144c50>
+        'pixel_size' is 0.22052311639419295
+        'wsi' is <width=23204, height=31393, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI1: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI1: /project/simmons_hts/kxu/hest/xenium_data/XeniumR6/slide1/ROI1/patches/ROI1.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR6/slide1/ROI1/patches_vis/ROI1_patch_vis.png
+<hest.HESTData.HESTData object at 0x7758bb2054d0>
+        'pixel_size' is 0.2204794992378835
+        'wsi' is <width=26058, height=22774, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI2: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI2: /project/simmons_hts/kxu/hest/xenium_data/XeniumR6/slide1/ROI2/patches/ROI2.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR6/slide1/ROI2/patches_vis/ROI2_patch_vis.png
+<hest.HESTData.HESTData object at 0x7758bb236f10>
+        'pixel_size' is 0.22064871827023919
+        'wsi' is <width=15979, height=20612, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI3: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI3: /project/simmons_hts/kxu/hest/xenium_data/XeniumR6/slide1/ROI3/patches/ROI3.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR6/slide1/ROI3/patches_vis/ROI3_patch_vis.png
+<hest.HESTData.HESTData object at 0x7758b808cb50>
+        'pixel_size' is 0.22045593807079839
+        'wsi' is <width=24628, height=21643, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI4: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI4: /project/simmons_hts/kxu/hest/xenium_data/XeniumR6/slide1/ROI4/patches/ROI4.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR6/slide1/ROI4/patches_vis/ROI4_patch_vis.png
+<hest.HESTData.HESTData object at 0x7758b3ce5350>
+        'pixel_size' is 0.22047107801134094
+        'wsi' is <width=62038, height=29284, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI5: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI5: /project/simmons_hts/kxu/hest/xenium_data/XeniumR6/slide1/ROI5/patches/ROI5.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR6/slide1/ROI5/patches_vis/ROI5_patch_vis.png
+<hest.HESTData.HESTData object at 0x7758baf33d10>
+        'pixel_size' is 0.2203912629752772
+        'wsi' is <width=49085, height=23886, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI6: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI6: /project/simmons_hts/kxu/hest/xenium_data/XeniumR6/slide1/ROI6/patches/ROI6.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR6/slide1/ROI6/patches_vis/ROI6_patch_vis.png
+Processing /project/simmons_hts/kxu/hest/xenium_data/XeniumR6/slide2...
+[INFO] Auto-detected 5 sample folders: ['ROI10', 'ROI11', 'ROI7', 'ROI8', 'ROI9']
+<hest.HESTData.HESTData object at 0x7758be4ff890>
+        'pixel_size' is 0.2204777763569274
+        'wsi' is <width=21748, height=10906, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI10: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI10: /project/simmons_hts/kxu/hest/xenium_data/XeniumR6/slide2/ROI10/patches/ROI10.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR6/slide2/ROI10/patches_vis/ROI10_patch_vis.png
+<hest.HESTData.HESTData object at 0x7758b3f63190>
+        'pixel_size' is 0.22058205739906586
+        'wsi' is <width=40491, height=54010, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI11: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI11: /project/simmons_hts/kxu/hest/xenium_data/XeniumR6/slide2/ROI11/patches/ROI11.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumR6/slide2/ROI11/patches_vis/ROI11_patch_vis.png
+<hest.HESTData.HESTData object at 0x7758bae5c710>
+        'pixel_size' is 0.22058282311947774
+        'wsi' is <width=37563, height=32489, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI7: tissue_seg present = True
+CBB Profiling started Mon Nov 10 13:33:21 2025
+SLURM_JOB_ID		4465250
+REQ_CPU_CORES		20
+REQ_MEMORY_GB		320.000000
+Starting profiling...
+
+                                                                                
+                                                                                
+                                   CPU (cores)                                  
+  20 +----------------------------------------------------------------------+   
+     |           +           +           +          +           +           |   
+  18 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+  16 |-+                                                                  +-|   
+     |                                                                      |   
+  14 |-+                                                                  +-|   
+     |                                                                      |   
+  12 |-+                                                                  +-|   
+     |                                                                      |   
+  10 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+   8 |-+                                                                  +-|   
+     |                                                                      |   
+   6 |-+                                                                  +-|   
+     |                                                                      |   
+   4 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+   2 |-+                                                                  +-|   
+     |######################################################################|   
+   0 +----------------------------------------------------------------------+   
+     0          200         400         600        800         1000        1200 
+                               Job profiling step                               
+                                                                                
+
+                                                                                
+                                                                                
+                                    Memory (GB)                                 
+  350 +---------------------------------------------------------------------+   
+      |           +          +           +           +          +           |   
+      |*********************************************************************|   
+  300 |-+                                                                 +-|   
+      |                                                                     |   
+      |                                                                     |   
+      |                                                                     |   
+  250 |-+                                                                 +-|   
+      |                                                                     |   
+      |                                                                     |   
+  200 |-+                                                                 +-|   
+      |                                                                     |   
+      |                                                                     |   
+  150 |-+                                                                 +-|   
+      |                                                                     |   
+      |                                                                     |   
+  100 |-+                                                                 +-|   
+      |                                                                     |   
+      |                                                                     |   
+      |                                                                     |   
+   50 |-+                                                                 +-|   
+      |                                                                     |   
+      |           +          +           +           +          +           |   
+    0 +---------------------------------------------------------------------+   
+      0          200        400         600         800        1000        1200 
+                                Job profiling step                              
+                                                                                
+
+                                                                                
+                                                                                
+                                   Data read (GB)                               
+  0.0008 +------------------------------------------------------------------+   
+         |          +          +           +          +          +          |   
+         |                                                              ####|   
+  0.0007 |-+                                                          ### +#|   
+         |                                                       ######    #|   
+         |                                                     ###         #|   
+  0.0006 |-+                                                ####          +#|   
+         |                                                ###              #|   
+         |                                             ####                #|   
+  0.0005 |-+                                        ####                  +#|   
+         |                                       ####                      #|   
+  0.0004 |-+                                    ##                        +#|   
+         |                                  #####                          #|   
+         |                               ####                              #|   
+  0.0003 |-+                          ####                                +#|   
+         |                        #####                                    #|   
+         |                     ####                                        #|   
+  0.0002 |-+                 ###                                          +#|   
+         |                 ###                                             #|   
+         |            ######                                               #|   
+  0.0001 |-+       ####                                                   +#|   
+         |      ####                                                       #|   
+         |   ####   +          +           +          +          +         #|   
+       0 +------------------------------------------------------------------+   
+         0         200        400         600        800        1000       1200 
+                                 Job profiling step                             
+                                                                                
+
+                                                                                
+                                                                                
+                                Data written (GB)                               
+  12 +----------------------------------------------------------------------+   
+     |           +           +           +          +           +           |   
+     |                                                                      |   
+     |                                                                  ####|   
+  10 |-+                                                              ### +#|   
+     |                                                             ####    #|   
+     |                                                        ######       #|   
+     |                                                     ####            #|   
+   8 |-+                                                 ###              +#|   
+     |                                                ####                 #|   
+     |                                             ####                    #|   
+   6 |-+                                        ####                      +#|   
+     |                                        ###                          #|   
+     |                                    #####                            #|   
+     |                                #####                                #|   
+   4 |-+                           ####                                   +#|   
+     |                        ######                                       #|   
+     |                     ####                                            #|   
+     |                   ###                                               #|   
+   2 |-+              ####                                                +#|   
+     |           ######                                                    #|   
+     |       #####                                                         #|   
+     |   #####   +           +           +          +           +          #|   
+   0 +----------------------------------------------------------------------+   
+     0          200         400         600        800         1000        1200 
+                               Job profiling step                               
+                                                                                

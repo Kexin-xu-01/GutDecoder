@@ -1,0 +1,156 @@
+0.0.1
+[INFO] Auto-detected 5 samples from /project/simmons_hts/kxu/hest/xenium_data/XeniumR1/slide1: ['ROI4', 'ROI2', 'ROI5', 'ROI7', 'ROI3']
+<hest.HESTData.HESTData object at 0x7f7f60357350>
+        'pixel_size' is 0.22035058607882274
+        'wsi' is <width=38817, height=29960, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI4 → /project/simmons_hts/kxu/hest/xenium_data/XeniumR1/slide1/ROI4/tissue_seg
+<hest.HESTData.HESTData object at 0x7f7f46cef310>
+        'pixel_size' is 0.2206063377139358
+        'wsi' is <width=26141, height=23258, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI2 → /project/simmons_hts/kxu/hest/xenium_data/XeniumR1/slide1/ROI2/tissue_seg
+<hest.HESTData.HESTData object at 0x7f7f4a183510>
+        'pixel_size' is 0.22037675446442723
+        'wsi' is <width=28418, height=24464, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI5 → /project/simmons_hts/kxu/hest/xenium_data/XeniumR1/slide1/ROI5/tissue_seg
+<hest.HESTData.HESTData object at 0x7f7f633d2610>
+        'pixel_size' is 0.22041049001605853
+        'wsi' is <width=26706, height=24133, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI7 → /project/simmons_hts/kxu/hest/xenium_data/XeniumR1/slide1/ROI7/tissue_seg
+<hest.HESTData.HESTData object at 0x7f7f60357210>
+        'pixel_size' is 0.2203145462360508
+        'wsi' is <width=11477, height=10270, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI3 → /project/simmons_hts/kxu/hest/xenium_data/XeniumR1/slide1/ROI3/tissue_seg
+CBB Profiling started Fri Oct 31 14:51:32 2025
+SLURM_JOB_ID		4404805
+REQ_CPU_CORES		4
+REQ_MEMORY_GB		58.593750
+Starting profiling...
+
+                                                                                
+                                                                                
+                                    CPU (cores)                                 
+    4 +---------------------------------------------------------------------+   
+      |       +       +      +       +       +       +      +     ##+  #    |   
+      |                                                       #   ## ###    |   
+  3.5 |-+                                             ##     # # # # # #  +-|   
+      |                                               ##     # # # # # #    |   
+      |                                              #  ##   # # # # # #    |   
+    3 |-+                                            #  ##  #  # # # # #  +-|   
+      |                                              #   #  #  # # # # #    |   
+      |                                              #   #  #  ##  # # #    |   
+  2.5 |-+                                            #   #  #  ##  # # #  +-|   
+      |                                              #   #  #  ##  # # #    |   
+    2 |-+                                            #   #  #  ##  # # #  +-|   
+      |                                              #   #  #  ##  ##  #    |   
+      |                                              #    # #   #  ##  #    |   
+  1.5 |-+                                            #    # #   #  ##  #  +-|   
+      |                                              #    # #   #  ##  # #  |   
+      |                                              #    # #   #  ##  # #  |   
+    1 |-+                                           #     # #   #  ##  # #+-|   
+      |                                             #     # #   #  ##  # ## |   
+      |                                             #     # #   #  ##   # # |   
+  0.5 |-+                                           #     # #   #  ##   # #-|   
+      |  #######   ##################################     ###   #  ##   # ##|   
+      |##     +####   +      +       +       +       +      +       +       |   
+    0 +---------------------------------------------------------------------+   
+      0       10      20     30      40      50      60     70      80      90  
+                                Job profiling step                              
+                                                                                
+
+                                                                                
+                                                                                
+                                   Memory (GB)                                  
+  60 +----------------------------------------------------------------------+   
+     |**********************************************************************|   
+     |                                                                      |   
+     |                                                                      |   
+  50 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+     |                                                                      |   
+  40 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+  30 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+     |                                                                      |   
+  20 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+     |                                                       ####### ##  #  |   
+  10 |-+                                                 #  #  ##  # ##  #+-|   
+     |                                              ######  #  ##  # # # ## |   
+     |                                              #     ##   #   ##  ## # |   
+     |       +       +       +       +      +       #     ##+  #   ##   # ##|   
+   0 +----------------------------------------------------------------------+   
+     0       10      20      30      40     50      60      70      80      90  
+                               Job profiling step                               
+                                                                                
+
+                                                                                
+                                                                                
+                                    Data read (GB)                              
+    2e-05 +-----------------------------------------------------------------+   
+          |      +       +      +      +       +      +     ################|   
+  1.8e-05 |-+                                               #             +-|   
+          |                                                 #               |   
+          |                                                #                |   
+  1.6e-05 |-+                       ########################              +-|   
+          |                         #                                       |   
+  1.4e-05 |-+                       #                                     +-|   
+          |                         #                                       |   
+  1.2e-05 |-+                       #                                     +-|   
+          |                         #                                       |   
+    1e-05 |-+                       #                                     +-|   
+          |                         #                                       |   
+          |                         #                                       |   
+    8e-06 |-+                       #                                     +-|   
+          |                        #                                        |   
+    6e-06 |-+                      #                                      +-|   
+          |                        #                                        |   
+    4e-06 |-+                      #                                      +-|   
+          |                        #                                        |   
+          |                        #                                        |   
+    2e-06 |-+                      #                                      +-|   
+          |      +       +      +  #   +       +      +      +       +      |   
+        0 +-----------------------------------------------------------------+   
+          0      10      20     30     40      50     60     70      80     90  
+                                  Job profiling step                            
+                                                                                
+
+                                                                                
+                                                                                
+                                  Data written (GB)                             
+  0.008 +-------------------------------------------------------------------+   
+        |       +      +       +      +       +      +       +      +   ####|   
+        |                                                               #   |   
+  0.007 |-+                                                             # +-|   
+        |                                                              #    |   
+        |                                                              #    |   
+  0.006 |-+                                                         ####  +-|   
+        |                                                           #       |   
+        |                                                           #       |   
+  0.005 |-+                                                         #     +-|   
+        |                                                           #       |   
+  0.004 |-+                                                     ####      +-|   
+        |                                                       #           |   
+        |                                                       #           |   
+  0.003 |-+                                                    #          +-|   
+        |                                                      #            |   
+        |                                                  #####            |   
+  0.002 |-+                                                #              +-|   
+        |                                                  #                |   
+        |                                                  #                |   
+  0.001 |-+                                                #              +-|   
+        |                                                  #                |   
+        |       +      +       +      +       +      +     # +      +       |   
+      0 +-------------------------------------------------------------------+   
+        0       10     20      30     40      50     60      70     80      90  
+                                 Job profiling step                             
+                                                                                

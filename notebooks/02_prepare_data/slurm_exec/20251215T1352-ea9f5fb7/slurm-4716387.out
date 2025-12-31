@@ -1,0 +1,175 @@
+[INFO] Auto-detected 8 sample folders: ['ROI1', 'ROI2', 'ROI3', 'ROI4', 'ROI5', 'ROI6', 'ROI7', 'ROI8']
+<hest.HESTData.HESTData object at 0x7b4efb231e50>
+        'pixel_size' is 0.4353514884015406
+        'wsi' is <width=8851, height=8585, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI1: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI1: /project/simmons_hts/kxu/hest/xenium_data/XeniumPR1_25um/slide1/ROI1/patches/ROI1.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumPR1_25um/slide1/ROI1/patches_vis/ROI1_patch_vis.png
+<hest.HESTData.HESTData object at 0x7b4efb190390>
+        'pixel_size' is 0.43561023341205224
+        'wsi' is <width=7408, height=10434, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI2: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI2: /project/simmons_hts/kxu/hest/xenium_data/XeniumPR1_25um/slide1/ROI2/patches/ROI2.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumPR1_25um/slide1/ROI2/patches_vis/ROI2_patch_vis.png
+<hest.HESTData.HESTData object at 0x7b4ef49df6d0>
+        'pixel_size' is 0.4346822863887948
+        'wsi' is <width=12994, height=8725, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI3: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI3: /project/simmons_hts/kxu/hest/xenium_data/XeniumPR1_25um/slide1/ROI3/patches/ROI3.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumPR1_25um/slide1/ROI3/patches_vis/ROI3_patch_vis.png
+<hest.HESTData.HESTData object at 0x7b4ef820fc90>
+        'pixel_size' is 0.43509460497596525
+        'wsi' is <width=14343, height=8724, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI4: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI4: /project/simmons_hts/kxu/hest/xenium_data/XeniumPR1_25um/slide1/ROI4/patches/ROI4.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumPR1_25um/slide1/ROI4/patches_vis/ROI4_patch_vis.png
+<hest.HESTData.HESTData object at 0x7b4ef465a750>
+        'pixel_size' is 0.4342285450650283
+        'wsi' is <width=29752, height=7302, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI5: tissue_seg present = True
+found 0 valid patches
+[INFO] Patches saved for ROI5: /project/simmons_hts/kxu/hest/xenium_data/XeniumPR1_25um/slide1/ROI5/patches/ROI5.h5
+[INFO] Patch visualization saved: /project/simmons_hts/kxu/hest/xenium_data/XeniumPR1_25um/slide1/ROI5/patches_vis/ROI5_patch_vis.png
+<hest.HESTData.HESTData object at 0x7b4ee0853950>
+        'pixel_size' is 0.434453340495722
+        'wsi' is <width=25467, height=11081, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] ROI6: tissue_seg present = True
+CBB Profiling started Mon Dec 15 13:53:05 2025
+SLURM_JOB_ID		4716387
+REQ_CPU_CORES		30
+REQ_MEMORY_GB		5.000000
+Starting profiling...
+
+                                                                                
+                                                                                
+                                   CPU (cores)                                  
+  30 +----------------------------------------------------------------------+   
+     |           +           +           +          +           +           |   
+     |                                                                      |   
+     |                                                                      |   
+  25 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+     |                                                                      |   
+  20 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+  15 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+     |                                                                      |   
+  10 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+     |                                                                      |   
+   5 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+     |######################################################################|   
+   0 +----------------------------------------------------------------------+   
+     0          200         400         600        800         1000        1200 
+                               Job profiling step                               
+                                                                                
+
+                                                                                
+                                                                                
+                                    Memory (GB)                                 
+    5 +---------------------------------------------------------------------+   
+      |           +          +           +           +          +           |   
+  4.5 |-+                                                                 +-|   
+      |                                                                     |   
+      |                                                                     |   
+    4 |-+                                                                 +-|   
+      |                                                                     |   
+  3.5 |-+                                                                 +-|   
+      |                                                                     |   
+    3 |-+                                                                 +-|   
+      |                                                                     |   
+  2.5 |-+                                                                 +-|   
+      |                                        #                            |   
+      |                                        #                            |   
+    2 |-+                                      #                          +-|   
+      |                                        #############################|   
+  1.5 |-+                 #        #           #                          +-|   
+      |                   #        #           #                            |   
+    1 |-+        #        ######################                          +-|   
+      |          ##########        #                                        |   
+      |###########                                                          |   
+  0.5 |#+                                                                 +-|   
+      |#          +          +           +           +          +           |   
+    0 +---------------------------------------------------------------------+   
+      0          200        400         600         800        1000        1200 
+                                Job profiling step                              
+                                                                                
+
+                                                                                
+                                                                                
+                                   Data read (GB)                               
+  0.0009 +------------------------------------------------------------------+   
+         |          +          +           +          +          +         #|   
+         |                                                                ##|   
+  0.0008 |-+                                                           ###+-|   
+         |                                                           ###    |   
+  0.0007 |-+                                                       ###    +-|   
+         |                                                        ##        |   
+         |                                     ####################         |   
+  0.0006 |-+                                 ##                           +-|   
+         |                                 ###                              |   
+  0.0005 |-+                        ########                              +-|   
+         |                       ####                                       |   
+         |                      ##                                          |   
+  0.0004 |-+                  ###                                         +-|   
+         |                   ##                                             |   
+  0.0003 |-+             #####                                            +-|   
+         |              ##                                                  |   
+         |            ##                                                    |   
+  0.0002 |-+         ##                                                   +-|   
+         |        ####                                                      |   
+  0.0001 |-+   ###                                                        +-|   
+         |    ##                                                            |   
+         |  ###     +          +           +          +          +          |   
+       0 +------------------------------------------------------------------+   
+         0         200        400         600        800        1000       1200 
+                                 Job profiling step                             
+                                                                                
+
+                                                                                
+                                                                                
+                                Data written (GB)                               
+  14 +----------------------------------------------------------------------+   
+     |           +           +           +          +           +         ##|   
+     |                                                                   ## |   
+  12 |-+                                                              ### +-|   
+     |                                                              ###     |   
+     |                                                             ##       |   
+     |                                                           ##         |   
+  10 |-+                                     #####################        +-|   
+     |                                     ###                              |   
+     |                                   ###                                |   
+   8 |-+                         #########                                +-|   
+     |                         ###                                          |   
+     |                        ##                                            |   
+   6 |-+                    ##                                            +-|   
+     |                   ####                                               |   
+     |                 ###                                                  |   
+   4 |-+             ###                                                  +-|   
+     |             ###                                                      |   
+     |            ##                                                        |   
+     |        #####                                                         |   
+   2 |-+    ###                                                           +-|   
+     |    ###                                                               |   
+     |   ##      +           +           +          +           +           |   
+   0 +----------------------------------------------------------------------+   
+     0          200         400         600        800         1000        1200 
+                               Job profiling step                               
+                                                                                

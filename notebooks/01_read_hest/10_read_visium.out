@@ -1,0 +1,815 @@
+Loading python-cbrg/202510
+  Loading requirement: python-base/3.11.14
+Processing VisiumR1S1ROI1...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR1S1ROI1
+Processing sample=VisiumR1S1ROI1, roi=1, slide=1, run=R1...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/GI_7051_INFLAMMATORY/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 1725 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR1/slide1/ROI1
+Processing VisiumR1S1ROI2...
+VisiumR1S1ROI2
+Processing sample=VisiumR1S1ROI2, roi=2, slide=1, run=R1...
+⚠️ VisiumR1S1ROI2 (2) already processed at /project/simmons_hts/kxu/hest/visium_data/VisiumR1/slide1/ROI2, skipping.
+Processing VisiumR1S1ROI3...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR1S1ROI3
+Processing sample=VisiumR1S1ROI3, roi=3, slide=1, run=R1...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/GI_7595_STRICTURING/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 1742 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR1/slide1/ROI3
+Processing VisiumR1S1ROI4...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR1S1ROI4
+Processing sample=VisiumR1S1ROI4, roi=4, slide=1, run=R1...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/TIP_535_FISTULATING/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 1335 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR1/slide1/ROI4
+Processing VisiumR2S1ROI1...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR2S1ROI1
+Processing sample=VisiumR2S1ROI1, roi=1, slide=1, run=R2...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/GI_6966_INFLAMMATORY/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 2947 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide1/ROI1
+Processing VisiumR2S1ROI2...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR2S1ROI2
+Processing sample=VisiumR2S1ROI2, roi=2, slide=1, run=R2...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/GI_7738_JR_STRICTURING/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 4544 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide1/ROI2
+Processing VisiumR2S1ROI3...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR2S1ROI3
+Processing sample=VisiumR2S1ROI3, roi=3, slide=1, run=R2...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/TIP_473_JR_FISTULATING/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 4597 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide1/ROI3
+Processing VisiumR2S1ROI4...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR2S1ROI4
+Processing sample=VisiumR2S1ROI4, roi=4, slide=1, run=R2...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/TIP_633_JR_HEALTHY/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 4619 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide1/ROI4
+Processing VisiumR2S2ROI1...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR2S2ROI1
+Processing sample=VisiumR2S2ROI1, roi=1, slide=2, run=R2...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/TIP_522_HEALTHY/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 2737 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide2/ROI1
+Processing VisiumR2S2ROI2...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR2S2ROI2
+Processing sample=VisiumR2S2ROI2, roi=2, slide=2, run=R2...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/TIP_559_FISTULATING_1/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 3812 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide2/ROI2
+Processing VisiumR2S2ROI3...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR2S2ROI3
+Processing sample=VisiumR2S2ROI3, roi=3, slide=2, run=R2...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/TIP_815_INFLAMMATORY/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 2793 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide2/ROI3
+Processing VisiumR2S2ROI4...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR2S2ROI4
+Processing sample=VisiumR2S2ROI4, roi=4, slide=2, run=R2...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/TIP535JR_FISTULATING/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 3928 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide2/ROI4
+Processing VisiumR3S1ROI1...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR3S1ROI1
+Processing sample=VisiumR3S1ROI1, roi=1, slide=1, run=R3...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/FISTULATING_JR_1B/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 2815 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR3/slide1/ROI1
+Processing VisiumR3S1ROI2...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR3S1ROI2
+Processing sample=VisiumR3S1ROI2, roi=2, slide=1, run=R3...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/FISTULATING_JR_4/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 4208 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR3/slide1/ROI2
+Processing VisiumR3S1ROI3...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR3S1ROI3
+Processing sample=VisiumR3S1ROI3, roi=3, slide=1, run=R3...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/FISTULATING_JR_5/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 3889 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR3/slide1/ROI3
+Processing VisiumR3S1ROI4...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR3S1ROI4
+Processing sample=VisiumR3S1ROI4, roi=4, slide=1, run=R3...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/FISTULATING_JR_2/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 3818 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR3/slide1/ROI4
+Processing VisiumR4S1ROI1...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR4S1ROI1
+Processing sample=VisiumR4S1ROI1, roi=1, slide=1, run=R4...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/A1/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 3807 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR4/slide1/ROI1
+Processing VisiumR4S1ROI2...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR4S1ROI2
+Processing sample=VisiumR4S1ROI2, roi=2, slide=1, run=R4...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/A2/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 4609 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR4/slide1/ROI2
+Processing VisiumR4S1ROI3...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR4S1ROI3
+Processing sample=VisiumR4S1ROI3, roi=3, slide=1, run=R4...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/A3/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 4922 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR4/slide1/ROI3
+Processing VisiumR4S1ROI4...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR4S1ROI4
+Processing sample=VisiumR4S1ROI4, roi=4, slide=1, run=R4...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/A4/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 4274 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR4/slide1/ROI4
+Processing VisiumR5S1ROI1...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR5S1ROI1
+Processing sample=VisiumR5S1ROI1, roi=1, slide=1, run=R5...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/A5/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 4317 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide1/ROI1
+Processing VisiumR5S1ROI2...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR5S1ROI2
+Processing sample=VisiumR5S1ROI2, roi=2, slide=1, run=R5...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/A6/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 2241 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide1/ROI2
+Processing VisiumR5S1ROI3...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR5S1ROI3
+Processing sample=VisiumR5S1ROI3, roi=3, slide=1, run=R5...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/A7/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 4129 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide1/ROI3
+Processing VisiumR5S1ROI4...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR5S1ROI4
+Processing sample=VisiumR5S1ROI4, roi=4, slide=1, run=R5...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/A8/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 2526 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide1/ROI4
+Processing VisiumR5S2ROI1...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR5S2ROI1
+Processing sample=VisiumR5S2ROI1, roi=1, slide=2, run=R5...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/A10/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 4053 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide2/ROI1
+Processing VisiumR5S2ROI2...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR5S2ROI2
+Processing sample=VisiumR5S2ROI2, roi=2, slide=2, run=R5...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/A11/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 2349 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide2/ROI2
+Processing VisiumR5S2ROI3...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR5S2ROI3
+Processing sample=VisiumR5S2ROI3, roi=3, slide=2, run=R5...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/A12/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 1906 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide2/ROI3
+Processing VisiumR6S1ROI1...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR6S1ROI1
+Processing sample=VisiumR6S1ROI1, roi=1, slide=1, run=R6...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/B9/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 2446 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide1/ROI1
+Processing VisiumR6S1ROI2...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR6S1ROI2
+Processing sample=VisiumR6S1ROI2, roi=2, slide=1, run=R6...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/B10/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 3523 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide1/ROI2
+Processing VisiumR6S1ROI3...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR6S1ROI3
+Processing sample=VisiumR6S1ROI3, roi=3, slide=1, run=R6...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/B11/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 3580 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide1/ROI3
+Processing VisiumR6S1ROI4...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR6S1ROI4
+Processing sample=VisiumR6S1ROI4, roi=4, slide=1, run=R6...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/B12/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 4215 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide1/ROI4
+Processing VisiumR6S2ROI1...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR6S2ROI1
+Processing sample=VisiumR6S2ROI1, roi=1, slide=2, run=R6...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/C1/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 3024 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide2/ROI1
+Processing VisiumR6S2ROI2...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR6S2ROI2
+Processing sample=VisiumR6S2ROI2, roi=2, slide=2, run=R6...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/C2/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 2892 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide2/ROI2
+Processing VisiumR6S2ROI3...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR6S2ROI3
+Processing sample=VisiumR6S2ROI3, roi=3, slide=2, run=R6...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/C3/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 3695 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide2/ROI3
+Processing VisiumR6S2ROI4...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1832: UserWarning: Variable names are not unique. To make them unique, call `.var_names_make_unique`.
+  utils.warn_names_duplicates("var")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+VisiumR6S2ROI4
+Processing sample=VisiumR6S2ROI4, roi=4, slide=2, run=R6...
+loading data from directory /project/simmons_hts/kxu/deepspace_CD/test_data/C4/SpaceRanger
+alignment file is  None
+AnnData object with n_obs × n_vars = 4824 × 17943
+    var: 'gene_ids', 'feature_types', 'genome'
+trim the barcodes
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide2/ROI4
+CBB Profiling started Tue Dec  2 17:18:29 2025
+SLURM_JOB_ID		4613685
+REQ_CPU_CORES		20
+REQ_MEMORY_GB		20.000000
+Starting profiling...
+
+                                                                                
+                                                                                
+                                   CPU (cores)                                  
+  20 +----------------------------------------------------------------------+   
+     |         +         +         +          +         +         +         |   
+     |                                                                      |   
+     |                                                                      |   
+     |                                                                      |   
+     |                                                                      |   
+  15 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+     |                                                                      |   
+     |                                                                      |   
+  10 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                       #                              |   
+     |                                       #                              |   
+     |                                       #                              |   
+     |                                       #                              |   
+   5 |-+                                     #                            +-|   
+     | #   #    # #            #       #   # #        #   #   #             |   
+     |### ###   # #####      # #   #   #   # #        # # #   ##  #         |   
+     |#################### # # # # # # # # # # # ## # # # #  #### #         |   
+     |###### ################################# # ###################        |   
+     |#        +       ##############################################       |   
+   0 +----------------------------------------------------------------------+   
+     0        200       400       600        800       1000      1200      1400 
+                               Job profiling step                               
+                                                                                
+
+                                                                                
+                                                                                
+                                   Memory (GB)                                  
+  20 +----------------------------------------------------------------------+   
+     |         +         +         +          +         +         +         |   
+  18 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+  16 |-+                                                                  +-|   
+     |                                                                      |   
+  14 |-+                                                                  +-|   
+     |                                                                      |   
+  12 |-+                                                                  +-|   
+     |                                                                      |   
+  10 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+   8 |-+                                                                  +-|   
+     |                                                                      |   
+   6 |-+                                                                  +-|   
+     |                                                                      |   
+   4 |-+                                #  # #         #   #       #      +-|   
+     |                  # # # # # # # # # ## # # # # # # # # # # # #        |   
+     |    #   # ###   # # # # # # # # # #### # # # # # # # # # # # #        |   
+   2 |-+#############################################################     +-|   
+     |## # ## #+################## # ### # # #+# ###### #############       |   
+   0 +----------------------------------------------------------------------+   
+     0        200       400       600        800       1000      1200      1400 
+                               Job profiling step                               
+                                                                                
+
+                                                                                
+                                                                                
+                                   Data read (GB)                               
+   0.003 +------------------------------------------------------------------+   
+         |         +        +         +        +         +        +         |   
+         |                                                                  |   
+         |                                                          ##      |   
+  0.0025 |-+                                                    #####     +-|   
+         |                                                  #####           |   
+         |                                                ###               |   
+         |                                            #####                 |   
+   0.002 |-+                                       ####                   +-|   
+         |                                     #####                        |   
+         |                                  ####                            |   
+  0.0015 |-+                            #####                             +-|   
+         |                          #####                                   |   
+         |                       ####                                       |   
+         |                    ###                                           |   
+   0.001 |-+                 ##                                           +-|   
+         |                   #                                              |   
+         |               #####                                              |   
+         |           #####                                                  |   
+  0.0005 |-+      ####                                                    +-|   
+         |      ###                                                         |   
+         |  #####                                                           |   
+         |###      +        +         +        +         +        +         |   
+       0 +------------------------------------------------------------------+   
+         0        200      400       600      800       1000     1200      1400 
+                                 Job profiling step                             
+                                                                                
+
+                                                                                
+                                                                                
+                                Data written (GB)                               
+  35 +----------------------------------------------------------------------+   
+     |         +         +         +          +         +         +         |   
+     |                                                              #       |   
+  30 |-+                                                          ###     +-|   
+     |                                                        #####         |   
+     |                                                     ####             |   
+     |                                                  ####                |   
+  25 |-+                                             ####                 +-|   
+     |                                            ####                      |   
+     |                                         ####                         |   
+  20 |-+                                    ####                          +-|   
+     |                                  #####                               |   
+     |                               ####                                   |   
+  15 |-+                           ###                                    +-|   
+     |                          ####                                        |   
+     |                       ####                                           |   
+  10 |-+                   ###                                            +-|   
+     |                  ####                                                |   
+     |               ####                                                   |   
+     |           #####                                                      |   
+   5 |-+       ###                                                        +-|   
+     |     ####                                                             |   
+     |  ####   +         +         +          +         +         +         |   
+   0 +----------------------------------------------------------------------+   
+     0        200       400       600        800       1000      1200      1400 
+                               Job profiling step                               
+                                                                                
