@@ -1,0 +1,38 @@
+Loading python-cbrg/202510
+  Loading requirement: python-base/3.11.14
+Processing XeniumR2S1ROI1...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+22:27:53 | INFO | cuCIM not available — falling back to CPU ops
+XeniumR2S1ROI1
+Processing sample=XeniumR2S1ROI1, roi=1, slide=1, run=R2...
+⚠️ XeniumR2S1ROI1 (1) already processed at /project/simmons_hts/kxu/hest/xenium_data/XeniumR2_cell_l0/slide1/ROI1, skipping.
+Processing XeniumR2S1ROI2...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+22:28:01 | INFO | cuCIM not available — falling back to CPU ops
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+/var/spool/slurmd/job4794194/slurm_script: line 13: 2052701 Killed                  python /project/simmons_hts/kxu/JupyterFolder/hest/01_read_hest/12_read_xenium_480_cell.py "$ID"
+Processing XeniumR2S1ROI3...
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_metadata.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+22:29:29 | INFO | cuCIM not available — falling back to CPU ops
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/package/python-cbrg/202510/3.11.3/lib/python3.11/site-packages/anndata/_core/anndata.py:1105: FutureWarning: is_categorical_dtype is deprecated and will be removed in a future version. Use isinstance(dtype, CategoricalDtype) instead
+  if not is_categorical_dtype(df_full[k]):
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)

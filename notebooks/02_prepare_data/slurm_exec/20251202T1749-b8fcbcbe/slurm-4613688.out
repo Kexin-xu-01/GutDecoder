@@ -1,0 +1,323 @@
+0.0.1
+🚀 Running segmentation for: /project/simmons_hts/kxu/hest/visium_data/VisiumR1/slide1
+[INFO] Auto-detected 4 samples from /project/simmons_hts/kxu/hest/visium_data/VisiumR1/slide1: ['ROI4', 'ROI1', 'ROI2', 'ROI3']
+<hest.HESTData.HESTData object at 0x7bfce4a01b10>
+        'pixel_size' is 0.879899488896232
+        'wsi' is <width=9457, height=9234, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI4 → /project/simmons_hts/kxu/hest/visium_data/VisiumR1/slide1/ROI4/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfcbeedae50>
+        'pixel_size' is 0.8810230741533039
+        'wsi' is <width=9511, height=9218, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI1 → /project/simmons_hts/kxu/hest/visium_data/VisiumR1/slide1/ROI1/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfcc5f58ed0>
+        'pixel_size' is 0.8802694121183509
+        'wsi' is <width=9782, height=8948, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI2 → /project/simmons_hts/kxu/hest/visium_data/VisiumR1/slide1/ROI2/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfcd47b09d0>
+        'pixel_size' is 0.8791017707282943
+        'wsi' is <width=9470, height=8950, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI3 → /project/simmons_hts/kxu/hest/visium_data/VisiumR1/slide1/ROI3/tissue_seg
+🚀 Running segmentation for: /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide1
+[INFO] Auto-detected 4 samples from /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide1: ['ROI4', 'ROI1', 'ROI2', 'ROI3']
+<hest.HESTData.HESTData object at 0x7bfcc60389d0>
+        'pixel_size' is 0.4398037158528228
+        'wsi' is <width=20339, height=18496, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI4 → /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide1/ROI4/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfe573f8ed0>
+        'pixel_size' is 0.4426834746118445
+        'wsi' is <width=20351, height=18498, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI1 → /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide1/ROI1/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfe57416b50>
+        'pixel_size' is 0.43877167028347397
+        'wsi' is <width=20337, height=18496, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI2 → /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide1/ROI2/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfcaffe8990>
+        'pixel_size' is 0.4410598367253281
+        'wsi' is <width=18496, height=20339, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI3 → /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide1/ROI3/tissue_seg
+🚀 Running segmentation for: /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide2
+[INFO] Auto-detected 4 samples from /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide2: ['ROI4', 'ROI1', 'ROI2', 'ROI3']
+<hest.HESTData.HESTData object at 0x7bfcc5ee8ed0>
+        'pixel_size' is 0.4401668217373307
+        'wsi' is <width=18508, height=20346, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI4 → /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide2/ROI4/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfe57260f50>
+        'pixel_size' is 0.4426559356136821
+        'wsi' is <width=20346, height=18503, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI1 → /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide2/ROI1/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfcc6125750>
+        'pixel_size' is 0.44272273734845113
+        'wsi' is <width=18899, height=18496, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI2 → /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide2/ROI2/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfe574909d0>
+        'pixel_size' is 0.4427083183217939
+        'wsi' is <width=20354, height=18496, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI3 → /project/simmons_hts/kxu/hest/visium_data/VisiumR2/slide2/ROI3/tissue_seg
+🚀 Running segmentation for: /project/simmons_hts/kxu/hest/visium_data/VisiumR3/slide1
+[INFO] Auto-detected 4 samples from /project/simmons_hts/kxu/hest/visium_data/VisiumR3/slide1: ['ROI4', 'ROI1', 'ROI2', 'ROI3']
+<hest.HESTData.HESTData object at 0x7bfe574689d0>
+        'pixel_size' is 0.44216784780318674
+        'wsi' is <width=18921, height=18499, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI4 → /project/simmons_hts/kxu/hest/visium_data/VisiumR3/slide1/ROI4/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfe571b89d0>
+        'pixel_size' is 0.44296109440631604
+        'wsi' is <width=20340, height=18501, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI1 → /project/simmons_hts/kxu/hest/visium_data/VisiumR3/slide1/ROI1/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfe573c89d0>
+        'pixel_size' is 0.44084184792638825
+        'wsi' is <width=20350, height=18500, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI2 → /project/simmons_hts/kxu/hest/visium_data/VisiumR3/slide1/ROI2/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfcc5ed09d0>
+        'pixel_size' is 0.4382164760411641
+        'wsi' is <width=18910, height=18500, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI3 → /project/simmons_hts/kxu/hest/visium_data/VisiumR3/slide1/ROI3/tissue_seg
+🚀 Running segmentation for: /project/simmons_hts/kxu/hest/visium_data/VisiumR4/slide1
+[INFO] Auto-detected 4 samples from /project/simmons_hts/kxu/hest/visium_data/VisiumR4/slide1: ['ROI4', 'ROI1', 'ROI2', 'ROI3']
+<hest.HESTData.HESTData object at 0x7bfcc47cce90>
+        'pixel_size' is 0.4424765392099344
+        'wsi' is <width=18914, height=18503, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI4 → /project/simmons_hts/kxu/hest/visium_data/VisiumR4/slide1/ROI4/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfcc5175750>
+        'pixel_size' is 0.4427048500924932
+        'wsi' is <width=18898, height=18501, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI1 → /project/simmons_hts/kxu/hest/visium_data/VisiumR4/slide1/ROI1/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfcbeed8ed0>
+        'pixel_size' is 0.47918903369998833
+        'wsi' is <width=18905, height=18507, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI2 → /project/simmons_hts/kxu/hest/visium_data/VisiumR4/slide1/ROI2/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfe571b8ed0>
+        'pixel_size' is 0.44293301685959935
+        'wsi' is <width=20349, height=18506, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI3 → /project/simmons_hts/kxu/hest/visium_data/VisiumR4/slide1/ROI3/tissue_seg
+🚀 Running segmentation for: /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide1
+[INFO] Auto-detected 4 samples from /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide1: ['ROI4', 'ROI1', 'ROI2', 'ROI3']
+<hest.HESTData.HESTData object at 0x7bfcc4358150>
+        'pixel_size' is 0.4426410918480266
+        'wsi' is <width=20352, height=19586, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI4 → /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide1/ROI4/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfcc43e0ed0>
+        'pixel_size' is 0.4426084197991328
+        'wsi' is <width=18912, height=19584, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI1 → /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide1/ROI1/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfe572289d0>
+        'pixel_size' is 0.4424778761061947
+        'wsi' is <width=18904, height=19584, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI2 → /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide1/ROI2/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfe574b04d0>
+        'pixel_size' is 0.44273561317455157
+        'wsi' is <width=20353, height=19586, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI3 → /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide1/ROI3/tissue_seg
+🚀 Running segmentation for: /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide2
+[INFO] Auto-detected 3 samples from /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide2: ['ROI1', 'ROI2', 'ROI3']
+<hest.HESTData.HESTData object at 0x7bfcc49989d0>
+        'pixel_size' is 0.43908853959891986
+        'wsi' is <width=18903, height=18497, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI1 → /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide2/ROI1/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfcc4df89d0>
+        'pixel_size' is 0.4427571947172449
+        'wsi' is <width=20344, height=17419, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI2 → /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide2/ROI2/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfcc43b09d0>
+        'pixel_size' is 0.44260780200614663
+        'wsi' is <width=20356, height=18498, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI3 → /project/simmons_hts/kxu/hest/visium_data/VisiumR5/slide2/ROI3/tissue_seg
+🚀 Running segmentation for: /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide1
+[INFO] Auto-detected 4 samples from /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide1: ['ROI4', 'ROI1', 'ROI2', 'ROI3']
+<hest.HESTData.HESTData object at 0x7bfcc4df89d0>
+        'pixel_size' is 0.43743933220054076
+        'wsi' is <width=20354, height=18501, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI4 → /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide1/ROI4/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfe571bb590>
+        'pixel_size' is 0.44247486810664965
+        'wsi' is <width=18902, height=18496, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI1 → /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide1/ROI1/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfcc56409d0>
+        'pixel_size' is 0.44270579640485225
+        'wsi' is <width=20345, height=18496, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI2 → /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide1/ROI2/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfe570389d0>
+        'pixel_size' is 0.4398335064174735
+        'wsi' is <width=20348, height=18502, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI3 → /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide1/ROI3/tissue_seg
+🚀 Running segmentation for: /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide2
+[INFO] Auto-detected 4 samples from /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide2: ['ROI4', 'ROI1', 'ROI2', 'ROI3']
+<hest.HESTData.HESTData object at 0x7bfcc4808ed0>
+        'pixel_size' is 0.43729229565172695
+        'wsi' is <width=20349, height=18499, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI4 → /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide2/ROI4/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfcd47b09d0>
+        'pixel_size' is 0.4427757648965839
+        'wsi' is <width=18901, height=18503, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI1 → /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide2/ROI1/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfe570389d0>
+        'pixel_size' is 0.442477755785035
+        'wsi' is <width=18901, height=18496, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI2 → /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide2/ROI2/tissue_seg
+<hest.HESTData.HESTData object at 0x7bfe573989d0>
+        'pixel_size' is 0.44286968509699487
+        'wsi' is <width=20343, height=18504, backend=OpenSlideWSI>
+        'shapes': []
+[INFO] Segmentation complete for ROI3 → /project/simmons_hts/kxu/hest/visium_data/VisiumR6/slide2/ROI3/tissue_seg
+CBB Profiling started Tue Dec  2 17:49:06 2025
+SLURM_JOB_ID		4613688
+REQ_CPU_CORES		10
+REQ_MEMORY_GB		5.000000
+Starting profiling...
+
+                                                                                
+                                                                                
+                                   CPU (cores)                                  
+  10 +----------------------------------------------------------------------+   
+     |             +             +              +             +             |   
+     |                                      #                      #  #     |   
+     |                                      #                      ## #    #|   
+     |                                      #                      ## # # ##|   
+   8 |-+                                  # #               # ## # ## ######|   
+     |                         # #        # #               # ####### ######|   
+     |                         # #        ###           ## ## ####### ######|   
+     |                         # # #   #  ###      #    ##### ##############|   
+   6 |-+                  #   #### # # #  ###  ##  # ######## ###### #######|   
+     |                    # # #### # # # ####  ### # ############### #######|   
+     |                   ## ###### # ### ####  ### # ############### #######|   
+     |                   ########### ########  ### ################# #######|   
+     |                #  ####################  ### ################# #######|   
+   4 |-+              # #####################  ### ############### # #######|   
+     |             # ######################## ##### # ############ # #######|   
+     |             # ######################## ### # # ############ # #######|   
+     |             ########################## # # # # ### ##### ## # #######|   
+   2 |-+           ############################ # # # ### ##### ## # # #####|   
+     |            # #################### ###### # # # ### ##### ## # # #####|   
+     |##          # ########### ######## # #### # # # ### ##### ## # # #####|   
+     |############# ######### # ######## # #### # # # ### ## ## ## # # #####|   
+     |             +             +              +             +             |   
+   0 +----------------------------------------------------------------------+   
+     0             50           100            150           200           250  
+                               Job profiling step                               
+                                                                                
+
+                                                                                
+                                                                                
+                                   Memory (GB)                                  
+  16 +----------------------------------------------------------------------+   
+     |             +             +              +             +             |   
+     |                                          ##       ############# #####|   
+  14 |-+             #### ##########  #### ####### # #######################|   
+     |               #######################################################|   
+     |               #######################################################|   
+  12 |-+             #######################################################|   
+     |               #######################################################|   
+     |            ##########################################################|   
+  10 |-+          # ########################################################|   
+     |            # ########################################################|   
+   8 |-+          # ########################### # ################ #########|   
+     |            # #################### ###### # # # ### ## ## ## #########|   
+     |            # # ####### # ######## # #### # # # ### ## ## ## ### ## ##|   
+   6 |-+          # # ####### # #### ### # #### # # # ### ## ## ## ### ## ##|   
+     |            # # ####### # #### ### # #### # # # ### ## ## ## ### ## ##|   
+     |************#*#*###*###*#*####*###*#*####*#*#*#*###*##*##*##*###*##*##|   
+   4 |-+          # # ### ### # #### ### # #### # # # ### ## ## ## # # ## ##|   
+     |            # # ### ### # ## # ### # #### # # # ### ## ## ## # # ## ##|   
+     |            # # ### # # # ## # ### # #### # # # ### ## ## ## # # ## ##|   
+   2 |-+          # # ### # # # ## # ### # #### # # # ### ## ## ## # # ## ##|   
+     |          ### #   #                  #                                |   
+     |###########  +             +              +             +             |   
+   0 +----------------------------------------------------------------------+   
+     0             50           100            150           200           250  
+                               Job profiling step                               
+                                                                                
+
+                                                                                
+                                                                                
+                                  Data read (GB)                                
+    1 +---------------------------------------------------------------------+   
+      |             +             +             +             +             |   
+      |                                                                     |   
+      |                                                                     |   
+      |                                                                     |   
+      |                                                                     |   
+  0.5 |-+                                                                 +-|   
+      |                                                                     |   
+      |                                                                     |   
+      |                                                                     |   
+      |                                                                     |   
+    0 |#####################################################################|   
+      |                                                                     |   
+      |                                                                     |   
+      |                                                                     |   
+      |                                                                     |   
+      |                                                                     |   
+ -0.5 |-+                                                                 +-|   
+      |                                                                     |   
+      |                                                                     |   
+      |                                                                     |   
+      |                                                                     |   
+      |             +             +             +             +             |   
+   -1 +---------------------------------------------------------------------+   
+      0             50           100           150           200           250  
+                                Job profiling step                              
+                                                                                
+
+                                                                                
+                                                                                
+                                  Data written (GB)                             
+  0.045 +-------------------------------------------------------------------+   
+        |             +            +             +            +             |   
+        |                                                              #####|   
+   0.04 |-+                                                           ##  +-|   
+        |                                                          ###      |   
+  0.035 |-+                                                       ##      +-|   
+        |                                                       ###         |   
+        |                                                       #           |   
+   0.03 |-+                                                   ###         +-|   
+        |                                                  ###              |   
+  0.025 |-+                                             ###               +-|   
+        |                                          ######                   |   
+        |                                       ###                         |   
+   0.02 |-+                                 ####                          +-|   
+        |                                  ##                               |   
+  0.015 |-+                          #######                              +-|   
+        |                          ###                                      |   
+        |                       ####                                        |   
+   0.01 |-+                   ###                                         +-|   
+        |                   ###                                             |   
+  0.005 |-+               ###                                             +-|   
+        |                ##                                                 |   
+        |             +###         +             +            +             |   
+      0 +-------------------------------------------------------------------+   
+        0             50          100           150          200           250  
+                                 Job profiling step                             
+                                                                                

@@ -3,7 +3,6 @@ from scipy.stats import pearsonr
 from sklearn.linear_model import Ridge
 import xgboost as xgb
 from tqdm import tqdm
-import cuml
 import torch
 import os
 import warnings
@@ -40,6 +39,7 @@ def can_use_cuml():
 
     # 2) Try cuML import
     try:
+        import cuml
         from cuml.ensemble import RandomForestRegressor  # noqa
     except Exception as e:
         warnings.warn(f"cuML import failed: {e}")
@@ -134,6 +134,7 @@ def train_test_reg(X_train, X_test, y_train, y_test,
         use_cuml = can_use_cuml()
 
         if use_cuml:
+            import cuml
 
             from cuml.ensemble import RandomForestRegressor as cuRF
 
@@ -179,39 +180,23 @@ def train_test_reg(X_train, X_test, y_train, y_test,
         if not use_cuml:
             from sklearn.ensemble import RandomForestRegressor as skRF
 
-        n_targets = y_train.shape[1]
-        n_test = X_test.shape[0]
-        preds_list = []
+            n_targets = y_train.shape[1]
+            n_test = X_test.shape[0]
+            preds_list = []
 
-        for i in range(n_targets):
-            print(f"Fitting RandomForest target {i+1}/{n_targets}")
-            y_col = y_train[:, i]
+            for i in range(n_targets):
+                print(f"Fitting RandomForest target {i+1}/{n_targets}")
+                y_col = y_train[:, i]
 
-            if use_cuml:
-                try:
-                    reg = cuRF(n_estimators=70, random_state=random_state)
-                    reg.fit(X_train, y_col)
-                    pred_i = reg.predict(X_test)
-                    pred_i = np.asarray(pred_i)
-                except Exception as e:
-                    # Catch runtime CUDA driver/runtime errors and fallback to sklearn
-                    warnings.warn(f"cuML failed at target {i}: {e}. Falling back to sklearn for remaining targets.")
-                    use_cuml = False
-                    del reg
-                    # initialize sklearn regressor for this target instead
-                    reg = skRF(n_estimators=70, random_state=random_state, n_jobs=-1)
-                    reg.fit(X_train, y_col)
-                    pred_i = reg.predict(X_test)
-            else:
                 reg = skRF(n_estimators=70, random_state=random_state, n_jobs=-1)
                 reg.fit(X_train, y_col)
                 pred_i = reg.predict(X_test)
 
-            pred_i = pred_i.reshape(n_test,)
-            preds_list.append(pred_i)
-            del reg
+                pred_i = pred_i.reshape(n_test,)
+                preds_list.append(pred_i)
+                del reg
 
-        preds_all = np.column_stack(preds_list)
+            preds_all = np.column_stack(preds_list)
 
             
     elif method == 'xgboost':
