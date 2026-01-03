@@ -102,6 +102,13 @@ def patch_hest_samples(
             print(f"[WARN] Skipping {sample_id}: folder does not exist at {sample_dir}")
             continue
 
+     # --- skip if any patch .h5 already exists under the sample (e.g. ROI/*/patches/*.h5) ---
+        existing_patch_files = list(sample_dir.glob("**/patches/*.h5"))
+        if existing_patch_files:
+            if verbose:
+                print(f"[INFO] Skipping {sample_id}: found existing patch files ({len(existing_patch_files)}) — e.g. {existing_patch_files[0]}")
+            continue
+
         try:
             # Load the sample via your helper
             st = load_hest_sample(sample_dir)
@@ -148,6 +155,7 @@ def patch_hest_samples(
             print(f"[ERROR] Missing required file(s) for {sample_id}: {e}")
         except Exception as e:
             print(f"[ERROR] Failed to patch {sample_id}: {e}")
+            
 
 def show_images(
     broad_dir: Path,
