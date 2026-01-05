@@ -110,6 +110,7 @@ def to_cuml_compatible_array(x, dtype=np.float32):
 def train_test_reg(X_train, X_test, y_train, y_test, 
                    max_iter=1000, random_state=0, genes=None, alpha=None, method='ridge'):
     
+    import numpy as np
     
     if method == 'ridge':
         alpha = 100 / (X_train.shape[1] * y_train.shape[1])
