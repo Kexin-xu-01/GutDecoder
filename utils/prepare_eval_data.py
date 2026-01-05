@@ -22,13 +22,23 @@ def _sanitize_tag(s: str, maxlen: int = 8) -> str:
     s2 = re.sub(r'[^A-Za-z0-9]', '', s)
     return s2.upper()[:maxlen] or "R"
 
-def _extract_pr_number(path: Path) -> Optional[int]:
+def _extract_r_number(path: Path) -> Optional[int]:
     """
-    Look for 'XeniumPR<digit>' pattern in the path (case-insensitive).
-    Returns int digit (1..9) or None.
+    Return the integer immediately following 'R' (case-insensitive).
+
+    Examples:
+      XeniumR6_cell_l0   -> 6
+      XeniumPR3          -> 3
+      VisiumR2_slideA    -> 2
+      VisiumR12_slideA   -> 12
+
+    Returns None if no such segment is found.
     """
-    m = re.search(r'XeniumPR(\d)', str(path), flags=re.IGNORECASE)
-    return int(m.group(1)) if m else None
+    for part in Path(path).parts:
+        m = re.search(r'[Rr](\d+)', part)
+        if m:
+            return int(m.group(1))
+    return None
 
 def _extract_slide_number(root: Path) -> Optional[str]:
     """
@@ -39,13 +49,11 @@ def _extract_slide_number(root: Path) -> Optional[str]:
     m = re.search(r'slide[_\-]?(\d+)', n)
     if m:
         return m.group(1)
-    m2 = re.search(r'\bS(\d+)\b', root.name, flags=re.IGNORECASE)
-    if m2:
-        return m2.group(1)
     return None
 
 def _discover_samples_from_roots(
     roots: List[Path],
+    prefix: str,
     ids: Optional[List[str]] = None,
 ) -> Dict[str, Dict[str, Path]]:
     """
@@ -99,17 +107,17 @@ def _discover_samples_from_roots(
                 exact = [c for c in cands if c.name == f"{sid}_patch_vis.png"]
                 vis_png = exact[0] if exact else cands[0]
 
-        # --- Naming rule ---
-        pr_num = _extract_pr_number(root)
-        slide_num = _extract_slide_number(root) or _sanitize_tag(root.name, 3)
+        pr_num = _extract_r_number(root)
+        slide_num = _extract_slide_number(root) 
 
         if pr_num is not None:
-            prefix = f"XeniumPR{pr_num}S{slide_num}"
+            sample_prefix = f"{prefix}{pr_num}S{slide_num}"
         else:
-            # fallback for unknown roots
-            prefix = f"{_sanitize_tag(root.name)}S{slide_num}"
-
-        new_id = f"{prefix}{sid}"
+            # fallback: sanitize root name (simple fallback below)
+            root_tag = re.sub(r'\W+', '', root.name)[:10]
+            sample_prefix = f"{root_tag}S{slide_num}"
+        
+        new_id = f"{sample_prefix}{sid}"
         if new_id in samples:
             raise ValueError(
                 f"Duplicate renamed sample id '{new_id}' (collision between roots for sid='{sid}')."
@@ -364,6 +372,7 @@ def write_var_k_genes_from_paths(
 def create_benchmark_data_multislide(
     save_dir: str | Path,
     K: int | str,
+    prefix: str,
     base_root: str | Path = "sftp://login1.molbiol.ox.ac.uk/ceph/project/simmons_hts/kxu/hest/xenium_data/XeniumPR1_segger",
     slide_subdirs: List[str] | tuple = ("slide1", "slide2"),
     ids: Optional[List[str]] = None,
@@ -411,7 +420,7 @@ def create_benchmark_data_multislide(
     roots = [base_root / sd for sd in slide_subdirs]
     print(f"[INFO] Using slide roots: {roots}")
 
-    samples = _discover_samples_from_roots(roots, ids=ids)
+    samples = _discover_samples_from_roots(roots, prefix = prefix, ids=ids)
     if not samples:
         raise ValueError(
             f"No valid samples (with aligned_adata.h5ad) found under any of: {roots}."
