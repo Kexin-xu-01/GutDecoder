@@ -12,7 +12,10 @@ import h5py
 import math
 from matplotlib.backends.backend_pdf import PdfPages
 import warnings
+from typing import Dict, List, Tuple
 from scipy.stats import pearsonr
+from scipy.sparse import issparse
+
 from hest.vis.plot import *
 
 
@@ -315,11 +318,7 @@ def read_patch_meta_from_h5(h5_path, barcode_ds='barcode', coords_ds='coords', v
         print(f"[read] {os.path.basename(h5_path)}: {len(df)} barcodes")
     return df
 
-import os
-import h5py
-import numpy as np
-import pandas as pd
-from typing import Dict, List, Tuple
+
 
 def _count_patches_in_tile_h5(tile_h5_path: str, barcode_ds: str = 'barcode') -> int:
     """Return number of barcode entries (patches) in a tile h5 file."""
@@ -875,38 +874,83 @@ def add_formatted_inference_to_adata(
     return summary
 
 
-def save_adata_from_list(adata_list, RUN_ROOT, RUN):
+# def save_adata_from_list(adata_list, RUN_ROOT, RUN):
+#     """
+#     Save all AnnData objects in adata_list to the run directory.
+#     Each file saved as <sample_name>.h5ad under os.path.join(RUN_ROOT, RUN).
+
+#     Parameters
+#     ----------
+#     adata_list : list[AnnData]
+#         list of AnnData objects
+#     RUN_ROOT : str or Path
+#         base directory for runs
+#     RUN : str
+#         subfolder name for this run
+#     filename_prefix : str or None
+#         optional string to prefix all filenames (e.g. 'inferred_')
+#     """
+#     save_dir = os.path.join(RUN_ROOT, 'ST_pred_results', RUN, 'pred')
+#     os.makedirs(save_dir, exist_ok=True)
+
+#     for i, ad in enumerate(adata_list):
+#         # try to infer sample name
+#         if 'sample_id' in ad.obs.columns:
+#             sample_name = str(ad.obs['sample_id'].iat[0])
+#         else:
+#             sample_name = f"{i}"
+
+#         out_path = os.path.join(save_dir, f"{sample_name}.h5ad")
+
+#         ad.write(out_path)
+#         print(f"[OK] Saved {sample_name} → {out_path}")
+
+#     print(f"All AnnData objects saved under {save_dir}")
+
+
+def save_adata_from_list(adata_list, RUN_ROOT, RUN, existing_pred_samples=None, force_overwrite=False):
     """
     Save all AnnData objects in adata_list to the run directory.
-    Each file saved as <sample_name>.h5ad under os.path.join(RUN_ROOT, RUN).
+    Each file saved as <sample_name>.h5ad under os.path.join(RUN_ROOT, 'ST_pred_results', RUN, 'pred').
 
-    Parameters
-    ----------
-    adata_list : list[AnnData]
-        list of AnnData objects
-    RUN_ROOT : str or Path
-        base directory for runs
-    RUN : str
-        subfolder name for this run
-    filename_prefix : str or None
-        optional string to prefix all filenames (e.g. 'inferred_')
+    If existing_pred_samples is provided (set of sample names):
+      - if force_overwrite == False: those samples will be skipped (not overwritten).
+      - if force_overwrite == True: those samples will be overwritten.
+    Returns list of saved paths.
     """
     save_dir = os.path.join(RUN_ROOT, 'ST_pred_results', RUN, 'pred')
     os.makedirs(save_dir, exist_ok=True)
 
+    saved_paths = []
     for i, ad in enumerate(adata_list):
-        # try to infer sample name
+        # try to infer sample name (same sanitisation as elsewhere)
         if 'sample_id' in ad.obs.columns:
             sample_name = str(ad.obs['sample_id'].iat[0])
+        elif 'sample' in ad.obs.columns:
+            sample_name = str(ad.obs['sample'].iat[0])
         else:
             sample_name = f"{i}"
 
-        out_path = os.path.join(save_dir, f"{sample_name}.h5ad")
+        safe_name = "".join(c if c.isalnum() or c in ('-', '_') else "_" for c in sample_name)
+        out_path = os.path.join(save_dir, f"{safe_name}.h5ad")
 
-        ad.write(out_path)
-        print(f"[OK] Saved {sample_name} → {out_path}")
+        # Skip or overwrite depending on force_overwrite
+        if existing_pred_samples and safe_name in existing_pred_samples and not force_overwrite:
+            print(f"[SKIP SAVE] {safe_name} already exists in pred folder -> not overwriting")
+            continue
 
-    print(f"All AnnData objects saved under {save_dir}")
+        try:
+            ad.write(out_path)
+            saved_paths.append(out_path)
+            action = "Overwrote" if os.path.exists(out_path) and safe_name in existing_pred_samples and force_overwrite else "Saved"
+            print(f"[OK] {action} {safe_name} → {out_path}")
+        except Exception as e:
+            print(f"[ERROR] Failed to save {safe_name}: {e}")
+
+    print(f"Saved {len(saved_paths)} AnnData objects under {save_dir}")
+    return saved_paths
+
+
 
 def _safe_sample_name(adata, idx):
     # prefer obs sample_id, then obs sample, then uns sample_id, then fallback
@@ -920,14 +964,7 @@ def _safe_sample_name(adata, idx):
     s = "".join(c if c.isalnum() or c in ('-', '_') else "_" for c in s)
     return s
 
-import os
-import math
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
-import warnings
-import scanpy as sc
-from scipy.sparse import issparse
+
 
 # pearsonr fallback
 try:
@@ -983,6 +1020,17 @@ def save_spatial_pred_target_pdfs_for_adata_list(
         safe_name = "".join(c if c.isalnum() or c in ('-', '_') else "_" for c in sample_name)
 
         out_pdf = os.path.join(outdir, f"{safe_name}.pdf")
+
+        # ---- skip if PDF already exists ----
+        if os.path.isfile(out_pdf):
+            if verbose:
+                print(f"[SKIP PDF] {sample_name}: PDF already exists at {out_pdf}")
+            results[sample_name] = {
+                "pdf_path": out_pdf,
+                "summary": None,
+                "reason": "pdf already exists"
+            }
+            continue
 
         # quick checks: pred/target layers exist?
         if pred_layer not in getattr(ad, "layers", {}):
@@ -1224,7 +1272,8 @@ def add_inference_to_adata_and_plot(
     size=1.2,
     dpi=100,
     cmap=None,
-    verbose=True
+    verbose=True,
+    force_overwrite: bool = False
 ):
     """
     High-level wrapper that:
@@ -1258,15 +1307,53 @@ def add_inference_to_adata_and_plot(
     if verbose: print("[step] remap split keys -> sample names using test splits")
     df_test_splits = get_test_splits(RUN)
 
-    # --------------- 2) load adata_list for dataset ----------------
+    # --------------- determine already-saved pred h5ads and skip them ---------------
+    pred_save_dir = os.path.join(RUN_ROOT, 'ST_pred_results', RUN, 'pred')
+    existing_pred_samples = set()
+    if os.path.isdir(pred_save_dir):
+        for f in os.listdir(pred_save_dir):
+            if f.endswith('.h5ad'):
+                existing_pred_samples.add(os.path.splitext(f)[0])
+    if verbose:
+        print(f"[info] existing pred h5ads in {pred_save_dir}: {sorted(list(existing_pred_samples))}")
+        if force_overwrite:
+            print("[info] force_overwrite=True -> existing pred h5ads WILL be overwritten and samples WILL be processed")
+
+    # # --------------- 2) load adata_list for dataset ----------------
+    # data_dir = os.path.join(base_data_dir, dataset_name, 'adata')
+    # if verbose: print(f"[step] loading adata files from {data_dir}")
+    # adata_list = []
+    # sample_names = []
+    # for fname in os.listdir(data_dir):
+    #     if not fname.endswith(".h5ad"):
+    #         continue
+    #     sample = os.path.splitext(fname)[0]
+    #     fpath = os.path.join(data_dir, fname)
+    #     if verbose: print(f"  loading {fpath}")
+    #     adata = sc.read_h5ad(fpath)
+    #     # store sample name in .obs for later saving and matching
+    #     adata.obs['sample_id'] = sample
+    #     adata_list.append(adata)
+    #     sample_names.append(sample)
+
+    # --------------- 2) load adata_list for dataset, skipping pre-saved samples ----------------
     data_dir = os.path.join(base_data_dir, dataset_name, 'adata')
     if verbose: print(f"[step] loading adata files from {data_dir}")
     adata_list = []
     sample_names = []
+    skipped_preexisting = []
     for fname in os.listdir(data_dir):
         if not fname.endswith(".h5ad"):
             continue
         sample = os.path.splitext(fname)[0]
+        # apply same sanitisation used for saved pred filenames to compare
+        safe_sample = "".join(c if c.isalnum() or c in ('-', '_') else "_" for c in sample)
+        if safe_sample in existing_pred_samples:
+            skipped_preexisting.append(sample)
+            if verbose:
+                print(f"[SKIP LOAD] {sample}: h5ad already present in pred folder -> skipping processing for this sample")
+            continue
+
         fpath = os.path.join(data_dir, fname)
         if verbose: print(f"  loading {fpath}")
         adata = sc.read_h5ad(fpath)
@@ -1275,6 +1362,8 @@ def add_inference_to_adata_and_plot(
         adata_list.append(adata)
         sample_names.append(sample)
 
+    if verbose and skipped_preexisting:
+        print(f"[info] skipped {len(skipped_preexisting)} samples because pred h5ad already exists: {skipped_preexisting}")
 
     # --------------- 3) attach patch barcodes to formatted_inference automatically -------------
     # extra sampple matching for broad splits (leave-one-patient-out CV)
@@ -1289,14 +1378,57 @@ def add_inference_to_adata_and_plot(
         verbose=verbose
     )
 
-    if verbose: print("[step] attach barcodes to formatted_inference using patches directory")
+    # if verbose: print("[step] attach barcodes to formatted_inference using patches directory")
+    # patch_meta_map = attach_barcodes_to_formatted_inference_auto(
+    #     formatted_inference,
+    #     dataset_name=dataset_name,
+    #     base_dir=base_data_dir,
+    #     subdir=patches_subdir,
+    #     verbose=verbose
+    # )
+
+    if verbose:
+        print("[step] attach barcodes to formatted_inference using patches directory")
+
+    # skip samples whose pred h5ad already exists (unless force_overwrite)
+    if existing_pred_samples and not force_overwrite:
+        filtered_formatted_inference = {}
+        skipped_barcode_attach = []
+        for k, v in formatted_inference.items():
+            safe_k = "".join(c if c.isalnum() or c in ('-', '_') else "_" for c in str(k))
+            if safe_k in existing_pred_samples:
+                skipped_barcode_attach.append(k)
+            else:
+                filtered_formatted_inference[k] = v
+
+        if verbose and skipped_barcode_attach:
+            print(
+                f"[SKIP BARCODE ATTACH] skipping {len(skipped_barcode_attach)} samples "
+                f"because pred h5ad already exists: {skipped_barcode_attach}"
+            )
+    else:
+        filtered_formatted_inference = formatted_inference
+
     patch_meta_map = attach_barcodes_to_formatted_inference_auto(
-        formatted_inference,
+        filtered_formatted_inference,
         dataset_name=dataset_name,
         base_dir=base_data_dir,
         subdir=patches_subdir,
         verbose=verbose
-    )
+)
+
+    if existing_pred_samples and not force_overwrite:
+        removed = []
+        for k in list(formatted_inference.keys()):
+            safe_k = "".join(c if c.isalnum() or c in ('-', '_') else "_" for c in str(k))
+            if safe_k in existing_pred_samples:
+                removed.append(k)
+                formatted_inference.pop(k, None)
+        if verbose and removed:
+            print(f"[SKIP INFERENCE] removed {len(removed)} formatted_inference entries because pred h5ad already exists: {removed}")
+    elif existing_pred_samples and force_overwrite:
+        if verbose:
+            print("[info] force_overwrite=True -> keeping formatted_inference entries for samples that already have pred h5ads (will overwrite)")
 
     # --------------- 4) add formatted_inference to adata layers ----------------
     if verbose: print("[step] writing preds/targets into adata.layers (with sanitisation)")
@@ -1311,8 +1443,10 @@ def add_inference_to_adata_and_plot(
     )
 
     # --------------- 5) save the adata list to RUN folder ----------------
+    # if verbose: print("[step] saving adata_list to disk")
+    # saved_paths = save_adata_from_list(adata_list, RUN_ROOT, RUN)
     if verbose: print("[step] saving adata_list to disk")
-    saved_paths = save_adata_from_list(adata_list, RUN_ROOT, RUN)
+    saved_paths = save_adata_from_list(adata_list, RUN_ROOT, RUN, existing_pred_samples=existing_pred_samples, force_overwrite=force_overwrite)
 
     # --------------- 6) optionally plot gene lists ----------------
     plot_results = {}
