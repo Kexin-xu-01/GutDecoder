@@ -19,6 +19,17 @@ from pathlib import Path
 
 from hest.utils import read_xenium_alignment, align_xenium_df  
 
+# keep original function
+_orig_calc_qc = sc.pp.calculate_qc_metrics
+
+try:
+    # replace with a no-op
+    sc.pp.calculate_qc_metrics = lambda *args, **kwargs: None
+
+finally:
+    # restore original function
+    sc.pp.calculate_qc_metrics = _orig_calc_qc
+
 
 def coord_range(spatial: np.ndarray) -> Tuple[float, float, float, float]:
     """Return (x_min, x_max, y_min, y_max) for an n×2 spatial array."""
@@ -567,7 +578,321 @@ def apply_spot_exclusions(sx, sy, bbox, rules):
 
     return ~exclude  # keep mask
 
+def apply_spot_exclusions(sx, sy, bbox, rules):
+    """
+    Exclude spots by region rules. Returns a boolean mask of spots to KEEP.
 
+    Parameters
+    ----------
+    sx, sy : 1D arrays of spot coordinates (pixels)
+    bbox   : (xmin, xmax, ymin, ymax) in pixels
+    rules  : list of dicts. Supported types:
+      - {'type':'corner', 'corner':'top-left|top-right|bottom-left|bottom-right',
+         'width': <float>, 'height': <float>, 'units':'px'|'frac'}
+      - {'type':'strip', 'side':'top|bottom|left|right', 'size': <float>, 'units':'px'|'frac'}
+        OR to define a middle strip:
+        - {'type':'strip', 'axis':'x'|'y', 'bounds': (start, end), 'units':'px'|'frac'}
+          * For axis='y' bounds are (ymin_rel, ymax_rel) (0..1 in 'frac') or pixel coords in 'px'
+          * For axis='x' bounds are (xmin_rel, xmax_rel) similarly.
+          * If `bounds` is provided it takes precedence over side/size behavior.
+      - {'type':'rect', 'xmin': <float>, 'xmax': <float>, 'ymin': <float>, 'ymax': <float>, 'units':'px'|'frac'}
+        * For 'rect' in 'frac' units, values are in [0,1] relative to the bbox (0=left/top, 1=right/bottom).
+      - {'type':'trapezoid', 'orientation':'top|bottom|left|right',
+         'top_width': <float>, 'bottom_width': <float>, 'height': <float>,
+         'units':'px'|'frac', 'center_offset': <float (px or frac)>}
+        * 'orientation' describes which bbox edge the trapezoid base sits on:
+           - 'top' : base along top edge y = ymin and trapezoid points downward
+           - 'bottom': base along bottom edge y = ymax and trapezoid points upward
+           - 'left' : base along left edge x = xmin and trapezoid points rightward
+           - 'right': base along right edge x = xmax and trapezoid points leftward
+        * widths/heights are in px or fraction of bbox width/height depending on 'units'.
+        * 'center_offset' (optional, default 0) shifts the trapezoid along the edge axis (positive moves right for top/bottom, down for left/right).
+    """
+    xmin, xmax, ymin, ymax = bbox
+    w = xmax - xmin
+    h = ymax - ymin
+
+    exclude = np.zeros_like(sx, dtype=bool)
+
+    for r in rules:
+        rtype = r.get('type')
+
+        if rtype == 'corner':
+            units = r.get('units', 'px')
+            corner = r['corner']
+            ww = r['width']
+            hh = r['height']
+            if units == 'frac':
+                ww = ww * w
+                hh = hh * h
+
+            if corner == 'top-left':
+                cond = (sx < xmin + ww) & (sy < ymin + hh)
+            elif corner == 'top-right':
+                cond = (sx > xmax - ww) & (sy < ymin + hh)
+            elif corner == 'bottom-left':
+                cond = (sx < xmin + ww) & (sy > ymax - hh)
+            elif corner == 'bottom-right':
+                cond = (sx > xmax - ww) & (sy > ymax - hh)
+            else:
+                raise ValueError("corner must be one of: top-left, top-right, bottom-left, bottom-right")
+            exclude |= cond
+
+        elif rtype == 'strip':
+            # New behaviour: if 'bounds' provided, it defines an arbitrary strip region
+            # bounds = (start, end) in 'px' or 'frac' relative to bbox
+            bounds = r.get('bounds', None)
+            units = r.get('units', 'px')
+
+            if bounds is not None:
+                if not (isinstance(bounds, (list, tuple)) and len(bounds) == 2):
+                    raise ValueError("strip 'bounds' must be a 2-tuple/list (start, end)")
+
+                start, end = bounds
+                # convert frac to pixels relative to bbox
+                if units == 'frac':
+                    # If both values between 0 and 1 we treat them as fractions of bbox
+                    # For clarity: start=0 -> left/top; end=1 -> right/bottom
+                    if r.get('axis') == 'x' or r.get('side') in ('left', 'right'):
+                        sx_min = xmin + start * w
+                        sx_max = xmin + end * w
+                        cond = (sx >= min(sx_min, sx_max)) & (sx <= max(sx_min, sx_max))
+                    else:
+                        # default axis is 'y' if unspecified or if side is top/bottom
+                        sy_min = ymin + start * h
+                        sy_max = ymin + end * h
+                        cond = (sy >= min(sy_min, sy_max)) & (sy <= max(sy_min, sy_max))
+                else:
+                    # units == 'px'
+                    if r.get('axis') == 'x' or r.get('side') in ('left', 'right'):
+                        sx_min = start
+                        sx_max = end
+                        cond = (sx >= min(sx_min, sx_max)) & (sx <= max(sx_min, sx_max))
+                    else:
+                        sy_min = start
+                        sy_max = end
+                        cond = (sy >= min(sy_min, sy_max)) & (sy <= max(sy_min, sy_max))
+
+                exclude |= cond
+
+            else:
+                # legacy edge-strip behavior using 'side' + 'size'
+                side = r['side']
+                ss = r['size']
+                if units == 'frac':
+                    ss = ss * (h if side in ('top','bottom') else w)
+
+                if side == 'top':
+                    cond = sy < ymin + ss
+                elif side == 'bottom':
+                    cond = sy > ymax - ss
+                elif side == 'left':
+                    cond = sx < xmin + ss
+                elif side == 'right':
+                    cond = sx > xmax - ss
+                else:
+                    raise ValueError("side must be one of: top, bottom, left, right")
+                exclude |= cond
+
+        elif rtype == 'rect':
+            units = r.get('units', 'px')
+            if units == 'frac':
+                rxmin = xmin + r['xmin'] * w
+                rxmax = xmin + r['xmax'] * w
+                rymin = ymin + r['ymin'] * h
+                rymax = ymin + r['ymax'] * h
+            else:
+                rxmin, rxmax = r['xmin'], r['xmax']
+                rymin, rymax = r['ymin'], r['ymax']
+            cond = (sx >= rxmin) & (sx <= rxmax) & (sy >= rymin) & (sy <= rymax)
+            exclude |= cond
+
+        elif rtype == 'trapezoid':
+            # Parameters & defaults
+            units = r.get('units', 'px')
+            ori = r.get('orientation', 'top')
+            top_w = r.get('top_width')
+            bot_w = r.get('bottom_width')
+            height = r.get('height')
+            offset = r.get('center_offset', 0.0)
+
+            if top_w is None or bot_w is None or height is None:
+                raise ValueError("trapezoid requires 'top_width', 'bottom_width', and 'height'")
+
+            # Convert frac to px if needed
+            if units == 'frac':
+                if ori in ('top', 'bottom'):
+                    top_w = top_w * w
+                    bot_w = bot_w * w
+                    height = height * h
+                    offset = offset * w
+                else:
+                    top_w = top_w * h  # for left/right, interpret widths along vertical axis
+                    bot_w = bot_w * h
+                    height = height * w
+                    offset = offset * h
+
+            # Build polygon vertices depending on orientation.
+            if ori == 'top':
+                cx = (xmin + xmax) / 2.0 + offset
+                top_left_x = cx - top_w / 2.0
+                top_right_x = cx + top_w / 2.0
+                bot_left_x = cx - bot_w / 2.0
+                bot_right_x = cx + bot_w / 2.0
+
+                poly_x = np.array([top_left_x, top_right_x, bot_right_x, bot_left_x])
+                poly_y = np.array([ymin, ymin, ymin + height, ymin + height])
+
+            elif ori == 'bottom':
+                cx = (xmin + xmax) / 2.0 + offset
+                top_left_x = cx - bot_w / 2.0
+                top_right_x = cx + bot_w / 2.0
+                bot_left_x = cx - top_w / 2.0
+                bot_right_x = cx + top_w / 2.0
+
+                poly_x = np.array([top_left_x, top_right_x, bot_right_x, bot_left_x])
+                poly_y = np.array([ymax - height, ymax - height, ymax, ymax])
+
+            elif ori == 'left':
+                cy = (ymin + ymax) / 2.0 + offset
+                top_left_y = cy - top_w / 2.0
+                bottom_left_y = cy + top_w / 2.0
+                top_right_y = cy - bot_w / 2.0
+                bottom_right_y = cy + bot_w / 2.0
+
+                poly_x = np.array([xmin, xmin, xmin + height, xmin + height])
+                poly_y = np.array([top_left_y, bottom_left_y, bottom_right_y, top_right_y])
+
+            elif ori == 'right':
+                cy = (ymin + ymax) / 2.0 + offset
+                top_left_y = cy - bot_w / 2.0
+                bottom_left_y = cy + bot_w / 2.0
+                top_right_y = cy - top_w / 2.0
+                bottom_right_y = cy + top_w / 2.0
+
+                poly_x = np.array([xmax - height, xmax - height, xmax, xmax])
+                poly_y = np.array([top_left_y, bottom_left_y, bottom_right_y, top_right_y])
+
+            else:
+                raise ValueError("orientation must be one of: top, bottom, left, right")
+
+            # Now check which points are inside polygon (requires your _points_in_polygon helper)
+            inside_trap = _points_in_polygon(sx, sy, poly_x, poly_y)
+            exclude |= inside_trap
+
+        else:
+            raise ValueError(f"Unknown rule type: {rtype}")
+
+    return ~exclude  # keep mask
+
+def rule_based_spot_exclusion(
+    st,
+    rules,
+    img_key="downscaled_fullres",
+    plot=True,
+    figsize=(8, 6),
+    show=False,
+    save_path=None,
+    verbose=True,
+):
+    """
+    Apply rule-based exclusions to spots across the full WSI (no cell bbox restriction).
+
+    Parameters
+    ----------
+    st : object
+        Object containing spatial AnnData at `st.adata` and (optionally) a `st.wsi` with .width/.height.
+        Must have st.adata.obsm["spatial"] present.
+    rules : list of dict
+        List of rule dictionaries. Each dict must contain:
+            - 'type': currently only 'strip' supported
+            - 'side': 'top' | 'bottom' | 'left' | 'right'
+            - 'size': numeric (if units == 'px', size in pixels; if units == 'frac', fractional size 0-1)
+            - 'units': 'px' | 'frac'  (default 'frac' if omitted)
+        Example: [{'type':'strip','side':'top','size':0.09,'units':'frac'}]
+        Rules are applied sequentially; a spot is kept only if it passes ALL rules (logical AND).
+    img_key : str
+        Image key used for plotting with sc.pl.spatial (default "downscaled_fullres").
+    plot : bool
+        If True, build and return a matplotlib Figure showing spots kept (uses sc.pl.spatial(..., return_fig=True)).
+    figsize : tuple
+        Figure size in inches.
+    show : bool
+        Passed to sc.pl.spatial show argument (if False the function will return the fig and not show it).
+    save_path : str or Path or None
+        If provided, the plotted figure will be saved to this path (requires plot=True).
+    verbose : bool
+        Print summaries.
+
+    Returns
+    -------
+    final_keep : np.ndarray (bool)
+        Boolean mask (len = number of spots) with True for spots kept after applying all rules.
+    fig : matplotlib.figure.Figure or None
+        If plot=True, returns the figure; otherwise returns None.
+
+    Notes
+    -----
+    - Coordinate system assumptions: `st.adata.obsm["spatial"]` is Nx2 array of (x, y).
+      The bounding box is assumed to be [xmin, xmax] x [ymin, ymax]. If `st.wsi` exists it uses
+      width/height from there. Otherwise it uses min/max of the coordinates as a fallback.
+    - Currently only 'strip' rules implemented. A 'strip' removes a band along one side:
+        side = 'top'    -> band near ymin
+        side = 'bottom' -> band near ymax
+        side = 'left'   -> band near xmin
+        side = 'right'  -> band near xmax
+      For 'frac' units the size is fraction of the full height (for top/bottom) or width (for left/right).
+    """
+    # get spot coordinates
+    xy = st.adata.obsm["spatial"]
+    sx = xy[:, 0].astype(float)
+    sy = xy[:, 1].astype(float)
+
+    # determine bounding box
+    try:
+        xmin, ymin = 0.0, 0.0
+        xmax, ymax = float(st.wsi.width), float(st.wsi.height)
+    except Exception:
+        # fallback: use min/max of coords (adds small padding)
+        xmin, xmax = float(sx.min()), float(sx.max())
+        ymin, ymax = float(sy.min()), float(sy.max())
+        # add a tiny padding so strips that reference fractions behave sensibly
+        pad_x = (xmax - xmin) * 0.001 if (xmax > xmin) else 1.0
+        pad_y = (ymax - ymin) * 0.001 if (ymax > ymin) else 1.0
+        xmin -= pad_x; xmax += pad_x
+        ymin -= pad_y; ymax += pad_y
+
+    width = xmax - xmin
+    height = ymax - ymin
+
+    # start with everything kept
+    final_keep = apply_spot_exclusions(sx, sy, (xmin, xmax, ymin, ymax), rules)
+
+    if verbose:
+        kept = int(np.count_nonzero(final_keep))
+        total = len(final_keep)
+        print(f"Spots kept after rules: {kept} / {total}")
+
+    fig = None
+    if plot:
+        # prepare a subsetted AnnData view for plotting
+        try:
+            ad_subset = st.adata[final_keep]
+            sc.pl.spatial(
+                st.adata[final_keep],
+                img_key="downscaled_fullres",
+                color="total_counts",
+                title="In-tissue spots (after rule exclusions)",
+            )
+
+            if save_path is not None:
+                fig.savefig(str(save_path), bbox_inches="tight")
+        except Exception as e:
+            if verbose:
+                print("Plotting failed:", e)
+            fig = None
+
+    return final_keep, fig
 
 __all__ = [
     "coord_range",
@@ -582,5 +907,6 @@ __all__ = [
     "plot_cell",
     "save_all",
     "apply_spot_exclusions",
-    'fast_spatial'
+    'fast_spatial',
+    "rule_based_spot_exclusion"
 ]
