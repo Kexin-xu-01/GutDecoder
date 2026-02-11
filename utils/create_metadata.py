@@ -1,7 +1,9 @@
 from pathlib import Path
-from typing import List, Union, Optional, Sequence, Dict, Any
+from typing import List, Union, Optional, Sequence, Dict, Any, List, Callable
 import pandas as pd
 import re
+import scanpy as sc
+from IPython.display import display
 
 
 def _maybe_prefix(sample_id: str, prefix: Optional[str]) -> str:
@@ -200,3 +202,387 @@ def build_merged_counts(
             print(f"[info] merged metric '{key}' ({len(df_counts)} rows) into metadata; merged shape now {merged.shape}")
 
     return {"merged": merged, "per_metric": per_metric}
+
+
+def return_qc(root, save_csv=None):
+    """
+    Load .h5ad files under each sample folder and compute mean QC metrics.
+
+    Expected structure:
+        root/
+            sample1/
+                *.h5ad
+            sample2/
+                *.h5ad
+
+    Args:
+        root (str or Path): root directory containing sample folders
+        save_csv (str or Path, optional): if given, save summary table to this CSV
+
+    Returns:
+        pandas.DataFrame
+    """
+    root = Path(root)
+    results = []
+
+    for sample_dir in sorted(root.iterdir()):
+        if not sample_dir.is_dir():
+            continue
+
+        for h5ad_file in sample_dir.glob("aligned_adata.h5ad"):
+            sample_id = sample_dir.name
+
+            try:
+                adata = sc.read_h5ad(h5ad_file)
+
+                obs = adata.obs
+
+                summary = {
+                    "sample_id": sample_id,
+                    "n_obs": adata.n_obs,
+                    "mean_total_counts": obs["total_counts"].mean() if "total_counts" in obs else None,
+                    "mean_n_genes_by_counts": obs["n_genes_by_counts"].mean() if "n_genes_by_counts" in obs else None,
+                    "mean_log1p_total_counts": obs["log1p_total_counts"].mean() if "log1p_total_counts" in obs else None,
+                    "mean_log1p_n_genes_by_counts": obs["log1p_n_genes_by_counts"].mean() if "log1p_n_genes_by_counts" in obs else None,
+                }
+
+                results.append(summary)
+
+            except Exception as e:
+                print(f"[ERROR] Failed reading {h5ad_file}: {e}")
+
+    df = pd.DataFrame(results).sort_values("sample_id")
+
+    print(df)
+
+    if save_csv:
+        df.to_csv(root / save_csv, index=False)
+        print(f"[INFO] Saved summary to {root / save_csv}")
+
+    return df
+
+
+# from pathlib import Path
+# import pandas as pd
+# from typing import Callable, List, Tuple, Optional, Dict
+
+# import re
+
+
+# def add_qc_from_selected_runs(
+#     metadata: pd.DataFrame,
+#     root: str | Path,
+#     qc_func: Optional[Callable[[str, Optional[str]], pd.DataFrame]] = None,
+#     save_csv_name: Optional[str] = "qc_summary.csv",
+#     update_existing: bool = True,
+#     verbose: bool = True,
+# ) -> Dict[str, Any]:
+#     """
+#     Scan root for run folders exactly matching:
+#       - XeniumPR<digits>  (e.g. XeniumPR1)
+#       - XeniumR<digits>   (e.g. XeniumR1)
+#       - VisiumR<digits>   (e.g. VisiumR1)
+
+#     For each run found, processes slide1 and slide2 (if present), runs qc_func on the slide path,
+#     prefixes sample_id by '{run_name}S{slide_idx}', and merges QC columns into metadata.
+
+#     Args:
+#         metadata: pandas.DataFrame containing at least 'sample_id' (will be preserved).
+#         root: root directory containing run folders.
+#         qc_func: function(path: str, save_csv: Optional[str]) -> pandas.DataFrame.
+#                  If None, will try to use `return_qc`, `summarize_h5ad_qc_from_adata`, or
+#                  `summarize_h5ad_qc_safe` from globals().
+#         save_csv_name: optional filename (relative to each slide) to pass to qc_func so it may save CSV.
+#         update_existing: if True, overwrite existing metadata values for matched sample_id rows;
+#                          if False, only fill missing values (NaNs).
+#         verbose: whether to print progress.
+
+#     Returns:
+#         {
+#             "metadata": updated_metadata_df,
+#             "processed_runs": list_of_run_names_processed,
+#             "per_slide": list_of (slide_path_str, df_qc) tuples for debugging
+#         }
+#     """
+#     root = Path(root)
+
+#     # compile regexes for exact matches
+#     patterns = [
+#         re.compile(r"^XeniumPR\d+$"),
+#         re.compile(r"^XeniumR\d+$"),
+#         re.compile(r"^VisiumR\d+$"),
+#     ]
+
+#     # find run directories that exactly match any pattern
+#     run_dirs: List[Path] = []
+#     for d in sorted(root.iterdir()):
+#         if not d.is_dir():
+#             continue
+#         if any(p.match(d.name) for p in patterns):
+#             run_dirs.append(d)
+
+#     if verbose:
+#         print(f"Found {len(run_dirs)} matching runs under {root}:")
+#         for r in run_dirs:
+#             print("  -", r.name)
+
+#     # autodetect qc_func if not provided
+#     if qc_func is None:
+#         qc_func = globals().get("return_qc") or globals().get("summarize_h5ad_qc_from_adata") or globals().get("summarize_h5ad_qc_safe")
+#         if qc_func is None:
+#             raise ValueError("qc_func not provided and no default (return_qc/summarize_h5ad_qc_from_adata) found in globals.")
+
+#     expected_cols = [
+#         "n_obs",
+#         "mean_total_counts",
+#         "mean_n_genes_by_counts",
+#         "mean_log1p_total_counts",
+#         "mean_log1p_n_genes_by_counts",
+#     ]
+
+#     # make a working copy of metadata and ensure QC columns exist
+#     meta = metadata.copy(deep=True)
+#     for c in expected_cols:
+#         if c not in meta.columns:
+#             meta[c] = pd.NA
+
+#     processed_runs: List[str] = []
+#     per_slide: List[tuple] = []
+
+#     for run_dir in run_dirs:
+#         run_name = run_dir.name
+#         processed_runs.append(run_name)
+
+#         for slide_idx, slide_name in enumerate(["slide1", "slide2"], start=1):
+#             slide_path = run_dir / slide_name
+#             if not slide_path.exists():
+#                 if verbose:
+#                     print(f"[SKIP] {run_name}/{slide_name} not found.")
+#                 continue
+
+#             if verbose:
+#                 print(f"\n[QC] Processing {run_name} / {slide_name} ...")
+
+#             # call qc_func; try (path, save_csv) signature first
+#             try:
+#                 if save_csv_name is not None:
+#                     df_qc = qc_func(str(slide_path), save_csv=save_csv_name)
+#                 else:
+#                     df_qc = qc_func(str(slide_path))
+#             except TypeError:
+#                 df_qc = qc_func(str(slide_path))
+#             except Exception as e:
+#                 if verbose:
+#                     print(f"[ERROR] qc_func failed on {slide_path}: {e}")
+#                 continue
+
+#             if df_qc is None or df_qc.empty:
+#                 if verbose:
+#                     print("  No QC rows returned.")
+#                 continue
+
+#             # normalize df_qc: ensure sample_id
+#             if "sample_id" not in df_qc.columns:
+#                 df_qc = df_qc.reset_index().rename(columns={"index": "sample_id"})
+
+#             # prefix sample_id like RunNameS{slide_idx}
+#             prefix = f"{run_name}S{slide_idx}"
+#             df_qc["sample_id"] = prefix + df_qc["sample_id"].astype(str)
+
+#             # ensure expected columns exist in df_qc
+#             for c in expected_cols:
+#                 if c not in df_qc.columns:
+#                     df_qc[c] = pd.NA
+
+#             # trim to expected columns + sample_id
+#             df_qc_trim = df_qc[["sample_id"] + expected_cols].copy()
+
+#             per_slide.append((str(slide_path), df_qc_trim))
+
+#             if verbose:
+#                 # pretty display if in notebook, otherwise print head
+#                 try:
+#                     from IPython.display import display
+#                     display(df_qc_trim)
+#                 except Exception:
+#                     print(df_qc_trim.head())
+
+#             # merge into meta
+#             for _, row in df_qc_trim.iterrows():
+#                 sid = row["sample_id"]
+#                 if sid in meta["sample_id"].values:
+#                     if update_existing:
+#                         for c in expected_cols:
+#                             meta.loc[meta["sample_id"] == sid, c] = row[c]
+#                     else:
+#                         for c in expected_cols:
+#                             mask = meta["sample_id"] == sid
+#                             meta.loc[mask, c] = meta.loc[mask, c].fillna(row[c])
+#                 else:
+#                     # append new row preserving meta columns
+#                     new_row = {col: pd.NA for col in meta.columns}
+#                     new_row["sample_id"] = sid
+#                     for c in expected_cols:
+#                         new_row[c] = row[c]
+#                     meta = pd.concat([meta, pd.DataFrame([new_row])], ignore_index=True)
+
+#     # final tidy
+#     if "sample_id" in meta.columns:
+#         meta = meta.sort_values("sample_id").reset_index(drop=True)
+
+#     if verbose:
+#         print("\n✅ QC integration complete. Processed runs:", processed_runs)
+
+#     return {"metadata": meta, "processed_runs": processed_runs, "per_slide": per_slide}
+
+
+
+
+
+def add_qc_from_all_runs(
+    metadata: pd.DataFrame,
+    xenium_root: str | Path,
+    visium_root: str | Path,
+    qc_func: Optional[Callable] = None,
+    save_csv_name: Optional[str] = "qc_summary.csv",
+    update_existing: bool = True,
+    verbose: bool = True,
+) -> Dict[str, Any]:
+    """
+    Scan both xenium_root and visium_root for run folders exactly matching:
+        XeniumPR<digits>
+        XeniumR<digits>
+        VisiumR<digits>
+
+    For each run:
+        - process slide1 and slide2
+        - call qc_func on slide path
+        - prefix sample_id with RunNameS{slide_idx}
+        - merge QC columns into metadata
+
+    Returns:
+        {
+            "metadata": updated_metadata_df,
+            "processed_runs": [...],
+        }
+    """
+
+    xenium_root = Path(xenium_root)
+    visium_root = Path(visium_root)
+
+    # strict matching
+    patterns = [
+        re.compile(r"^XeniumPR\d+$"),
+        re.compile(r"^XeniumR\d+$"),
+        re.compile(r"^VisiumR\d+$"),
+    ]
+
+    # collect all valid run dirs from both roots
+    run_dirs: List[Path] = []
+
+    for root in [xenium_root, visium_root]:
+        if not root.exists():
+            continue
+        for d in root.iterdir():
+            if d.is_dir() and any(p.match(d.name) for p in patterns):
+                run_dirs.append(d)
+
+    if verbose:
+        print(f"Found {len(run_dirs)} valid runs across Xenium + Visium:")
+        for r in sorted(run_dirs):
+            print("  -", r)
+
+    # autodetect qc function if not provided
+    if qc_func is None:
+        qc_func = (
+            globals().get("return_qc")
+            or globals().get("summarize_h5ad_qc_from_adata")
+            or globals().get("summarize_h5ad_qc_safe")
+        )
+        if qc_func is None:
+            raise ValueError("qc_func not provided and no default QC function found.")
+
+    expected_cols = [
+        "n_obs",
+        "mean_total_counts",
+        "mean_n_genes_by_counts",
+        "mean_log1p_total_counts",
+        "mean_log1p_n_genes_by_counts",
+    ]
+
+    meta = metadata.copy(deep=True)
+
+    # ensure QC columns exist
+    for col in expected_cols:
+        if col not in meta.columns:
+            meta[col] = pd.NA
+
+    processed_runs = []
+
+    for run_dir in sorted(run_dirs):
+        run_name = run_dir.name
+        processed_runs.append(run_name)
+
+        for slide_idx, slide_name in enumerate(["slide1", "slide2"], start=1):
+            slide_path = run_dir / slide_name
+            if not slide_path.exists():
+                continue
+
+            if verbose:
+                print(f"\n[QC] {run_name} - {slide_name}")
+
+            try:
+                if save_csv_name:
+                    df_qc = qc_func(str(slide_path), save_csv=save_csv_name)
+                else:
+                    df_qc = qc_func(str(slide_path))
+            except TypeError:
+                df_qc = qc_func(str(slide_path))
+            except Exception as e:
+                print(f"[ERROR] QC failed on {slide_path}: {e}")
+                continue
+
+            if df_qc is None or df_qc.empty:
+                if verbose:
+                    print("  No QC rows found.")
+                continue
+
+            if "sample_id" not in df_qc.columns:
+                df_qc = df_qc.reset_index().rename(columns={"index": "sample_id"})
+
+            # prefix with RunNameS{slide}
+            prefix = f"{run_name}S{slide_idx}"
+            df_qc["sample_id"] = prefix + df_qc["sample_id"].astype(str)
+
+            for col in expected_cols:
+                if col not in df_qc.columns:
+                    df_qc[col] = pd.NA
+
+            df_qc = df_qc[["sample_id"] + expected_cols]
+
+            if verbose:
+                display(df_qc)
+
+            # merge/update metadata
+            for _, row in df_qc.iterrows():
+                sid = row["sample_id"]
+
+                if sid in meta["sample_id"].values:
+                    if update_existing:
+                        for col in expected_cols:
+                            meta.loc[meta["sample_id"] == sid, col] = row[col]
+                    else:
+                        for col in expected_cols:
+                            mask = meta["sample_id"] == sid
+                            meta.loc[mask, col] = meta.loc[mask, col].fillna(row[col])
+                else:
+                    new_row = {c: pd.NA for c in meta.columns}
+                    new_row["sample_id"] = sid
+                    for col in expected_cols:
+                        new_row[col] = row[col]
+                    meta = pd.concat([meta, pd.DataFrame([new_row])], ignore_index=True)
+
+    meta = meta.sort_values("sample_id").reset_index(drop=True)
+
+    print("\n✅ QC integration complete.")
+    return {"metadata": meta, "processed_runs": processed_runs}

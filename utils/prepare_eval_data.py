@@ -6,6 +6,7 @@ import shutil
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional, Union
 
+
 # --- Third-party ---
 import numpy as np
 import pandas as pd
@@ -959,6 +960,12 @@ def create_benchmark_data_multirun(
 
     splits_dir = save_dir / "splits"
     splits_dir.mkdir(parents=True, exist_ok=True)
+
+    if isinstance(K, str) and K.lower() == "loocv":
+        # number of (dataset_title, patient) groups — exactly matches `group` below
+        K = meta.groupby(["dataset_title", "patient"]).ngroups
+        print(f"[INFO] Using leave-one-patient-per-dataset CV: K = {K}")
+
     create_splits(str(splits_dir), group, K=K)
     print(f"[INFO] Wrote {K}-fold patient-level splits to {splits_dir}")
 
@@ -973,11 +980,6 @@ def create_benchmark_data_multirun(
 
 
 
-from pathlib import Path
-from typing import List, Union, Optional, Dict
-import re
-import numpy as np
-import pandas as pd
 
 def create_benchmark_data_multirun_ex_val(
     save_dir: str | Path,
