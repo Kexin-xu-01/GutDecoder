@@ -373,14 +373,15 @@ def create_benchmark_data_multislide(
     save_dir: str | Path,
     K: int | str,
     prefix: str,
-    base_root: str | Path = "sftp://login1.molbiol.ox.ac.uk/ceph/project/simmons_hts/kxu/hest/xenium_data/XeniumPR1_segger",
+    base_root: str | Path,
     slide_subdirs: List[str] | tuple = ("slide1", "slide2"),
     ids: Optional[List[str]] = None,
     gene_k: Union[int, str] = 50,
     gene_criteria: str = "var",
     min_cells_pct: float = 0.10,
+    metadata_csv: str = "/project/simmons_hts/kxu/hest/hest_directory.csv",
     symlink: bool = False,
-    seed: int = 0,
+    seed: int = 0
 ):
     """
     Build a HEST benchmark package from both slide1 and slide2 under the XeniumPR1_segger tree
@@ -429,23 +430,33 @@ def create_benchmark_data_multislide(
     print(f"[INFO] Discovered {len(discovered_ids)} samples: {discovered_ids}")
 
     # 2) Minimal metadata DF for splitting (patient from prefix; dataset_title from base folder name)
-    def _infer_patient(sid: str) -> str:
-        return sid.split("_")[0] if "_" in sid else sid
+    # Load metadata CSV mapping sample_id -> patient_id
+    patient_map = {}
+    meta_df_csv = None
+    if Path(metadata_csv).exists():
+        metadata_csv = pd.read_csv(metadata_csv, dtype=str)
+        meta = pd.DataFrame()
+        meta["dataset_title"] = base_root.name or "xenium"
+        if {"sample_id", "patient_id"}.issubset(meta_df_csv.columns):
+            meta["id"] = meta_df_csv["sample_id"].astype(str).str.strip()
+            meta["patient"] = meta_df_csv["patient_id"].astype(str).str.strip()
+            patient_map = dict(zip(meta_df_csv["sample_id"], meta_df_csv["patient_id"]))
+            print(f"[INFO] Loaded {len(patient_map)} entries from {metadata_csv}")
+        else:
+            print(f"[WARN] metadata_csv missing columns 'sample_id'/'patient_id'; will fallback to automatic patient inference")
+    else:
+        print(f"[WARN] metadata_csv not found: {metadata_csv}; will fallback to automatic patient inference")
 
-    dataset_title = base_root.name or "xenium"
-    meta = pd.DataFrame(
-        {
-            "id": discovered_ids,
-            "patient": [_infer_patient(s) for s in discovered_ids],
-            "dataset_title": [dataset_title] * len(discovered_ids),
-        }
-    )
 
-    # 3) Compute var_k genes → var_50genes.json
-    # adata_paths = [samples[sid]["adata"] for sid in discovered_ids]
-    # var_json = save_dir / f"var_{gene_k}genes.json"
-    # write_var_k_genes_from_paths(adata_paths, gene_k, gene_criteria, min_cells_pct,var_json)
-    # print(f"[INFO] Wrote {var_json}")
+    # dataset_title = base_root.name or "xenium"
+    # meta = pd.DataFrame(
+    #     {
+    #         "id": discovered_ids,
+    #         "patient": [_infer_patient(s) for s in discovered_ids],
+    #         "dataset_title": [dataset_title] * len(discovered_ids),
+    #     }
+    # )
+
 
     # 3) Compute var_k genes → var_{k}genes.json
     adata_paths = [samples[sid]["adata"] for sid in discovered_ids]
@@ -503,6 +514,234 @@ def create_benchmark_data_multislide(
             print(f"  - {sid} [{lbl}] → {path}")
 
     print(f"✅ Benchmark dataset created at {save_dir}")
+
+from pathlib import Path
+from typing import List, Union, Optional
+import numpy as np
+import pandas as pd
+
+def create_benchmark_data_multislide(
+    save_dir: str | Path,
+    K: int | str,
+    prefix: str,
+    base_root: str | Path,
+    slide_subdirs: List[str] | tuple = ("slide1", "slide2"),
+    ids: Optional[List[str]] = None,
+    gene_k: Union[int, str] = 50,
+    gene_criteria: str = "var",
+    min_cells_pct: float = 0.10,
+    metadata_csv: str = "/project/simmons_hts/kxu/hest/hest_directory.csv",
+    symlink: bool = False,
+    seed: int = 0,
+    exclude_ids: Optional[List[str]] = None
+):
+    """
+    Build a HEST benchmark package from both slide1 and slide2 under the XeniumPR1_segger tree
+    (or any set of slide subfolders you pass), and write split CSVs that include patient metadata.
+
+    See comments in conversation for expected layout and outputs.
+
+    Returns:
+        meta (pd.DataFrame) with columns: id, patient, dataset_title
+    """
+    from hest.HESTData import create_splits
+
+    save_dir = Path(save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1) Build slide roots list and discover samples across them
+    base_root = Path(base_root)
+    roots = [base_root / sd for sd in slide_subdirs]
+    print(f"[INFO] Using slide roots: {roots}")
+
+    samples = _discover_samples_from_roots(roots, prefix=prefix, ids=ids)
+    if not samples:
+        raise ValueError(
+            f"No valid samples (with aligned_adata.h5ad) found under any of: {roots}."
+        )
+    discovered_ids = sorted(samples.keys())
+    print(f"[INFO] Discovered {len(discovered_ids)} samples: {discovered_ids}")
+
+    # -------------------------------------------------
+    # 🔹 APPLY EXCLUSION
+    # -------------------------------------------------
+    if exclude_ids:
+        exclude_set = set(exclude_ids)
+        before = len(discovered_ids)
+
+        discovered_ids = [sid for sid in discovered_ids if sid not in exclude_set]
+
+        removed = before - len(discovered_ids)
+        print(f"[INFO] Excluded {removed} samples → remaining {len(discovered_ids)}")
+
+        missing_excludes = exclude_set - set(samples.keys())
+        if missing_excludes:
+            print(f"[WARN] exclude_ids not found: {sorted(missing_excludes)}")
+
+        if not discovered_ids:
+            raise ValueError("All samples were excluded. Nothing left to process.")
+
+    discovered_ids = sorted(discovered_ids)
+    print(f"[INFO] Final sample list ({len(discovered_ids)}): {discovered_ids}")
+
+    # 2) Load metadata CSV mapping sample_id -> patient_id (if available); otherwise fallback to inference
+    patient_map = {}
+    meta_df_csv = None
+    metadata_csv_path = Path(metadata_csv)
+    if metadata_csv_path.exists():
+        try:
+            meta_df_csv = pd.read_csv(metadata_csv_path, dtype=str)
+        except Exception as e:
+            print(f"[WARN] Failed to read metadata_csv {metadata_csv_path}: {e}; will fallback to inference")
+            meta_df_csv = None
+
+        if meta_df_csv is not None and {"sample_id", "patient_id"}.issubset(meta_df_csv.columns):
+            # create patient_map from CSV (strip whitespace)
+            meta_df_csv["sample_id"] = meta_df_csv["sample_id"].astype(str).str.strip()
+            meta_df_csv["patient_id"] = meta_df_csv["patient_id"].astype(str).str.strip()
+            patient_map = dict(zip(meta_df_csv["sample_id"], meta_df_csv["patient_id"]))
+            print(f"[INFO] Loaded {len(patient_map)} entries from {metadata_csv_path}")
+        else:
+            if meta_df_csv is not None:
+                print(f"[WARN] metadata_csv found but missing 'sample_id'/'patient_id' columns; will fallback to automatic patient inference")
+            else:
+                print(f"[WARN] metadata_csv not readable; will fallback to automatic patient inference")
+    else:
+        print(f"[WARN] metadata_csv not found: {metadata_csv_path}; will fallback to automatic patient inference")
+
+    # Helper: infer patient from sample id if no mapping exists
+    def _infer_patient_from_sample(sid: str) -> str:
+        return sid.split("_")[0] if "_" in sid else sid
+
+    # Build meta DataFrame for exactly discovered_ids
+    dataset_title = base_root.name or "xenium"
+    patients_for_ids = []
+    unresolved = []
+    for sid in discovered_ids:
+        if sid in patient_map:
+            patients_for_ids.append(patient_map[sid])
+        else:
+            # try suffix / contains match in CSV if provided
+            matched = None
+            if meta_df_csv is not None:
+                # find any csv sample_id that endswith sid
+                candidates = [s for s in meta_df_csv["sample_id"].values if str(s).endswith(str(sid))]
+                if candidates:
+                    matched = candidates[0]
+                    patients_for_ids.append(patient_map.get(matched))
+                else:
+                    inferred = _infer_patient_from_sample(sid)
+                    patients_for_ids.append(inferred)
+                    unresolved.append(sid)
+            else:
+                inferred = _infer_patient_from_sample(sid)
+                patients_for_ids.append(inferred)
+                unresolved.append(sid)
+
+    meta = pd.DataFrame({
+        "id": discovered_ids,
+        "patient": patients_for_ids,
+        "dataset_title": [dataset_title] * len(discovered_ids)
+    })
+
+    if unresolved:
+        print(f"[WARN] {len(unresolved)} samples used fallback patient ids (no entry in metadata_csv): {unresolved[:20]}")
+
+    # 3) Compute var_k genes → var_{k}genes.json (calls helper that returns k and path)
+    adata_paths = [samples[sid]["adata"] for sid in discovered_ids]
+    provisional_var_json = save_dir / ("var_auto_genes.json" if isinstance(gene_k, str) and str(gene_k).lower() == "auto" else f"var_{gene_k}genes.json")
+
+    var_k_genes, all_common_genes, filtered_common_genes, k_actual, var_out_path = write_var_k_genes_from_paths(
+        adata_paths,
+        gene_k,
+        gene_criteria,
+        min_cells_pct,
+        provisional_var_json,
+    )
+
+    print(f"[INFO] Wrote {var_out_path} (top-{k_actual}, criteria={gene_criteria})")
+
+    # 4) K-fold splits using HEST's create_splits
+    # handle LOOCV (leave-one-(dataset_title,patient)-out)
+    if isinstance(K, str) and str(K).lower() == "loocv":
+        K = meta.groupby(["dataset_title", "patient"]).ngroups
+        print(f"[INFO] Using leave-one-patient-per-dataset CV: K = {K}")
+
+    # Build group dict: (dataset_title, patient) -> list of sample ids
+    group = meta.groupby(["dataset_title", "patient"])["id"].agg(list).to_dict()
+
+    # Deterministic shuffle within each group
+    rng = np.random.RandomState(seed)
+    for key, id_list in group.items():
+        rng.shuffle(id_list)
+
+    # Write splits directory and also CSVs that include patient metadata
+    splits_dir = save_dir / "splits"
+    splits_dir.mkdir(parents=True, exist_ok=True)
+
+    # Use HEST create_splits for compatibility (this will write the HEST-native split files)
+    try:
+        create_splits(str(splits_dir), group, K=int(K))
+        print(f"[INFO] Wrote {K}-fold splits to {splits_dir} (via create_splits)")
+    except Exception as e:
+        print(f"[WARN] create_splits raised: {e} — continuing and will write CSV splits manually.")
+
+    # Additionally write train_i.csv / test_i.csv with patient and paths (3/4 column format)
+    # If create_splits produced fold files we could read them; to be robust we simply generate folds ourselves
+    # Make an ordered list of group keys, shuffle deterministically and assign groups to folds round-robin
+    group_keys = list(group.keys())
+    rng.shuffle(group_keys)
+    folds = [[] for _ in range(int(K))]
+    for i, gk in enumerate(group_keys):
+        folds[i % int(K)].extend(group[gk])
+
+    def make_df_rows(sample_list: List[str]) -> pd.DataFrame:
+        df = pd.DataFrame({"sample_id": sample_list})
+        df = df.merge(meta[["id", "patient"]].rename(columns={"id": "sample_id"}), on="sample_id", how="left")
+        df["patches_path"] = df["sample_id"].apply(lambda x: f"patches/{x}.h5")
+        df["expr_path"] = df["sample_id"].apply(lambda x: f"adata/{x}.h5ad")
+        return df[["sample_id", "patient", "patches_path", "expr_path"]]
+
+    for i in range(int(K)):
+        test_samples = sorted(set(folds[i]))
+        train_samples = sorted(set(sum([folds[j] for j in range(int(K)) if j != i], [])))
+
+        df_train = make_df_rows(train_samples)
+        df_test = make_df_rows(test_samples)
+
+        df_train.to_csv(splits_dir / f"train_{i}.csv", index=False, sep=",")
+        df_test.to_csv(splits_dir / f"test_{i}.csv", index=False, sep=",")
+        print(f"[INFO] Wrote split CSVs: train_{i}.csv ({len(df_train)} rows), test_{i}.csv ({len(df_test)} rows)")
+
+    # Write per-patient metadata CSV
+    per_patient = (
+        meta.groupby(["patient", "dataset_title"])["id"]
+        .agg(lambda ids: ";".join(sorted(ids)))
+        .reset_index()
+        .rename(columns={"id": "samples"})
+    )
+    per_patient.to_csv(splits_dir / "per_patient_metadata.csv", index=False)
+    print(f"[INFO] Wrote per-patient metadata to {splits_dir/'per_patient_metadata.csv'}")
+
+    # 5) Copy/symlink assets
+    (save_dir / "patches").mkdir(exist_ok=True, parents=True)
+    (save_dir / "patches" / "vis").mkdir(exist_ok=True, parents=True)
+    (save_dir / "adata").mkdir(exist_ok=True, parents=True)
+
+    missing: List[tuple] = []
+    for sid in discovered_ids:
+        info = samples[sid]
+        _transfer(info.get("patch"), save_dir / "patches" / f"{sid}.h5", "patch", symlink, missing)
+        _transfer(info.get("vis"), save_dir / "patches" / "vis" / f"{sid}.png", "vis", symlink, missing)
+        _transfer(info.get("adata"), save_dir / "adata" / f"{sid}.h5ad", "adata", symlink, missing)
+
+    if missing:
+        print("[WARN] Missing files:")
+        for sid, lbl, path in missing:
+            print(f"  - {sid} [{lbl}] → {path}")
+
+    print(f"✅ Benchmark dataset created at {save_dir}")
+    return meta
 
 
 # copy directly from other eval folder
@@ -731,3 +970,327 @@ def create_benchmark_data_multirun(
 
     print(f"✅ Merged benchmark created at {save_dir}")
     return meta
+
+
+
+from pathlib import Path
+from typing import List, Union, Optional, Dict
+import re
+import numpy as np
+import pandas as pd
+
+def create_benchmark_data_multirun_ex_val(
+    save_dir: str | Path,
+    K: int | str,
+    eval_dirs: List[str | Path],
+    gene_k: Union[int, str] = 50,
+    gene_criteria: str = "var",
+    min_cells_pct: float = 0.10,
+    symlink: bool = False,
+    seed: int = 0,
+    metadata_csv: str = "/project/simmons_hts/kxu/hest/hest_directory.csv",
+    exclude_ids: Optional[List[str]] = None,
+    # NEW: map condition name -> list of PR integers (e.g. {"PR123":[1,2,3], "PR45":[4,5]})
+    condition_map: Optional[Dict[str, List[int]]] = None,
+    # If True, samples that can't be assigned to any condition will be excluded from splits (but copied).
+    drop_unassigned_from_splits: bool = True
+):
+    """
+    Build a merged benchmark package by copying (or symlinking) assets from one or more
+    'eval' dataset folders that already contain:
+        <eval_dir>/
+            patches/
+                *.h5
+                vis/
+                    *.png
+            adata/
+                *.h5ad
+
+    Added behavior: if `condition_map` is provided, create external-validation splits
+    by condition: for each condition produce a split where that condition is the test set
+    and all other conditions are the train set.
+
+    Args:
+        save_dir: destination directory to create merged dataset (will contain patches/, patches/vis/, adata/, splits/, var_*.json)
+        K: number of folds (patient-level) -- kept for backward compat. If `condition_map` is provided,
+           K is ignored for split generation and condition-based external splits are created instead.
+        eval_dirs: list of dataset root paths to copy from (e.g. XeniumPR2 eval folder)
+        condition_map: OPTIONAL dict mapping condition_name -> list of PR integers (e.g. {"PR1-3":[1,2,3], ...}).
+                       If None, function will attempt to infer PR from sample ids using regex 'XeniumPR(\d+)' and group
+                       by integer ranges (1-3,4-5,6-9) as a reasonable default.
+        drop_unassigned_from_splits: whether to exclude samples that can't be assigned to any condition from the split CSVs.
+    Returns:
+        pd.DataFrame meta (columns: id, patient, dataset_title, condition)
+    """
+    from hest.HESTData import create_splits  # keep original dependency
+
+    save_dir = Path(save_dir)
+    eval_dirs = [Path(x) for x in eval_dirs]
+    # sanitise and check inputs
+    existing = [d for d in eval_dirs if d.exists() and d.is_dir()]
+    if not existing:
+        raise ValueError(f"No valid eval_dirs found among: {eval_dirs}")
+    print(f"[INFO] Using eval dirs: {existing}")
+
+    # discover sample ids by scanning adata/ and patches/ for filenames
+    discovered_ids = set()
+    sample_sources = {}  # id -> dict(sources found)
+    for d in existing:
+        adata_dir = d / "adata"
+        patches_dir = d / "patches"
+        vis_dir = patches_dir / "vis"
+
+        # adata
+        if adata_dir.exists() and adata_dir.is_dir():
+            for f in sorted(adata_dir.glob("*.h5ad")):
+                sid = f.stem
+                discovered_ids.add(sid)
+                sample_sources.setdefault(sid, {}).setdefault("adata", []).append(f)
+
+        # patches
+        if patches_dir.exists() and patches_dir.is_dir():
+            for f in sorted(patches_dir.glob("*.h5")):
+                sid = f.stem
+                discovered_ids.add(sid)
+                sample_sources.setdefault(sid, {}).setdefault("patch", []).append(f)
+
+            # vis images
+            if vis_dir.exists() and vis_dir.is_dir():
+                for f in sorted(vis_dir.glob("*.png")):
+                    stem = f.stem
+                    stem_clean = re.sub(r"_?patch_vis$", "", stem, flags=re.IGNORECASE)
+                    sid = stem_clean
+                    discovered_ids.add(sid)
+                    sample_sources.setdefault(sid, {}).setdefault("vis", []).append(f)
+
+    # ---- Apply exclusion ----
+    if exclude_ids:
+        exclude_set = set(exclude_ids)
+        before = len(discovered_ids)
+        discovered_ids = sorted([sid for sid in discovered_ids if sid not in exclude_set])
+
+        missing_excludes = exclude_set - set(discovered_ids)
+        if missing_excludes:
+            print(f"[WARN] Some exclude_ids not found: {sorted(missing_excludes)}")
+
+        removed = before - len(discovered_ids)
+        print(f"[INFO] Excluded {removed} samples → remaining {len(discovered_ids)}")
+        if removed > 0:
+            for e in sorted(exclude_set & set(discovered_ids)):
+                print(f"   - excluded: {e}")
+    else:
+        discovered_ids = sorted(discovered_ids)
+
+    if not discovered_ids:
+        raise ValueError("No samples discovered in provided eval_dirs (no *.h5ad or *.h5 files found).")
+    print(f"[INFO] Discovered sample IDs ({len(discovered_ids)}): {discovered_ids}")
+
+    # Prepare save_dir layout
+    patches_out = save_dir / "patches"
+    patches_vis_out = patches_out / "vis"
+    adata_out = save_dir / "adata"
+    for p in (patches_out, patches_vis_out, adata_out):
+        p.mkdir(parents=True, exist_ok=True)
+
+    # Load metadata CSV mapping sample_id -> patient_id
+    patient_map = {}
+    meta_df_csv = None
+    if Path(metadata_csv).exists():
+        meta_df_csv = pd.read_csv(metadata_csv, dtype=str)
+        if {"sample_id", "patient_id"}.issubset(meta_df_csv.columns):
+            meta_df_csv["sample_id"] = meta_df_csv["sample_id"].astype(str).str.strip()
+            meta_df_csv["patient_id"] = meta_df_csv["patient_id"].astype(str).str.strip()
+            patient_map = dict(zip(meta_df_csv["sample_id"], meta_df_csv["patient_id"]))
+            print(f"[INFO] Loaded {len(patient_map)} entries from {metadata_csv}")
+        else:
+            print(f"[WARN] metadata_csv missing columns 'sample_id'/'patient_id'; will fallback to automatic patient inference")
+    else:
+        print(f"[WARN] metadata_csv not found: {metadata_csv}; will fallback to automatic patient inference")
+
+    # Copy / symlink files into save_dir using sample id as filename stem
+    missing = []
+    planned_actions = []
+    for sid in discovered_ids:
+        srcs = sample_sources.get(sid, {})
+        # choose one adata: prefer first available
+        adata_src = None
+        if "adata" in srcs and srcs["adata"]:
+            adata_src = srcs["adata"][0]
+
+        patch_src = None
+        if "patch" in srcs and srcs["patch"]:
+            patch_src = srcs["patch"][0]
+
+        # vis: there may be multiple pngs per sample across eval_dirs — keep all but use a standardized name
+        vis_srcs = srcs.get("vis", [])
+
+        # plan copy/symlink
+        if adata_src:
+            dst = adata_out / f"{sid}.h5ad"
+            planned_actions.append(("adata", adata_src, dst))
+        else:
+            missing.append((sid, "adata"))
+
+        if patch_src:
+            dst = patches_out / f"{sid}.h5"
+            planned_actions.append(("patch", patch_src, dst))
+        else:
+            missing.append((sid, "patch"))
+
+        # for vis, when multiple sources exist, copy each with a numeric suffix if needed
+        for i, vs in enumerate(vis_srcs, start=1):
+            if i == 1:
+                dst = patches_vis_out / f"{sid}.png"
+            else:
+                dst = patches_vis_out / f"{sid}_{i}.png"
+            planned_actions.append(("vis", vs, dst))
+
+    # Show dry run summary
+    print(f"[INFO] Planned actions: {len(planned_actions)} file operations; {len(missing)} missing types.")
+    # perform file ops
+    for act, src, dst in planned_actions:
+        try:
+            _transfer(src, dst, act, symlink, [])  # we pass temporary missing list per transfer (keeps original signature)
+        except Exception as e:
+            print(f"[ERROR] transferring {src} -> {dst}: {e}")
+
+    # Build metadata DataFrame: use discovered sample IDs and patient mapping (full sample id)
+    patient_ids = []
+    unresolved = []
+    for sid in discovered_ids:
+        pid = patient_map.get(sid)
+        if pid is None:
+            matched = None
+            if meta_df_csv is not None:
+                # try find any csv sample_id that endswith sid
+                candidates = [s for s in meta_df_csv["sample_id"].values if str(s).endswith(str(sid))]
+                if candidates:
+                    matched = candidates[0]
+                    pid = patient_map.get(matched)
+            if pid is None:
+                pid = sid.split("_")[0] if "_" in sid else sid
+                unresolved.append(sid)
+        patient_ids.append(pid)
+
+    # derive condition for each sample
+    def infer_pr_number(sample_id: str) -> Optional[int]:
+        m = re.search(r"XeniumPR(\d+)", sample_id, re.IGNORECASE)
+        if m:
+            return int(m.group(1))
+        return None
+
+    # If no condition_map provided, set sensible default groups by PR number ranges
+    if condition_map is None:
+        # default grouping: PR1-3, PR4-5, PR6-9 (matches your example)
+        condition_map = {
+            "PR1-3": [1, 2, 3],
+            "PR4-5": [4, 5],
+            "PR6-9": [6, 7, 8, 9],
+        }
+        print("[INFO] No condition_map provided; using default PR groups: PR1-3, PR4-5, PR6-9")
+
+    # Create reverse lookup from PR int -> condition name
+    pr_to_condition = {}
+    for cond_name, pr_list in condition_map.items():
+        for pr in pr_list:
+            pr_to_condition[int(pr)] = cond_name
+
+    conditions_assigned = []
+    unassigned_samples = []
+    for sid in discovered_ids:
+        pr = infer_pr_number(sid)
+        if pr is not None and pr in pr_to_condition:
+            conditions_assigned.append(pr_to_condition[pr])
+        else:
+            # fallback: try to match condition name substring in sid (case-insensitive)
+            matched = None
+            for cond_name in condition_map.keys():
+                if cond_name.lower() in sid.lower():
+                    matched = cond_name
+                    break
+            if matched:
+                conditions_assigned.append(matched)
+            else:
+                conditions_assigned.append(None)
+                unassigned_samples.append(sid)
+
+    meta = pd.DataFrame({
+        "id": discovered_ids,
+        "patient": patient_ids,
+        "dataset_title": ["XeniumPR"] * len(discovered_ids),
+        "condition": conditions_assigned
+    })
+
+    print(f"[INFO] Built metadata: {len(meta)} samples, {meta['patient'].nunique()} unique patients.")
+    if unresolved:
+        print(f"[WARN] {len(unresolved)} samples used fallback patient ids (no entry in metadata_csv): {unresolved[:20]}")
+
+    if unassigned_samples:
+        print(f"[WARN] {len(unassigned_samples)} samples could not be assigned to any condition: {unassigned_samples[:20]}")
+
+    print(meta.head(20).to_string(index=False))
+
+    # write var_k genes (requires adata files to be present in save_dir or accessible)
+    adata_paths = [adata_out / f"{sid}.h5ad" for sid in discovered_ids]
+    var_json = save_dir / f"var_{gene_k}genes.json"
+    write_var_k_genes_from_paths(adata_paths, gene_k, gene_criteria, min_cells_pct, var_json)
+    print(f"[INFO] Wrote {var_json}")
+
+    # SPLITS: if condition_map present, create one external-val split per condition (leave-one-condition-out)
+    splits_dir = save_dir / "splits"
+    splits_dir.mkdir(parents=True, exist_ok=True)
+
+    # helper to make df as in your example
+    def make_df(samples: List[str]) -> pd.DataFrame:
+        df = pd.DataFrame({"sample_id": samples})
+        df["patches_path"] = df["sample_id"].apply(lambda x: f"patches/{x}.h5")
+        df["expr_path"]    = df["sample_id"].apply(lambda x: f"adata/{x}.h5ad")
+        return df
+
+    # collect unique conditions in order
+    unique_conditions = [c for c in pd.Series(meta["condition"]).dropna().unique()]
+    if not unique_conditions:
+        # fallback: use patient-level K-fold as before
+        print("[INFO] No conditions detected; falling back to patient-level K-fold splitting.")
+        group = meta.groupby(["dataset_title", "patient"])["id"].agg(list).to_dict()
+        rng = np.random.RandomState(seed)
+        for key, id_list in group.items():
+            rng.shuffle(id_list)
+        create_splits(str(splits_dir), group, K=K)
+        print(f"[INFO] Wrote {K}-fold patient-level splits to {splits_dir}")
+    else:
+        print(f"[INFO] Creating {len(unique_conditions)} external-validation splits for conditions: {unique_conditions}")
+        # for each condition, test = samples with that condition, train = all samples with assigned conditions != that one
+        for i, cond in enumerate(unique_conditions):
+            test_samples = meta.loc[meta["condition"] == cond, "id"].tolist()
+            train_samples = meta.loc[(meta["condition"].notna()) & (meta["condition"] != cond), "id"].tolist()
+
+            if drop_unassigned_from_splits:
+                # unassigned are excluded; otherwise, you could optionally include them in train
+                pass
+            else:
+                # include unassigned samples in train set
+                train_samples += unassigned_samples
+
+            df_train = make_df(sorted(train_samples))
+            df_test  = make_df(sorted(test_samples))
+
+            df_train.to_csv(splits_dir / f"train_{i}.csv", index=False, sep=",")
+            df_test.to_csv (splits_dir / f"test_{i}.csv",  index=False, sep=",")
+
+            print(f" - wrote train_{i}.csv ({len(df_train)} rows) / test_{i}.csv ({len(df_test)} rows)  [held-out: {cond}]")
+
+        # Also write a mapping file describing condition -> split index
+        cond_map_path = splits_dir / "condition_to_split.csv"
+        pd.DataFrame({"split_index": list(range(len(unique_conditions))), "condition": unique_conditions}).to_csv(cond_map_path, index=False)
+        print(f"[INFO] Wrote condition mapping to {cond_map_path}")
+
+    # final warnings about missing files
+    if missing:
+        print("[WARN] Some samples were missing adata/patch files (listing up to 50):")
+        for sid, typ in missing[:50]:
+            print(f"  - {sid}: missing {typ}")
+
+    print(f"✅ Merged benchmark created at {save_dir}")
+    return meta
+
