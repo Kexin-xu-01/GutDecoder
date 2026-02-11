@@ -274,23 +274,23 @@ def show_images(
     plt.close(fig)
 
 
-def count_patches(broad_root, save_csv=None):
+def count_patches(root, save_csv=None):
     """
     Count patches for each sample when patches are stored inside
     <sample_dir>/patches/*.h5.
 
     Args:
-        broad_root (str or Path): root directory containing sample folders
+        oot (str or Path): root directory containing sample folders
         save_csv (str or Path, optional): if given, save counts table to this CSV
 
     Returns:
         pandas.DataFrame
     """
-    broad_root = Path(broad_root)
+    root = Path(root)
     results = []
 
     # iterate over sample folders
-    for sample_dir in sorted(broad_root.iterdir()):
+    for sample_dir in sorted(root.iterdir()):
         if not sample_dir.is_dir():
             continue
 
@@ -315,8 +315,8 @@ def count_patches(broad_root, save_csv=None):
     print(f"\nTotal patches across all samples: {total_patches}")
 
     if save_csv:
-        df.to_csv(broad_root / save_csv, index=False)
-        print(f"[INFO] Saved counts to {broad_root/save_csv}")
+        df.to_csv(root / save_csv, index=False)
+        print(f"[INFO] Saved counts to {root/save_csv}")
 
     return df
 
