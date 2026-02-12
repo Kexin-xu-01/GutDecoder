@@ -41,6 +41,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from matplotlib import cm
 
 from IPython.display import display
 from adjustText import adjust_text
@@ -385,8 +386,23 @@ def plot_summary_bar(best_df: pd.DataFrame,
     df["dataset"] = df["dataset"].astype(str).fillna("Unknown")
 
     datasets = sorted(df["dataset"].unique().tolist())
-    palette = plt.get_cmap("tab20", len(datasets))
-    color_map = {ds: palette(i) for i, ds in enumerate(datasets)}
+    n_datasets = len(datasets)
+
+    # Combine qualitative matplotlib palettes (muted, publication-friendly)
+    cmap_tab20  = list(plt.get_cmap("tab20").colors)
+    cmap_tab20b = list(plt.get_cmap("tab20b").colors)
+    cmap_tab20c = list(plt.get_cmap("tab20c").colors)
+
+    combined_colors = cmap_tab20 + cmap_tab20b + cmap_tab20c
+
+    if n_datasets > len(combined_colors):
+        print(f"[plot_summary_bar] Warning: {n_datasets} datasets but only "
+              f"{len(combined_colors)} distinct tab colors available. "
+              f"Colors will repeat.")
+
+    colors_list = combined_colors[:n_datasets]
+    color_map = {ds: colors_list[i] for i, ds in enumerate(datasets)}
+
 
     # Order: dataset then mean desc
     ordered = []
@@ -432,6 +448,7 @@ def plot_summary_bar(best_df: pd.DataFrame,
         display(fig)
 
     return fig
+
 
 
 def plot_summary_genes_vs_mean(best_df: pd.DataFrame,
@@ -1174,131 +1191,132 @@ def plot_corrs_by_sample(
 
     return fig
 
-def plot_corrs_by_sample(
-    df,
-    dataset_name,
-    encoder_name,
-    group_by: str | None = None,
-    figsize=(16, 6)
-):
-    """
-    Plot per-split gene correlations grouped by metadata, and return the figure object.
+# def plot_corrs_by_sample(
+#     df,
+#     dataset_name,
+#     encoder_name,
+#     group_by: str | None = None,
+#     figsize=(16, 6)
+# ):
+#     """
+#     Plot per-split gene correlations grouped by metadata, and return the figure object.
 
-    Behavior:
-      - If group_by is None: one box per sample, single color.
-      - If group_by is categorical: behaves like your original function (box split by hue).
-      - If group_by is numeric (e.g. 'num_patches'): one box per sample, colored by numeric value with a colorbar.
+#     Behavior:
+#       - If group_by is None: one box per sample, single color.
+#       - If group_by is categorical: behaves like your original function (box split by hue).
+#       - If group_by is numeric (e.g. 'num_patches'): one box per sample, colored by numeric value with a colorbar.
 
-    Args:
-        df (pd.DataFrame): must contain columns:
-            [split, gene, corr, test_sample, Sample_type, Location, cell_type, condition, ...]
-        group_by (str or None): column to color/group samples by.
-        figsize (tuple): figure size.
+#     Args:
+#         df (pd.DataFrame): must contain columns:
+#             [split, gene, corr, test_sample, Sample_type, Location, cell_type, condition, ...]
+#         group_by (str or None): column to color/group samples by.
+#         figsize (tuple): figure size.
 
-    Returns:
-        matplotlib.figure.Figure
-    """
-    import pandas as pd
-    import seaborn as sns
-    import matplotlib.pyplot as plt
-    import matplotlib as mpl
+#     Returns:
+#         matplotlib.figure.Figure
+#     """
+#     import pandas as pd
+#     import seaborn as sns
+#     import matplotlib.pyplot as plt
+#     import matplotlib as mpl
 
-    df = df.copy()
+#     df = df.copy()
 
-    if group_by is not None and group_by not in df.columns:
-        raise ValueError(f"{group_by} must be a column in df")
+#     if group_by is not None and group_by not in df.columns:
+#         raise ValueError(f"{group_by} must be a column in df")
 
-    # ---------------- ordering of x-axis ----------------
-    if group_by is not None:
-        # if categorical: order groups by mean corr, then samples within each group
-        if pd.api.types.is_numeric_dtype(df[group_by]):
-            # For numeric group_by we still want to order samples by mean corr
-            sample_means = df.groupby("test_sample")["corr"].mean().sort_values(ascending=False)
-            x_order = sample_means.index.tolist()
-        else:
-            group_means = df.groupby(group_by)["corr"].mean().sort_values(ascending=False)
-            group_order = group_means.index.tolist()
-            x_order = []
-            for grp in group_order:
-                samples = (
-                    df.loc[df[group_by] == grp, "test_sample"]
-                      .dropna()
-                      .drop_duplicates()
-                      .tolist()
-                )
-                x_order.extend(samples)
-            x_order = list(dict.fromkeys(x_order))
-    else:
-        sample_means = df.groupby("test_sample")["corr"].mean().sort_values(ascending=False)
-        x_order = sample_means.index.tolist()
+#     # ---------------- ordering of x-axis ----------------
+#     if group_by is not None:
+#         # if categorical: order groups by mean corr, then samples within each group
+#         if pd.api.types.is_numeric_dtype(df[group_by]):
+#             # For numeric group_by we still want to order samples by mean corr
+#             sample_means = df.groupby("test_sample")["corr"].mean().sort_values(ascending=False)
+#             x_order = sample_means.index.tolist()
+#         else:
+#             group_means = df.groupby(group_by)["corr"].mean().sort_values(ascending=False)
+#             group_order = group_means.index.tolist()
+#             x_order = []
+#             for grp in group_order:
+#                 samples = (
+#                     df.loc[df[group_by] == grp, "test_sample"]
+#                       .dropna()
+#                       .drop_duplicates()
+#                       .tolist()
+#                 )
+#                 x_order.extend(samples)
+#             x_order = list(dict.fromkeys(x_order))
+#     else:
+#         sample_means = df.groupby("test_sample")["corr"].mean().sort_values(ascending=False)
+#         x_order = sample_means.index.tolist()
 
-    df["test_sample"] = pd.Categorical(df["test_sample"], categories=x_order, ordered=True)
+#     df["test_sample"] = pd.Categorical(df["test_sample"], categories=x_order, ordered=True)
 
-    # ---------------- plotting ----------------
-    fig, ax = plt.subplots(figsize=figsize)
+#     # ---------------- plotting ----------------
+#     fig, ax = plt.subplots(figsize=figsize)
 
-    if group_by is None:
-        # original simple single-color boxplot per sample
-        sns.boxplot(
-            data=df,
-            x="test_sample",
-            y="corr",
-            color="skyblue",
-            showfliers=False,
-            ax=ax,
-        )
-        ax.set_xlabel("Test Sample")
-    else:
-        # If group_by is numeric: draw one box per sample and color by numeric value
-        if pd.api.types.is_numeric_dtype(df[group_by]):
-                # Compute average numeric value per test_sample
-            mean_vals = df.groupby("test_sample")[group_by].mean()
+#     if group_by is None:
+#         # original simple single-color boxplot per sample
+#         sns.boxplot(
+#             data=df,
+#             x="test_sample",
+#             y="corr",
+#             color="skyblue",
+#             showfliers=False,
+#             ax=ax,
+#         )
+#         ax.set_xlabel("Test Sample")
+#     else:
+#         # If group_by is numeric: draw one box per sample and color by numeric value
+#         if pd.api.types.is_numeric_dtype(df[group_by]):
+#                 # Compute average numeric value per test_sample
+#             mean_vals = df.groupby("test_sample")[group_by].mean()
 
-            # Create a colormap
-            cmap = plt.cm.viridis
-            norm = plt.Normalize(vmin=df[group_by].min(), vmax=df[group_by].max())
-            colors = mean_vals.map(lambda x: cmap(norm(x)))
+#             # Create a colormap
+#             cmap = plt.cm.viridis
+#             norm = plt.Normalize(vmin=df[group_by].min(), vmax=df[group_by].max())
+#             colors = mean_vals.map(lambda x: cmap(norm(x)))
 
-            # Draw boxplot with palette based on numeric variable
-            sns.boxplot(
-                data=df,
-                x="test_sample",
-                y="corr",
-                order=mean_vals.index,
-                palette=colors.to_dict(),
-                showfliers=False,
-                ax=ax
-            )
+#             # Draw boxplot with palette based on numeric variable
+#             sns.boxplot(
+#                 data=df,
+#                 x="test_sample",
+#                 y="corr",
+#                 order=mean_vals.index,
+#                 palette=colors.to_dict(),
+#                 showfliers=False,
+#                 ax=ax
+#             )
 
-            # Add colorbar
-            sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-            sm.set_array([])
-            fig.colorbar(sm, ax=ax, label=group_by)
+#             # Add colorbar
+#             sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+#             sm.set_array([])
+#             fig.colorbar(sm, ax=ax, label=group_by)
             
-            ax.legend(title=group_by, bbox_to_anchor=(1.05, 1), loc="upper left")
-            ax.set_xlabel(f"Test Sample (grouped by {group_by})")
+#             ax.legend(title=group_by, bbox_to_anchor=(1.05, 1), loc="upper left")
+#             ax.set_xlabel(f"Test Sample (grouped by {group_by})")
 
-        else:
-            # categorical behavior (original behavior with hue)
-            sns.boxplot(
-                data=df,
-                x="test_sample",
-                y="corr",
-                hue=group_by,
-                showfliers=False,
-                palette="tab20",
-                ax=ax,
-            )
-            ax.legend(title=group_by, bbox_to_anchor=(1.05, 1), loc="upper left")
-            ax.set_xlabel(f"Test Sample (grouped by {group_by})")
+#         else:
+#             # categorical behavior (original behavior with hue)
+#             sns.boxplot(
+#                 data=df,
+#                 x="test_sample",
+#                 y="corr",
+#                 hue=group_by,
+#                 showfliers=False,
+#                 palette="tab20",
+#                 ax=ax,
+#             )
+#             ax.legend(title=group_by, bbox_to_anchor=(1.05, 1), loc="upper left")
+#             ax.set_xlabel(f"Test Sample (grouped by {group_by})")
 
-    # ---------------- styling ----------------
-    plt.xticks(rotation=60, ha="right")
-    ax.set_ylabel("Gene Correlation")
-    ax.set_title(f"Per-sample correlation | Data: {dataset_name} | Model: {encoder_name}")
-    plt.tight_layout()
+#     # ---------------- styling ----------------
+#     plt.xticks(rotation=60, ha="right")
+#     ax.set_ylabel("Gene Correlation")
+#     ax.set_title(f"Per-sample correlation | Data: {dataset_name} | Model: {encoder_name}")
+#     plt.tight_layout()
 
-    return fig
+#     return fig
+
 
 
 # def plot_pearson_vs_sample_metadata(
@@ -1306,86 +1324,82 @@ def plot_corrs_by_sample(
 #     df_splits: pd.DataFrame,
 #     outdir: Path,
 #     sample_col_candidates: list[str] = ["test_sample", "sample_id", "SampleID", "Sample_Id"],
-#     metadata_cols_preference: list[str] = None,
+#     metadata_cols_preference: list[str] | None = None,
 #     show: bool = False,
 #     dpi: int = 200,
 # ) -> Dict[str, Path]:
 #     """
-#     Create scatter plots of per-sample mean Pearson correlation vs some sample-level metadata.
-
-#     - df_long: long dataframe produced by merge_kfold_gene_corrs_with_test_metadata (contains 'corr' and 'test_sample')
-#     - df_splits: the test splits joined with extra metadata (as returned by get_test_splits)
-#     - metadata_cols_preference: list of metadata column names (strings) to try to plot against.
-#         Defaults to try: n_obs, mean_total_counts, mean_n_genes_by_counts, mean_log1p_total_counts
-#     - Saves images into outdir and returns dict mapping plot name -> Path.
+#     Create scatter plots of per-sample mean Pearson correlation vs sample-level *in-tissue* metadata.
 #     """
 #     outdir = Path(outdir)
 #     outdir.mkdir(parents=True, exist_ok=True)
-#     arts = {}
+#     arts: Dict[str, Path] = {}
 
 #     if metadata_cols_preference is None:
 #         metadata_cols_preference = [
-#             "n_obs",
-#             "mean_total_counts",
-#             "mean_n_genes_by_counts",
-#             "mean_log1p_total_counts",
-#             # fallback candidate (if one of the above not present)
-#             "mean_log1p_n_genes_by_counts",
+#             "n_obs_in_tissue",
+#             "mean_total_counts_in_tissue",
+#             "mean_n_genes_by_counts_in_tissue",
+#             "mean_log1p_total_counts_in_tissue",
+#             "mean_log1p_n_genes_by_counts_in_tissue",
 #         ]
 
 #     # determine sample column name
 #     sample_col = _find_col_ci(df_long, sample_col_candidates)
 #     if sample_col is None:
-#         # try the df_splits
 #         sample_col = _find_col_ci(df_splits, sample_col_candidates)
 #     if sample_col is None:
-#         raise KeyError("Could not find a sample id column in df_long or df_splits. "
-#                        "Searched: " + ", ".join(sample_col_candidates))
+#         raise KeyError(
+#             "Could not find a sample id column in df_long or df_splits. "
+#             "Searched: " + ", ".join(sample_col_candidates)
+#         )
 
-#     # compute per-sample mean Pearson
+#     # compute per-sample mean Pearson — compatible approach
+#     gb = df_long.groupby(sample_col)["corr"]
 #     df_sample_mean = (
-#         df_long
-#         .groupby(sample_col)["corr"]
-#         .agg(mean_pearson=("corr", "mean"), n_genes_per_sample=("corr", "size"))
+#         gb.agg(["mean", "size"])
 #         .reset_index()
+#         .rename(columns={"mean": "mean_pearson", "size": "n_genes_per_sample"})
 #     )
 
-#     # merge metadata from df_splits (if present)
-#     # prefer columns from df_splits (they come from extra metadata)
-#     merged = df_sample_mean.merge(df_splits.drop_duplicates(subset=[sample_col]),
-#                                   left_on=sample_col, right_on=sample_col, how="left")
+#     # merge metadata from df_splits
+#     merged = df_sample_mean.merge(
+#         df_splits.drop_duplicates(subset=[sample_col]),
+#         left_on=sample_col,
+#         right_on=sample_col,
+#         how="left",
+#     )
 
 #     # For each requested metadata column, try a case-insensitive lookup in merged
-#     for meta in metadata_cols_preference[:4]:  # produce 4 plots (first 4 preferred)
+#     for meta in metadata_cols_preference[:6]:  # produce up to 6 plots (we listed 6)
 #         meta_col = _find_col_ci(merged, [meta])
 #         if meta_col is None:
-#             print(f"[plot_pearson_vs_sample_metadata] metadata column '{meta}' not found - skipping.")
+#             print(f"[plot_pearson_vs_sample_metadata_in_tissue] metadata column '{meta}' not found - skipping.")
 #             continue
 
-#         # Prepare plotting data, drop NA values
 #         df_plot = merged[[sample_col, "mean_pearson", meta_col]].dropna(subset=["mean_pearson", meta_col]).copy()
 #         if df_plot.empty:
-#             print(f"[plot_pearson_vs_sample_metadata] no valid rows for {meta_col} - skipping.")
+#             print(f"[plot_pearson_vs_sample_metadata_in_tissue] no valid rows for {meta_col} - skipping.")
 #             continue
 
-#         # numeric conversion where possible
 #         df_plot[meta_col] = pd.to_numeric(df_plot[meta_col], errors="coerce")
 #         df_plot = df_plot.dropna(subset=[meta_col])
 #         if df_plot.empty:
-#             print(f"[plot_pearson_vs_sample_metadata] {meta_col} could not be coerced to numeric - skipping.")
+#             print(f"[plot_pearson_vs_sample_metadata_in_tissue] {meta_col} could not be coerced to numeric - skipping.")
 #             continue
 
-#         # Make figure
 #         fig, ax = plt.subplots(figsize=(9, 6))
-#         sc = ax.scatter(df_plot[meta_col].to_numpy(dtype=float),
-#                         df_plot["mean_pearson"].to_numpy(dtype=float),
-#                         s=60, edgecolors="black", linewidths=0.5, alpha=0.9)
+#         ax.scatter(
+#             df_plot[meta_col].to_numpy(dtype=float),
+#             df_plot["mean_pearson"].to_numpy(dtype=float),
+#             s=60, edgecolors="black", linewidths=0.5, alpha=0.9
+#         )
+
 #         ax.set_xlabel(meta_col)
 #         ax.set_ylabel("Mean Pearson correlation (per-sample)")
-#         ax.set_title(f"Mean Pearson per sample vs {meta_col}")
+#         ax.set_title(f"Mean Pearson per sample vs {meta_col} (in-tissue)")
 #         ax.grid(True, linestyle=":", alpha=0.4)
 
-#         # Label points with sample id, use adjust_text to reduce overlap
 #         texts = []
 #         for _, r in df_plot.iterrows():
 #             texts.append(ax.text(r[meta_col], r["mean_pearson"], str(r[sample_col]), fontsize=8))
@@ -1398,7 +1412,6 @@ def plot_corrs_by_sample(
 #                 arrowprops=dict(arrowstyle="-", color="gray", lw=0.5)
 #             )
 #         except Exception:
-#             # if adjust_text is not available or fails, ignore (labels will overlap)
 #             pass
 
 #         fig.tight_layout()
@@ -1418,36 +1431,35 @@ def plot_pearson_vs_sample_metadata(
     df_splits: pd.DataFrame,
     outdir: Path,
     sample_col_candidates: list[str] = ["test_sample", "sample_id", "SampleID", "Sample_Id"],
-    metadata_cols_preference: list[str] = None,
+    metadata_cols_preference: list[str] | None = None,
     show: bool = False,
     dpi: int = 200,
 ) -> Dict[str, Path]:
     """
-    Create scatter plots of per-sample mean Pearson correlation vs some sample-level metadata.
-    Compatible with older pandas versions (avoids tuple kwargs in .agg()).
+    Create scatter plots of per-sample mean Pearson correlation vs sample-level *in-tissue* metadata.
+    Points are colored by Run (if available).
     """
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
-    arts = {}
+    arts: Dict[str, Path] = {}
 
     if metadata_cols_preference is None:
         metadata_cols_preference = [
-            "n_obs",
-            "mean_total_counts",
-            "mean_n_genes_by_counts",
-            "mean_log1p_total_counts",
-            "mean_log1p_n_genes_by_counts",
+            "n_obs_in_tissue",
+            "mean_total_counts_in_tissue",
+            "mean_n_genes_by_counts_in_tissue",
+            "mean_log1p_total_counts_in_tissue",
+            "mean_log1p_n_genes_by_counts_in_tissue",
         ]
 
-    # determine sample column name
+    # determine sample column
     sample_col = _find_col_ci(df_long, sample_col_candidates)
     if sample_col is None:
         sample_col = _find_col_ci(df_splits, sample_col_candidates)
     if sample_col is None:
-        raise KeyError("Could not find a sample id column in df_long or df_splits. "
-                       "Searched: " + ", ".join(sample_col_candidates))
+        raise KeyError("Could not find sample id column.")
 
-    # compute per-sample mean Pearson — compatible approach
+    # compute per-sample mean Pearson
     gb = df_long.groupby(sample_col)["corr"]
     df_sample_mean = (
         gb.agg(["mean", "size"])
@@ -1455,53 +1467,84 @@ def plot_pearson_vs_sample_metadata(
         .rename(columns={"mean": "mean_pearson", "size": "n_genes_per_sample"})
     )
 
-    # merge metadata from df_splits
+    # merge metadata
     merged = df_sample_mean.merge(
         df_splits.drop_duplicates(subset=[sample_col]),
-        left_on=sample_col,
-        right_on=sample_col,
+        on=sample_col,
         how="left",
     )
 
-    # For each requested metadata column, try a case-insensitive lookup in merged
-    for meta in metadata_cols_preference[:4]:  # produce up to 4 plots
+    # detect run column
+    run_col = _find_col_ci(merged, ["run", "Run", "RUN"])
+
+    # create color mapping if run exists
+    if run_col is not None:
+        runs = sorted(merged[run_col].dropna().astype(str).unique())
+        cmap = plt.get_cmap("tab20")
+        colors = cmap(np.linspace(0, 1, max(len(runs), 1)))
+        color_map = {r: colors[i] for i, r in enumerate(runs)}
+    else:
+        runs = []
+        color_map = {}
+
+    # loop over metadata columns
+    for meta in metadata_cols_preference[:6]:
         meta_col = _find_col_ci(merged, [meta])
         if meta_col is None:
-            print(f"[plot_pearson_vs_sample_metadata] metadata column '{meta}' not found - skipping.")
+            print(f"[plot] metadata column '{meta}' not found - skipping.")
             continue
 
-        df_plot = merged[[sample_col, "mean_pearson", meta_col]].dropna(subset=["mean_pearson", meta_col]).copy()
-        if df_plot.empty:
-            print(f"[plot_pearson_vs_sample_metadata] no valid rows for {meta_col} - skipping.")
-            continue
+        df_plot = merged[[sample_col, "mean_pearson", meta_col] + ([run_col] if run_col else [])]
+        df_plot = df_plot.dropna(subset=["mean_pearson", meta_col]).copy()
 
         df_plot[meta_col] = pd.to_numeric(df_plot[meta_col], errors="coerce")
         df_plot = df_plot.dropna(subset=[meta_col])
         if df_plot.empty:
-            print(f"[plot_pearson_vs_sample_metadata] {meta_col} could not be coerced to numeric - skipping.")
             continue
 
         fig, ax = plt.subplots(figsize=(9, 6))
-        ax.scatter(
-            df_plot[meta_col].to_numpy(dtype=float),
-            df_plot["mean_pearson"].to_numpy(dtype=float),
-            s=60, edgecolors="black", linewidths=0.5, alpha=0.9
-        )
+
+        if run_col is not None:
+            for r in runs:
+                sub = df_plot[df_plot[run_col].astype(str) == r]
+                ax.scatter(
+                    sub[meta_col],
+                    sub["mean_pearson"],
+                    s=60,
+                    edgecolors="black",
+                    linewidths=0.5,
+                    alpha=0.9,
+                    color=color_map[r],
+                    label=r,
+                )
+            ax.legend(title="Run", bbox_to_anchor=(1.02, 1), loc="upper left")
+        else:
+            ax.scatter(
+                df_plot[meta_col],
+                df_plot["mean_pearson"],
+                s=60,
+                edgecolors="black",
+                linewidths=0.5,
+                alpha=0.9,
+            )
+
         ax.set_xlabel(meta_col)
         ax.set_ylabel("Mean Pearson correlation (per-sample)")
-        ax.set_title(f"Mean Pearson per sample vs {meta_col}")
+        ax.set_title(f"Mean Pearson per sample vs {meta_col} (in-tissue)")
         ax.grid(True, linestyle=":", alpha=0.4)
 
+        # Label samples
         texts = []
         for _, r in df_plot.iterrows():
             texts.append(ax.text(r[meta_col], r["mean_pearson"], str(r[sample_col]), fontsize=8))
 
         try:
             adjust_text(
-                texts, ax=ax,
+                texts,
+                ax=ax,
                 expand_points=(1.2, 1.6),
                 expand_text=(1.2, 1.6),
-                arrowprops=dict(arrowstyle="-", color="gray", lw=0.5)
+                arrowprops=dict(arrowstyle="-", color="gray", lw=0.5),
             )
         except Exception:
             pass
@@ -1517,6 +1560,7 @@ def plot_pearson_vs_sample_metadata(
         arts[f"pearson_vs_{meta_col}"] = path
 
     return arts
+
 
 # -----------------------
 # High-level workflow

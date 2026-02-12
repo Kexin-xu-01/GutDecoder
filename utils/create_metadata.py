@@ -1,9 +1,50 @@
+"""
+QC & patch-count utilities for HEST-derived Xenium / Visium runs
+----------------------------------------------------------------
+Purpose
+  - Scan slide folders, read aligned_adata.h5ad and patches/*.h5, and produce
+    per-sample QC summaries and patch counts that can be merged into metadata.
+
+Key behaviors
+  - Infers "in-tissue" spots by exact barcode matching between patch H5 files
+    and adata.obs.index (preferred). Falls back to obs['in_tissue'] only if
+    no patch barcodes are found.
+  - All reported means are rounded to 3 decimal places by default.
+  - Recognises runs named exactly: XeniumPR<digits>, XeniumR<digits>, VisiumR<digits>.
+
+Typical layout (example)
+  /.../xenium_data/XeniumPR6/slide1/<sample_folder>/
+      aligned_adata.h5ad
+      patches/patches.h5   (contains 'barcode' and 'coords' datasets)
+
+Quick examples
+  # single slide QC summary (saves qc_summary.csv in slide folder)
+  df = return_qc("/path/to/XeniumPR6/slide1", save_csv="qc_summary.csv")
+
+  # integrate QC across all runs under xenium_root and visium_root into `metadata`
+  out = add_qc_from_all_runs(metadata_df, xenium_root="/.../xenium_data",
+                             visium_root="/.../visium_data", save_csv_name="qc_summary.csv")
+
+  # build merged patch-count metrics and merge into metadata
+  out = build_merged_counts(metadata_df, specs, count_func=count_patches, auto_prefix=True)
+
+Notes / requirements
+  - The functions expect HEST-style patch files created by dump_patches() that include
+    an extra 'barcode' asset (fast, exact linking).
+  - If your files use different names/structure, inspect the H5 keys and adapt
+    `_read_barcodes_from_patch_h5` candidate keys accordingly.
+"""
+
+
 from pathlib import Path
-from typing import List, Union, Optional, Sequence, Dict, Any, List, Callable
+from typing import List, Union, Optional, Sequence, Dict, Any, List, Callable, Set
 import pandas as pd
 import re
 import scanpy as sc
 from IPython.display import display
+import numpy as np
+import h5py
+import warnings
 
 
 def _maybe_prefix(sample_id: str, prefix: Optional[str]) -> str:
@@ -204,238 +245,275 @@ def build_merged_counts(
     return {"merged": merged, "per_metric": per_metric}
 
 
-def return_qc(root, save_csv=None):
+def _read_barcodes_from_patch_h5(h5_path: Path) -> List[str]:
     """
-    Load .h5ad files under each sample folder and compute mean QC metrics.
+    Robustly read a 'barcode' array from a patch .h5 file.
+    Handles:
+      - datasets named 'barcode', 'barcodes', or nested under groups
+      - byte strings, shape (N,1) or (N,) arrays, arrays of arrays
+    Returns a list of unicode strings (may be empty).
+    """
+    h5_path = Path(h5_path)
+    if not h5_path.exists():
+        return []
 
-    Expected structure:
-        root/
-            sample1/
-                *.h5ad
-            sample2/
-                *.h5ad
+    with h5py.File(h5_path, "r") as f:
+        # try direct known keys first
+        candidate_keys = []
+        for k in f.keys():
+            candidate_keys.append(k)
+            # also consider nested
+            if isinstance(f[k], h5py.Group):
+                for kk in f[k].keys():
+                    candidate_keys.append(f"{k}/{kk}")
+
+        # prefer exact 'barcode' substring matches (case-insensitive)
+        barcode_key = None
+        for key in candidate_keys:
+            if "barcode" in key.lower():
+                barcode_key = key
+                break
+
+        arr = None
+        if barcode_key is not None:
+            # access possibly nested key
+            try:
+                arr = np.array(f[barcode_key])
+            except Exception:
+                arr = None
+        else:
+            # fallback: scan for any 1D/2D dataset with string-like dtype or small object dtype
+            def walk_find(group):
+                for name, item in group.items():
+                    if isinstance(item, h5py.Dataset):
+                        try:
+                            a = np.array(item)
+                        except Exception:
+                            continue
+                        if a is None:
+                            continue
+                        # Accept 1-D of strings or (N,1) nested structures
+                        if (a.ndim == 1) or (a.ndim == 2 and a.shape[1] == 1):
+                            # if dtype string-like or object, accept as candidate
+                            if a.dtype.kind in ("S", "U", "O", "a"):
+                                return a
+                        # sometimes stored as (N,1) bytes in dtype 'S'
+                        if a.ndim == 2 and a.shape[1] == 1:
+                            return a
+                    elif isinstance(item, h5py.Group):
+                        res = walk_find(item)
+                        if res is not None:
+                            return res
+                return None
+            arr = walk_find(f)
+
+        if arr is None:
+            return []
+
+        # flatten shapes like (N,1) -> (N,)
+        if arr.ndim > 1 and arr.shape[1] == 1:
+            arr = arr[:, 0]
+
+        # convert bytes/arrays -> str
+        def to_str(x):
+            if x is None:
+                return None
+            # bytes -> decode
+            if isinstance(x, (bytes, bytearray)):
+                try:
+                    return x.decode("utf-8", errors="ignore")
+                except Exception:
+                    return str(x)
+            # numpy.bytes_ etc.
+            if isinstance(x, (np.bytes_, np.str_)):
+                try:
+                    return str(x)
+                except Exception:
+                    return None
+            # nested sequences like ['007x211']
+            if isinstance(x, (list, tuple, np.ndarray)):
+                if len(x) == 0:
+                    return None
+                return to_str(x[0])
+            # otherwise cast
+            return str(x)
+
+        out = []
+        for el in arr:
+            s = to_str(el)
+            if s is None:
+                continue
+            s = s.strip()
+            out.append(s)
+        return out
+
+
+def _collect_patch_barcodes_from_dir(patches_dir: Path) -> List[str]:
+    """
+    Read all '*.h5' files under patches_dir and return unique barcodes preserving order.
+    """
+    patches_dir = Path(patches_dir)
+    if not patches_dir.exists() or not patches_dir.is_dir():
+        return []
+    seen = set()
+    out = []
+    for p in sorted(patches_dir.glob("*.h5")):
+        try:
+            barcodes = _read_barcodes_from_patch_h5(p)
+        except Exception as e:
+            warnings.warn(f"[WARN] Failed to read barcodes from {p}: {e}")
+            continue
+        for b in barcodes:
+            if b is None:
+                continue
+            if b not in seen:
+                seen.add(b)
+                out.append(b)
+    return out
+
+
+def return_qc(
+    root,
+    save_csv: Optional[str] = None,
+    patch_subdir: str = "patches",
+    patch_h5_name: str = "patches.h5",
+    round_decimals: int = 3,
+):
+    """
+    Scan `root` (a slide directory) for sample subfolders containing aligned_adata.h5ad and patches/,
+    infer in-tissue spots using patch barcodes (preferred), and return QC summary.
 
     Args:
-        root (str or Path): root directory containing sample folders
-        save_csv (str or Path, optional): if given, save summary table to this CSV
+        root: str or Path to slide directory containing sample subfolders.
+        save_csv: optional filename (if relative, saved under `root`). If provided, saves the table.
+        patch_subdir: name of the folder with patch files under each sample (default 'patches')
+        patch_h5_name: name of patch h5 (default 'patches.h5')
+        round_decimals: how many decimals to round means to (default 3)
 
     Returns:
-        pandas.DataFrame
+        pandas.DataFrame with columns:
+          sample_id, n_obs, mean_total_counts, mean_n_genes_by_counts,
+          mean_log1p_total_counts, mean_log1p_n_genes_by_counts,
+          inferred_in_tissue_from_patch_barcodes (bool), num_patch_barcodes,
+          n_obs_in_tissue, mean_..._in_tissue, pct_in_tissue
     """
     root = Path(root)
+    if not root.exists():
+        raise FileNotFoundError(root)
+
     results = []
 
+    def safe_mean(series):
+        try:
+            return round(float(pd.Series(series).mean()), round_decimals)
+        except Exception:
+            return None
+
+    # iterate sample folders
     for sample_dir in sorted(root.iterdir()):
         if not sample_dir.is_dir():
             continue
 
-        for h5ad_file in sample_dir.glob("aligned_adata.h5ad"):
-            sample_id = sample_dir.name
+        # path to aligned_adata.h5ad (keep same filename you use)
+        adata_candidates = list(sample_dir.glob("aligned_adata.h5ad")) + list(sample_dir.glob("*.h5ad"))
+        # prefer aligned_adata.h5ad if present
+        adata_file = None
+        for c in adata_candidates:
+            if c.name == "aligned_adata.h5ad":
+                adata_file = c
+                break
+        if adata_file is None and adata_candidates:
+            adata_file = adata_candidates[0]
 
-            try:
-                adata = sc.read_h5ad(h5ad_file)
+        if adata_file is None:
+            # nothing to do for this folder
+            continue
 
-                obs = adata.obs
+        sample_id = sample_dir.name
 
-                summary = {
-                    "sample_id": sample_id,
-                    "n_obs": adata.n_obs,
-                    "mean_total_counts": obs["total_counts"].mean() if "total_counts" in obs else None,
-                    "mean_n_genes_by_counts": obs["n_genes_by_counts"].mean() if "n_genes_by_counts" in obs else None,
-                    "mean_log1p_total_counts": obs["log1p_total_counts"].mean() if "log1p_total_counts" in obs else None,
-                    "mean_log1p_n_genes_by_counts": obs["log1p_n_genes_by_counts"].mean() if "log1p_n_genes_by_counts" in obs else None,
-                }
+        # load adata
+        try:
+            adata = sc.read_h5ad(adata_file)
+        except Exception as e:
+            warnings.warn(f"[WARN] Failed to read {adata_file}: {e}")
+            continue
 
-                results.append(summary)
+        obs = adata.obs
 
-            except Exception as e:
-                print(f"[ERROR] Failed reading {h5ad_file}: {e}")
+        # collect patch barcodes (fast, exact linking). look under sample_dir/patches/*.h5
+        patches_dir = sample_dir / patch_subdir
+        barcodes_in_patches = []
+        if patches_dir.exists() and patches_dir.is_dir():
+            # prefer reading a single 'patches.h5' if it exists, else read all .h5 files
+            single = patches_dir / patch_h5_name
+            if single.exists():
+                barcodes_in_patches = _collect_patch_barcodes_from_dir(patches_dir)
+            else:
+                barcodes_in_patches = _collect_patch_barcodes_from_dir(patches_dir)
 
-    df = pd.DataFrame(results).sort_values("sample_id")
+        barcode_set: Set[str] = set(barcodes_in_patches)
 
-    print(df)
+        # build in_tissue mask using barcode linking if available
+        in_tissue_mask = None
+        used_patch_barcodes = False
+        if len(barcode_set) > 0:
+            used_patch_barcodes = True
+            # ensure adata.obs.index are strings
+            adata_idx = adata.obs.index.astype(str).to_numpy()
+            in_tissue_mask = np.array([ (s in barcode_set) for s in adata_idx ], dtype=bool)
+        else:
+            # fallback: if adata.obs has in_tissue column, use it; else None
+            if "in_tissue" in obs.columns:
+                in_tissue_mask = obs["in_tissue"].astype(bool).to_numpy()
+            else:
+                in_tissue_mask = None
+
+        # compute summary metrics (all spots)
+        summary = {
+            "sample_id": sample_id,
+            "n_obs": int(adata.n_obs),
+            "inferred_in_tissue_from_patch_barcodes": bool(used_patch_barcodes),
+        }
+
+        # tissue-only metrics
+        if in_tissue_mask is None:
+            summary.update({
+                "n_obs_in_tissue": None,
+                "mean_total_counts_in_tissue": None,
+                "mean_n_genes_by_counts_in_tissue": None,
+                "mean_log1p_total_counts_in_tissue": None,
+                "mean_log1p_n_genes_by_counts_in_tissue": None,
+                "pct_in_tissue": None,
+            })
+        else:
+            if len(in_tissue_mask) != obs.shape[0]:
+                warnings.warn(f"[WARN] in_tissue mask length mismatch for {adata_file} ({len(in_tissue_mask)} vs {obs.shape[0]})")
+                obs_tissue = obs.iloc[[]]
+            else:
+                obs_tissue = obs.loc[in_tissue_mask]
+
+            n_in = int(obs_tissue.shape[0])
+            pct_in = round((n_in / float(obs.shape[0])) * 100.0, round_decimals) if obs.shape[0] > 0 else None
+
+            summary.update({
+                "n_obs_in_tissue": n_in,
+                "mean_total_counts_in_tissue": safe_mean(obs_tissue["total_counts"]) if "total_counts" in obs_tissue else None,
+                "mean_n_genes_by_counts_in_tissue": safe_mean(obs_tissue["n_genes_by_counts"]) if "n_genes_by_counts" in obs_tissue else None,
+                "mean_log1p_total_counts_in_tissue": safe_mean(obs_tissue["log1p_total_counts"]) if "log1p_total_counts" in obs_tissue else None,
+                "mean_log1p_n_genes_by_counts_in_tissue": safe_mean(obs_tissue["log1p_n_genes_by_counts"]) if "log1p_n_genes_by_counts" in obs_tissue else None,
+                "pct_in_tissue": pct_in,
+            })
+
+        results.append(summary)
+
+    df = pd.DataFrame(results).sort_values("sample_id").reset_index(drop=True)
 
     if save_csv:
-        df.to_csv(root / save_csv, index=False)
-        print(f"[INFO] Saved summary to {root / save_csv}")
+        out = Path(save_csv) if Path(save_csv).is_absolute() else (root / save_csv)
+        df.to_csv(out, index=False)
+        print(f"[INFO] Saved summary to {out}")
 
     return df
-
-
-# from pathlib import Path
-# import pandas as pd
-# from typing import Callable, List, Tuple, Optional, Dict
-
-# import re
-
-
-# def add_qc_from_selected_runs(
-#     metadata: pd.DataFrame,
-#     root: str | Path,
-#     qc_func: Optional[Callable[[str, Optional[str]], pd.DataFrame]] = None,
-#     save_csv_name: Optional[str] = "qc_summary.csv",
-#     update_existing: bool = True,
-#     verbose: bool = True,
-# ) -> Dict[str, Any]:
-#     """
-#     Scan root for run folders exactly matching:
-#       - XeniumPR<digits>  (e.g. XeniumPR1)
-#       - XeniumR<digits>   (e.g. XeniumR1)
-#       - VisiumR<digits>   (e.g. VisiumR1)
-
-#     For each run found, processes slide1 and slide2 (if present), runs qc_func on the slide path,
-#     prefixes sample_id by '{run_name}S{slide_idx}', and merges QC columns into metadata.
-
-#     Args:
-#         metadata: pandas.DataFrame containing at least 'sample_id' (will be preserved).
-#         root: root directory containing run folders.
-#         qc_func: function(path: str, save_csv: Optional[str]) -> pandas.DataFrame.
-#                  If None, will try to use `return_qc`, `summarize_h5ad_qc_from_adata`, or
-#                  `summarize_h5ad_qc_safe` from globals().
-#         save_csv_name: optional filename (relative to each slide) to pass to qc_func so it may save CSV.
-#         update_existing: if True, overwrite existing metadata values for matched sample_id rows;
-#                          if False, only fill missing values (NaNs).
-#         verbose: whether to print progress.
-
-#     Returns:
-#         {
-#             "metadata": updated_metadata_df,
-#             "processed_runs": list_of_run_names_processed,
-#             "per_slide": list_of (slide_path_str, df_qc) tuples for debugging
-#         }
-#     """
-#     root = Path(root)
-
-#     # compile regexes for exact matches
-#     patterns = [
-#         re.compile(r"^XeniumPR\d+$"),
-#         re.compile(r"^XeniumR\d+$"),
-#         re.compile(r"^VisiumR\d+$"),
-#     ]
-
-#     # find run directories that exactly match any pattern
-#     run_dirs: List[Path] = []
-#     for d in sorted(root.iterdir()):
-#         if not d.is_dir():
-#             continue
-#         if any(p.match(d.name) for p in patterns):
-#             run_dirs.append(d)
-
-#     if verbose:
-#         print(f"Found {len(run_dirs)} matching runs under {root}:")
-#         for r in run_dirs:
-#             print("  -", r.name)
-
-#     # autodetect qc_func if not provided
-#     if qc_func is None:
-#         qc_func = globals().get("return_qc") or globals().get("summarize_h5ad_qc_from_adata") or globals().get("summarize_h5ad_qc_safe")
-#         if qc_func is None:
-#             raise ValueError("qc_func not provided and no default (return_qc/summarize_h5ad_qc_from_adata) found in globals.")
-
-#     expected_cols = [
-#         "n_obs",
-#         "mean_total_counts",
-#         "mean_n_genes_by_counts",
-#         "mean_log1p_total_counts",
-#         "mean_log1p_n_genes_by_counts",
-#     ]
-
-#     # make a working copy of metadata and ensure QC columns exist
-#     meta = metadata.copy(deep=True)
-#     for c in expected_cols:
-#         if c not in meta.columns:
-#             meta[c] = pd.NA
-
-#     processed_runs: List[str] = []
-#     per_slide: List[tuple] = []
-
-#     for run_dir in run_dirs:
-#         run_name = run_dir.name
-#         processed_runs.append(run_name)
-
-#         for slide_idx, slide_name in enumerate(["slide1", "slide2"], start=1):
-#             slide_path = run_dir / slide_name
-#             if not slide_path.exists():
-#                 if verbose:
-#                     print(f"[SKIP] {run_name}/{slide_name} not found.")
-#                 continue
-
-#             if verbose:
-#                 print(f"\n[QC] Processing {run_name} / {slide_name} ...")
-
-#             # call qc_func; try (path, save_csv) signature first
-#             try:
-#                 if save_csv_name is not None:
-#                     df_qc = qc_func(str(slide_path), save_csv=save_csv_name)
-#                 else:
-#                     df_qc = qc_func(str(slide_path))
-#             except TypeError:
-#                 df_qc = qc_func(str(slide_path))
-#             except Exception as e:
-#                 if verbose:
-#                     print(f"[ERROR] qc_func failed on {slide_path}: {e}")
-#                 continue
-
-#             if df_qc is None or df_qc.empty:
-#                 if verbose:
-#                     print("  No QC rows returned.")
-#                 continue
-
-#             # normalize df_qc: ensure sample_id
-#             if "sample_id" not in df_qc.columns:
-#                 df_qc = df_qc.reset_index().rename(columns={"index": "sample_id"})
-
-#             # prefix sample_id like RunNameS{slide_idx}
-#             prefix = f"{run_name}S{slide_idx}"
-#             df_qc["sample_id"] = prefix + df_qc["sample_id"].astype(str)
-
-#             # ensure expected columns exist in df_qc
-#             for c in expected_cols:
-#                 if c not in df_qc.columns:
-#                     df_qc[c] = pd.NA
-
-#             # trim to expected columns + sample_id
-#             df_qc_trim = df_qc[["sample_id"] + expected_cols].copy()
-
-#             per_slide.append((str(slide_path), df_qc_trim))
-
-#             if verbose:
-#                 # pretty display if in notebook, otherwise print head
-#                 try:
-#                     from IPython.display import display
-#                     display(df_qc_trim)
-#                 except Exception:
-#                     print(df_qc_trim.head())
-
-#             # merge into meta
-#             for _, row in df_qc_trim.iterrows():
-#                 sid = row["sample_id"]
-#                 if sid in meta["sample_id"].values:
-#                     if update_existing:
-#                         for c in expected_cols:
-#                             meta.loc[meta["sample_id"] == sid, c] = row[c]
-#                     else:
-#                         for c in expected_cols:
-#                             mask = meta["sample_id"] == sid
-#                             meta.loc[mask, c] = meta.loc[mask, c].fillna(row[c])
-#                 else:
-#                     # append new row preserving meta columns
-#                     new_row = {col: pd.NA for col in meta.columns}
-#                     new_row["sample_id"] = sid
-#                     for c in expected_cols:
-#                         new_row[c] = row[c]
-#                     meta = pd.concat([meta, pd.DataFrame([new_row])], ignore_index=True)
-
-#     # final tidy
-#     if "sample_id" in meta.columns:
-#         meta = meta.sort_values("sample_id").reset_index(drop=True)
-
-#     if verbose:
-#         print("\n✅ QC integration complete. Processed runs:", processed_runs)
-
-#     return {"metadata": meta, "processed_runs": processed_runs, "per_slide": per_slide}
-
-
 
 
 
@@ -504,10 +582,11 @@ def add_qc_from_all_runs(
 
     expected_cols = [
         "n_obs",
-        "mean_total_counts",
-        "mean_n_genes_by_counts",
-        "mean_log1p_total_counts",
-        "mean_log1p_n_genes_by_counts",
+        "n_obs_in_tissue",
+        "mean_total_counts_in_tissue",
+        "mean_n_genes_by_counts_in_tissue",
+        "mean_log1p_total_counts_in_tissue",
+        "mean_log1p_n_genes_by_counts_in_tissue",
     ]
 
     meta = metadata.copy(deep=True)
