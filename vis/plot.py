@@ -63,6 +63,22 @@ DEFAULT_SUMMARY_PLOT_DIR = "/project/simmons_hts/kxu/hest/eval/summary_plots"
 import pandas as pd
 import numpy as np
 
+def _find_col_ci(df: pd.DataFrame, name_variants: list[str]) -> str | None:
+    """
+    Return the actual column name present in df that matches any of the
+    case-insensitive name_variants. Returns None if not found.
+    """
+    if df is None or df.empty:
+        return None
+    lowmap = {c.lower(): c for c in df.columns}
+    for v in name_variants:
+        if v is None:
+            continue
+        key = v.lower()
+        if key in lowmap:
+            return lowmap[key]
+    return None
+
 def add_num_training_patches_mean(
     df_summary: pd.DataFrame,
     xenium_csv: str = "/project/simmons_hts/kxu/hest/hest_directory.csv",
@@ -1285,6 +1301,222 @@ def plot_corrs_by_sample(
     return fig
 
 
+# def plot_pearson_vs_sample_metadata(
+#     df_long: pd.DataFrame,
+#     df_splits: pd.DataFrame,
+#     outdir: Path,
+#     sample_col_candidates: list[str] = ["test_sample", "sample_id", "SampleID", "Sample_Id"],
+#     metadata_cols_preference: list[str] = None,
+#     show: bool = False,
+#     dpi: int = 200,
+# ) -> Dict[str, Path]:
+#     """
+#     Create scatter plots of per-sample mean Pearson correlation vs some sample-level metadata.
+
+#     - df_long: long dataframe produced by merge_kfold_gene_corrs_with_test_metadata (contains 'corr' and 'test_sample')
+#     - df_splits: the test splits joined with extra metadata (as returned by get_test_splits)
+#     - metadata_cols_preference: list of metadata column names (strings) to try to plot against.
+#         Defaults to try: n_obs, mean_total_counts, mean_n_genes_by_counts, mean_log1p_total_counts
+#     - Saves images into outdir and returns dict mapping plot name -> Path.
+#     """
+#     outdir = Path(outdir)
+#     outdir.mkdir(parents=True, exist_ok=True)
+#     arts = {}
+
+#     if metadata_cols_preference is None:
+#         metadata_cols_preference = [
+#             "n_obs",
+#             "mean_total_counts",
+#             "mean_n_genes_by_counts",
+#             "mean_log1p_total_counts",
+#             # fallback candidate (if one of the above not present)
+#             "mean_log1p_n_genes_by_counts",
+#         ]
+
+#     # determine sample column name
+#     sample_col = _find_col_ci(df_long, sample_col_candidates)
+#     if sample_col is None:
+#         # try the df_splits
+#         sample_col = _find_col_ci(df_splits, sample_col_candidates)
+#     if sample_col is None:
+#         raise KeyError("Could not find a sample id column in df_long or df_splits. "
+#                        "Searched: " + ", ".join(sample_col_candidates))
+
+#     # compute per-sample mean Pearson
+#     df_sample_mean = (
+#         df_long
+#         .groupby(sample_col)["corr"]
+#         .agg(mean_pearson=("corr", "mean"), n_genes_per_sample=("corr", "size"))
+#         .reset_index()
+#     )
+
+#     # merge metadata from df_splits (if present)
+#     # prefer columns from df_splits (they come from extra metadata)
+#     merged = df_sample_mean.merge(df_splits.drop_duplicates(subset=[sample_col]),
+#                                   left_on=sample_col, right_on=sample_col, how="left")
+
+#     # For each requested metadata column, try a case-insensitive lookup in merged
+#     for meta in metadata_cols_preference[:4]:  # produce 4 plots (first 4 preferred)
+#         meta_col = _find_col_ci(merged, [meta])
+#         if meta_col is None:
+#             print(f"[plot_pearson_vs_sample_metadata] metadata column '{meta}' not found - skipping.")
+#             continue
+
+#         # Prepare plotting data, drop NA values
+#         df_plot = merged[[sample_col, "mean_pearson", meta_col]].dropna(subset=["mean_pearson", meta_col]).copy()
+#         if df_plot.empty:
+#             print(f"[plot_pearson_vs_sample_metadata] no valid rows for {meta_col} - skipping.")
+#             continue
+
+#         # numeric conversion where possible
+#         df_plot[meta_col] = pd.to_numeric(df_plot[meta_col], errors="coerce")
+#         df_plot = df_plot.dropna(subset=[meta_col])
+#         if df_plot.empty:
+#             print(f"[plot_pearson_vs_sample_metadata] {meta_col} could not be coerced to numeric - skipping.")
+#             continue
+
+#         # Make figure
+#         fig, ax = plt.subplots(figsize=(9, 6))
+#         sc = ax.scatter(df_plot[meta_col].to_numpy(dtype=float),
+#                         df_plot["mean_pearson"].to_numpy(dtype=float),
+#                         s=60, edgecolors="black", linewidths=0.5, alpha=0.9)
+#         ax.set_xlabel(meta_col)
+#         ax.set_ylabel("Mean Pearson correlation (per-sample)")
+#         ax.set_title(f"Mean Pearson per sample vs {meta_col}")
+#         ax.grid(True, linestyle=":", alpha=0.4)
+
+#         # Label points with sample id, use adjust_text to reduce overlap
+#         texts = []
+#         for _, r in df_plot.iterrows():
+#             texts.append(ax.text(r[meta_col], r["mean_pearson"], str(r[sample_col]), fontsize=8))
+
+#         try:
+#             adjust_text(
+#                 texts, ax=ax,
+#                 expand_points=(1.2, 1.6),
+#                 expand_text=(1.2, 1.6),
+#                 arrowprops=dict(arrowstyle="-", color="gray", lw=0.5)
+#             )
+#         except Exception:
+#             # if adjust_text is not available or fails, ignore (labels will overlap)
+#             pass
+
+#         fig.tight_layout()
+#         fname = f"pearson_vs_{meta_col}.png"
+#         path = outdir / fname
+#         fig.savefig(path, dpi=dpi, bbox_inches="tight")
+#         if show:
+#             display(fig)
+#         plt.close(fig)
+
+#         arts[f"pearson_vs_{meta_col}"] = path
+
+#     return arts
+
+def plot_pearson_vs_sample_metadata(
+    df_long: pd.DataFrame,
+    df_splits: pd.DataFrame,
+    outdir: Path,
+    sample_col_candidates: list[str] = ["test_sample", "sample_id", "SampleID", "Sample_Id"],
+    metadata_cols_preference: list[str] = None,
+    show: bool = False,
+    dpi: int = 200,
+) -> Dict[str, Path]:
+    """
+    Create scatter plots of per-sample mean Pearson correlation vs some sample-level metadata.
+    Compatible with older pandas versions (avoids tuple kwargs in .agg()).
+    """
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+    arts = {}
+
+    if metadata_cols_preference is None:
+        metadata_cols_preference = [
+            "n_obs",
+            "mean_total_counts",
+            "mean_n_genes_by_counts",
+            "mean_log1p_total_counts",
+            "mean_log1p_n_genes_by_counts",
+        ]
+
+    # determine sample column name
+    sample_col = _find_col_ci(df_long, sample_col_candidates)
+    if sample_col is None:
+        sample_col = _find_col_ci(df_splits, sample_col_candidates)
+    if sample_col is None:
+        raise KeyError("Could not find a sample id column in df_long or df_splits. "
+                       "Searched: " + ", ".join(sample_col_candidates))
+
+    # compute per-sample mean Pearson — compatible approach
+    gb = df_long.groupby(sample_col)["corr"]
+    df_sample_mean = (
+        gb.agg(["mean", "size"])
+        .reset_index()
+        .rename(columns={"mean": "mean_pearson", "size": "n_genes_per_sample"})
+    )
+
+    # merge metadata from df_splits
+    merged = df_sample_mean.merge(
+        df_splits.drop_duplicates(subset=[sample_col]),
+        left_on=sample_col,
+        right_on=sample_col,
+        how="left",
+    )
+
+    # For each requested metadata column, try a case-insensitive lookup in merged
+    for meta in metadata_cols_preference[:4]:  # produce up to 4 plots
+        meta_col = _find_col_ci(merged, [meta])
+        if meta_col is None:
+            print(f"[plot_pearson_vs_sample_metadata] metadata column '{meta}' not found - skipping.")
+            continue
+
+        df_plot = merged[[sample_col, "mean_pearson", meta_col]].dropna(subset=["mean_pearson", meta_col]).copy()
+        if df_plot.empty:
+            print(f"[plot_pearson_vs_sample_metadata] no valid rows for {meta_col} - skipping.")
+            continue
+
+        df_plot[meta_col] = pd.to_numeric(df_plot[meta_col], errors="coerce")
+        df_plot = df_plot.dropna(subset=[meta_col])
+        if df_plot.empty:
+            print(f"[plot_pearson_vs_sample_metadata] {meta_col} could not be coerced to numeric - skipping.")
+            continue
+
+        fig, ax = plt.subplots(figsize=(9, 6))
+        ax.scatter(
+            df_plot[meta_col].to_numpy(dtype=float),
+            df_plot["mean_pearson"].to_numpy(dtype=float),
+            s=60, edgecolors="black", linewidths=0.5, alpha=0.9
+        )
+        ax.set_xlabel(meta_col)
+        ax.set_ylabel("Mean Pearson correlation (per-sample)")
+        ax.set_title(f"Mean Pearson per sample vs {meta_col}")
+        ax.grid(True, linestyle=":", alpha=0.4)
+
+        texts = []
+        for _, r in df_plot.iterrows():
+            texts.append(ax.text(r[meta_col], r["mean_pearson"], str(r[sample_col]), fontsize=8))
+
+        try:
+            adjust_text(
+                texts, ax=ax,
+                expand_points=(1.2, 1.6),
+                expand_text=(1.2, 1.6),
+                arrowprops=dict(arrowstyle="-", color="gray", lw=0.5)
+            )
+        except Exception:
+            pass
+
+        fig.tight_layout()
+        fname = f"pearson_vs_{meta_col}.png"
+        path = outdir / fname
+        fig.savefig(path, dpi=dpi, bbox_inches="tight")
+        if show:
+            display(fig)
+        plt.close(fig)
+
+        arts[f"pearson_vs_{meta_col}"] = path
+
+    return arts
 
 # -----------------------
 # High-level workflow
@@ -1296,141 +1528,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from IPython.display import display
 
-def generate_all_plots(
-    run: str,
-    group_by: Union[str, List[str], None] = None,
-    runs_root: str = DEFAULT_RUNS_ROOT,
-    splits_root: str = DEFAULT_SPLITS_ROOT,
-    curated_xlsx: Optional[str] = DEFAULT_CURATED_XLSX,
-    extra_metadata_csv: Optional[str] = DEFAULT_EXTRA_METADATA,
-    top_n: int = 30,
-    show: bool = False,
-) -> Dict[str, Path]:
-    """
-    New workflow:
-      - Always produce base plots (gene_barplot, gene_hist, per_sample).
-      - If `group_by` is provided (str or list[str]), produce only those grouped plots
-        *when the needed metadata/columns exist*.
-        * Gene-level grouping supported for: panel, cell_type, condition (needs curated_xlsx).
-        * Per-sample grouping supported for any column present in df_long (e.g., Sample_type, Location, panel, cell_type, condition).
-    Saves into <runs_root>/<run>/plots with simple filenames.
-    """
-    # Paths
-    run_dir = Path(runs_root) / run
-    outdir = run_dir / "plots"
-    outdir.mkdir(parents=True, exist_ok=True)
-
-    # 1) Best model + gene correlations (k-fold aware)
-    best, dataset_name, df_genes = extract_best_model_gene_corrs(run, runs_root=runs_root, verbose=False)
-    encoder_name = best.get("encoder_name", "Unknown")
-
-    # 2) Splits (+ optional HEST directory metadata inside get_test_splits)
-    df_splits = get_test_splits(run, runs_root=runs_root, splits_root=splits_root, extra_metadata_csv=extra_metadata_csv)
-
-    # 3) Long per-split df
-    df_long = merge_kfold_gene_corrs_with_test_metadata(df_genes, df_splits)
-
-    # 4) Curated annotations (optional; needed for gene-level grouping by panel/cell_type/condition)
-    curated_ok = isinstance(curated_xlsx, str) and Path(curated_xlsx).exists()
-    if curated_ok:
-        df_genes_annot = annotate_genes_with_curated(df_genes, curated_xlsx)
-        df_long_annot  = annotate_genes_with_curated(df_long,  curated_xlsx)
-    else:
-        df_genes_annot = df_genes
-        df_long_annot  = df_long
-
-    arts: Dict[str, Path] = {}
-
-    # ---------------- Base plots (always) ----------------
-    fig = compare_models(run, runs_root=runs_root, show=show)
-    if fig is not None:
-        p = (Path(runs_root) / run / "plots" / "model_comparison.png")
-        p.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(p, dpi=200, bbox_inches="tight")
-        if show:
-            display(fig)
-        plt.close(fig)
-        arts["model_comparison"] = p
-
-    # Gene barplot (ungrouped)
-    fig = plot_gene_correlation_barplot(df_genes, dataset_name, encoder_name)
-    p = outdir / "gene_barplot.png"
-    fig.savefig(p, dpi=200, bbox_inches="tight")
-    if show: display(fig)
-    plt.close(fig)
-    arts["gene_barplot"] = p
-
-    # Histogram
-    fig = plot_gene_correlation_histogram(df_genes, dataset_name, encoder_name)
-    p = outdir / "gene_hist.png"
-    fig.savefig(p, dpi=200, bbox_inches="tight")
-    if show: display(fig)
-    plt.close(fig)
-    arts["gene_hist"] = p
-
-    # Per-sample (no grouping)
-    fig = plot_corrs_by_sample(df_long, dataset_name, encoder_name, group_by=None)
-    p = outdir / "per_sample.png"
-    fig.savefig(p, dpi=200, bbox_inches="tight")
-    if show: display(fig)
-    plt.close(fig)
-    arts["per_sample"] = p
-
-    # ---------------- Gene-level grouped barplots (only what user requested) ----------------
-    # normalize group_by to a list
-    requested_groups: List[str] = []
-    if group_by is not None:
-        requested_groups = [group_by] if isinstance(group_by, str) else list(group_by)
-
-    # Your grouped gene barplot supports: panel / cell_type / condition
-    valid_gene_groups = {"panel", "cell_type", "condition",'tcr','coeliac'}
-
-    for gb in requested_groups:
-        print('plot individual genes for group',gb)
-        if gb not in valid_gene_groups:
-            # skip silently if user asked for something not supported by this function
-            print("requested group " ,gb, "is not supported")
-            continue
-        # only plot if curated annotations are available and column is present with non-NA values
-        if curated_ok and (gb in df_genes_annot.columns) and df_genes_annot[gb].notna().any():
-            display(df_genes_annot[gb])
-            fig = plot_gene_correlation_barplot_grouped(
-                df_genes_annot,           # ← your function signature
-                group_by=gb,              # pass the requested group
-                show_mean=True
-            )
-            p = outdir / f"gene_barplot_by_{gb}.png"
-            fig.savefig(p, dpi=200, bbox_inches="tight")
-            if show: display(fig)
-            plt.close(fig)
-            arts[f"gene_barplot_by_{gb}"] = p
-        # if not curated / or column empty → skip
-
-    # ---------------- Per-sample grouped (optional, if user also wants these) ----------------
-    # If you also want to produce per-sample grouped plots based on the same `group_by` items:
-    for gb in requested_groups:
-        # pick annotated long df if it has the column; else fall back to df_long
-        if gb in df_long_annot.columns and df_long_annot[gb].notna().any():
-            dplot = df_long_annot
-        elif gb in df_long.columns and df_long[gb].notna().any():
-            dplot = df_long
-        else:
-            continue
-
-        print('plot sample-level group by')
-
-        fig = plot_corrs_by_sample(dplot, dataset_name, encoder_name, group_by=gb)
-        p = outdir / f"per_sample_by_{gb}.png"
-        fig.savefig(p, dpi=200, bbox_inches="tight")
-        if show: display(fig)
-        plt.close(fig)
-        arts[f"per_sample_by_{gb}"] = p
-
-    return arts
-
-from typing import Union, List, Optional, Dict
-from pathlib import Path
-import matplotlib.pyplot as plt
 
 def generate_all_plots(
     run: str,
@@ -1560,6 +1657,19 @@ def generate_all_plots(
         if show: display(fig)
         plt.close(fig)
         arts[f"per_sample_by_{gb}"] = p
+
+    # ---- Per-sample Pearson vs sample metadata (n_obs / mean_total_counts / ... ) ----
+    try:
+        more_plots = plot_pearson_vs_sample_metadata(
+            df_long=df_long,
+            df_splits=df_splits,
+            outdir=outdir,
+            # you can pass metadata_cols_preference explicitly if you prefer
+            show=show,
+        )
+        arts.update(more_plots)
+    except Exception as e:
+        print(f"[warning] failed to create pearson vs metadata plots: {e}")
 
     # ---------------- Combine all PNGs into a single PDF called plots.pdf ----------------
     try:
