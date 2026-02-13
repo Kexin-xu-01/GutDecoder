@@ -36,6 +36,7 @@ import os
 import glob
 from pathlib import Path
 from typing import Dict, Optional, Tuple
+import re
 
 import numpy as np
 import pandas as pd
@@ -43,8 +44,18 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib import cm
 
+from pathlib import Path
+import numpy as np
+import matplotlib.pyplot as plt
+from PIL import Image
+from IPython.display import display
+import re
+import warnings
+
 from IPython.display import display
 from adjustText import adjust_text
+
+from matplotlib.backends.backend_pdf import PdfPages
 
 
 # -----------------------
@@ -61,8 +72,6 @@ DEFAULT_SUMMARY_PLOT_DIR = "/project/simmons_hts/kxu/hest/eval/summary_plots"
 # -----------------------
 # Core IO
 # -----------------------
-import pandas as pd
-import numpy as np
 
 def _find_col_ci(df: pd.DataFrame, name_variants: list[str]) -> str | None:
     """
@@ -79,6 +88,22 @@ def _find_col_ci(df: pd.DataFrame, name_variants: list[str]) -> str | None:
         if key in lowmap:
             return lowmap[key]
     return None
+
+def _sample_cmap(cmap_name: str, n: int):
+    """
+    Return `n` RGBA colors sampled evenly from matplotlib colormap `cmap_name`.
+    Safer than plt.get_cmap(name, n) on older matplotlib versions.
+    """
+    import numpy as _np
+    import matplotlib.pyplot as _plt
+
+    cmap = _plt.get_cmap(cmap_name)
+    # guard: at least 1 color
+    if n <= 0:
+        n = 1
+    colors = cmap(_np.linspace(0, 1, n))
+    return colors
+
 
 def add_num_training_patches_mean(
     df_summary: pd.DataFrame,
@@ -355,18 +380,8 @@ def summarize_runs(root_dir):
     return df
 
 
-def _default_outdir(outdir: str | None) -> Path:
-    """Return Path for outdir, defaulting to hest/eval/summary_plots."""
-    if outdir is None:
-        outdir = Path(DEFAULT_SUMMARY_PLOT_DIR)
-    else:
-        outdir = Path(outdir)
-    outdir.mkdir(parents=True, exist_ok=True)
-    return outdir
-
-
 def plot_summary_bar(best_df: pd.DataFrame,
-                     outdir: str | None = None,
+                     outdir: str | None = DEFAULT_SUMMARY_PLOT_DIR,
                      filename: str = "summary_barplot.png",
                      show: bool = False):
     """
@@ -450,9 +465,282 @@ def plot_summary_bar(best_df: pd.DataFrame,
     return fig
 
 
+def _safe_filename(s: str) -> str:
+    """Make a string safe for filenames."""
+    s = str(s)
+    s = re.sub(r"[^\w\-_\. ]", "_", s)
+    s = re.sub(r"\s+", "_", s)
+    return s.strip("_")
+
+def _default_outdir(outdir):
+    if outdir is None:
+        return Path(".")
+    return Path(outdir)
+
+def _assemble_color_map(keys):
+    """Return color map dict for given keys combining tab20/tab20b/tab20c."""
+    cmap_tab20  = list(plt.get_cmap("tab20").colors)
+    cmap_tab20b = list(plt.get_cmap("tab20b").colors)
+    cmap_tab20c = list(plt.get_cmap("tab20c").colors)
+    combined = cmap_tab20 + cmap_tab20b + cmap_tab20c
+    if len(keys) > len(combined):
+        # repeat if needed
+        repeats = int(np.ceil(len(keys) / len(combined)))
+        combined = combined * repeats
+    return {k: combined[i] for i, k in enumerate(keys)}
+
+
+def _safe_filename(s: str) -> str:
+    """Make a string safe for filenames."""
+    s = str(s)
+    s = re.sub(r"[^\w\-_\. ]", "_", s)
+    s = re.sub(r"\s+", "_", s)
+    return s.strip("_")
+
+def _default_outdir(outdir):
+    if outdir is None:
+        return Path(".")
+    return Path(outdir)
+
+def _assemble_color_map(keys):
+    """Return color map dict for given keys combining tab20/tab20b/tab20c."""
+    cmap_tab20  = list(plt.get_cmap("tab20").colors)
+    cmap_tab20b = list(plt.get_cmap("tab20b").colors)
+    cmap_tab20c = list(plt.get_cmap("tab20c").colors)
+    combined = cmap_tab20 + cmap_tab20b + cmap_tab20c
+    if len(keys) > len(combined):
+        # repeat if needed
+        repeats = int(np.ceil(len(keys) / len(combined)))
+        combined = combined * repeats
+    return {k: combined[i] for i, k in enumerate(keys)}
+
+
+def plot_summary_bar_by_dataset(
+    best_df,
+    outdir: str | Path | None = DEFAULT_SUMMARY_PLOT_DIR,
+    prefix: str = "summary",
+    show: bool = False,
+    figsize_per_item: float = 0.5,
+):
+    """
+    Same plotting logic as before (no color or layout changes) but:
+      - saves PNGs into <outdir>/by_dataset/
+      - creates <outdir>/by_dataset_combined.pdf containing all PNGs (if any)
+    Returns:
+      (results_dict, combined_pdf_path)
+    """
+    outdir = _default_outdir(outdir)
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    folder = outdir / "by_dataset"
+    folder.mkdir(parents=True, exist_ok=True)
+
+    # Basic validation / normalization
+    df = best_df.copy()
+    df["highest_pearson_mean"] = pd.to_numeric(df["highest_pearson_mean"], errors="coerce")
+    df["highest_pearson_std"] = pd.to_numeric(df["highest_pearson_std"], errors="coerce").fillna(0.0)
+    df["num_genes"] = pd.to_numeric(df.get("num_genes", 0), errors="coerce").fillna(0).astype(int)
+    df["dataset"] = df["dataset"].astype(str).fillna("Unknown")
+    df["gene_list"] = df["gene_list"].astype(str).fillna("default")
+
+    results = {}  # store matplotlib.Figure objects keyed by filenames
+
+    datasets = sorted(df["dataset"].unique().tolist())
+    dataset_color_map = _assemble_color_map(datasets)
+
+    for ds in datasets:
+        sub = df[df["dataset"] == ds].copy()
+        if sub.empty:
+            continue
+
+        # order by mean desc
+        sub = sub.sort_values("highest_pearson_mean", ascending=False).reset_index(drop=True)
+        labels = (sub["gene_list"]).tolist()
+        x = np.arange(len(sub))
+        means = sub["highest_pearson_mean"].to_numpy()
+        errs = sub["highest_pearson_std"].to_numpy()
+        nums = sub["num_genes"].to_numpy()
+        colors = [dataset_color_map[ds]] * len(sub)
+
+        fig_w = max(8, len(sub) * figsize_per_item)
+        fig, ax = plt.subplots(figsize=(fig_w, 6))
+        # keep color usage exactly as before
+        bars = ax.bar(x, means, yerr=errs, color=colors, capsize=4, edgecolor="black")
+
+        # annotate num_genes above bars
+        for bar, val, err, ng in zip(bars, means, errs, nums):
+            height = bar.get_height()
+            va = "bottom" if height >= 0 else "top"
+            offset = 6 if height >= 0 else -6
+            ax.annotate(str(ng),
+                        xy=(bar.get_x() + bar.get_width()/2, height + (err if height >= 0 else -err)),
+                        xytext=(0, offset), textcoords="offset points",
+                        ha="center", va=va, fontsize=9)
+
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels, rotation=60, ha="right")
+        ax.set_ylabel("Pearson correlation (mean ± std)")
+        ax.set_title(f"{ds} — summary (label = num_genes)")
+        ax.grid(True, axis="y", linestyle=":", alpha=0.4)
+
+        # legend: single colored box for dataset (keeps your Rectangle usage)
+        handle = plt.Rectangle((0, 0), 1, 1, color=dataset_color_map[ds], edgecolor="black")
+        ax.legend([handle], [ds], title="Dataset", bbox_to_anchor=(1.02, 1), loc="upper left")
+
+        fig.tight_layout()
+
+        fname = folder / f"{_safe_filename(prefix)}_{_safe_filename(ds)}_summary.png"
+        fig.savefig(fname, dpi=200, bbox_inches="tight")
+        results[str(fname)] = fig
+        if show:
+            display(fig)
+        plt.close(fig)
+
+    # Combine saved PNGs into a single PDF (if any)
+    png_files = sorted(folder.glob("*.png"))
+    combined_pdf_path = None
+    if png_files:
+        images = []
+        for p in png_files:
+            try:
+                im = Image.open(p)
+                # convert to RGB if needed (PIL can't save RGBA to PDF)
+                if im.mode in ("RGBA", "LA") or (im.mode == "P"):
+                    im = im.convert("RGB")
+                images.append(im)
+            except Exception as e:
+                warnings.warn(f"Failed to open image {p}: {e}")
+
+        if images:
+            combined_pdf_path = outdir / "by_dataset_combined.pdf"
+            try:
+                images[0].save(combined_pdf_path, "PDF", resolution=200.0, save_all=True, append_images=images[1:])
+            except Exception as e:
+                warnings.warn(f"Failed to write combined PDF {combined_pdf_path}: {e}")
+                combined_pdf_path = None
+
+    return results, combined_pdf_path
+
+
+
+def plot_gene_list_across_datasets(
+    best_df,
+    outdir: str | Path | None = DEFAULT_SUMMARY_PLOT_DIR,
+    prefix: str = "gene_list_across_datasets",
+    show: bool = False,
+    figsize_per_item: float = 0.6,
+    order_by: str = "mean",  # "mean" or "dataset" or "none"
+):
+    """
+    For each gene_list present in `best_df`, create a plot showing that gene_list's runs
+    across all datasets (one bar per run). Bars are colored by dataset.
+
+    Saves PNGs into <outdir>/by_gene_list/ and also creates <outdir>/by_gene_list_combined.pdf
+
+    Returns:
+        (results, combined_pdf_path)
+        - results: dict mapping saved PNG filepath (str) -> matplotlib.figure.Figure
+        - combined_pdf_path: Path to combined PDF, or None if no images were produced
+    """
+    outdir = Path(outdir) if outdir is not None else Path(".")
+    folder = outdir / "by_gene_list"
+    folder.mkdir(parents=True, exist_ok=True)
+
+    df = best_df.copy()
+    df["highest_pearson_mean"] = pd.to_numeric(df["highest_pearson_mean"], errors="coerce")
+    df["highest_pearson_std"] = pd.to_numeric(df.get("highest_pearson_std", 0), errors="coerce").fillna(0.0)
+    df["num_genes"] = pd.to_numeric(df.get("num_genes", 0), errors="coerce").fillna(0).astype(int)
+    df["dataset"] = df["dataset"].astype(str).fillna("Unknown")
+    df["gene_list"] = df["gene_list"].astype(str).fillna("default")
+    df["run"] = df.get("run", df.index.astype(str)).astype(str)
+
+    results = {}
+    gene_lists = sorted(df["gene_list"].unique().tolist())
+    datasets = sorted(df["dataset"].unique().tolist())
+    dataset_color_map = _assemble_color_map(datasets)
+
+    for gl in gene_lists:
+        sub = df[df["gene_list"] == gl].copy()
+        if sub.empty:
+            continue
+
+        # Optionally order rows
+        if order_by == "mean":
+            sub = sub.sort_values("highest_pearson_mean", ascending=False).reset_index(drop=True)
+        elif order_by == "dataset":
+            sub = sub.sort_values(["dataset", "highest_pearson_mean"], ascending=[True, False]).reset_index(drop=True)
+        # else keep original order
+
+        labels = (sub["dataset"]).tolist()
+        x = np.arange(len(sub))
+        means = sub["highest_pearson_mean"].to_numpy()
+        errs = sub["highest_pearson_std"].to_numpy()
+        nums = sub["num_genes"].to_numpy()
+        colors = [dataset_color_map[ds] for ds in sub["dataset"]]
+
+        fig_w = max(6, len(sub) * figsize_per_item)
+        fig, ax = plt.subplots(figsize=(fig_w, 6))
+        # keep color usage exactly as before
+        bars = ax.bar(x, means, yerr=errs, color=colors, capsize=4, edgecolor="black")
+
+        # annotate num_genes above bars (if present)
+        for bar, val, err, ng in zip(bars, means, errs, nums):
+            height = bar.get_height()
+            va = "bottom" if height >= 0 else "top"
+            offset = 6 if height >= 0 else -6
+            if ng > 0:
+                ax.annotate(str(ng),
+                            xy=(bar.get_x() + bar.get_width()/2, height + (err if height >= 0 else -err)),
+                            xytext=(0, offset), textcoords="offset points",
+                            ha="center", va=va, fontsize=9)
+
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels, rotation=60, ha="right")
+        ax.set_ylabel("Pearson correlation (mean ± std)")
+        ax.set_title(f"Gene list: {gl} — across datasets")
+        ax.grid(True, axis="y", linestyle=":", alpha=0.4)
+
+        # Legend uses the same colors as before
+        present_datasets = sorted(sub["dataset"].unique().tolist())
+        handles = [plt.Rectangle((0, 0), 1, 1, color=dataset_color_map[ds], edgecolor="black") for ds in present_datasets]
+        ax.legend(handles, present_datasets, title="Dataset", bbox_to_anchor=(1.02, 1), loc="upper left")
+
+        fig.tight_layout()
+
+        fname = folder / f"{_safe_filename(prefix)}_{_safe_filename(gl)}.png"
+        fig.savefig(fname, dpi=200, bbox_inches="tight")
+        results[str(fname)] = fig
+        if show:
+            display(fig)
+        plt.close(fig)
+
+    # Combine saved PNGs into a single PDF (if any)
+    png_files = sorted(folder.glob("*.png"))
+    combined_pdf_path = None
+    if png_files:
+        images = []
+        for p in png_files:
+            try:
+                im = Image.open(p)
+                if im.mode in ("RGBA", "LA") or (im.mode == "P"):
+                    im = im.convert("RGB")
+                images.append(im)
+            except Exception as e:
+                warnings.warn(f"Failed to open image {p}: {e}")
+
+        if images:
+            combined_pdf_path = outdir / "by_gene_list_combined.pdf"
+            try:
+                images[0].save(combined_pdf_path, "PDF", resolution=200.0, save_all=True, append_images=images[1:])
+            except Exception as e:
+                warnings.warn(f"Failed to write combined PDF {combined_pdf_path}: {e}")
+                combined_pdf_path = None
+
+    return results, combined_pdf_path
 
 def plot_summary_genes_vs_mean(best_df: pd.DataFrame,
-                               outdir: str | None = None,
+                               outdir: str | None = DEFAULT_SUMMARY_PLOT_DIR,
                                filename: str = "summary_genes_vs_mean.png",
                                show: bool = False):
     """
@@ -477,8 +765,8 @@ def plot_summary_genes_vs_mean(best_df: pd.DataFrame,
         return None
 
     datasets = sorted(df["dataset"].dropna().unique().tolist())
-    cmap = plt.get_cmap("tab20", len(datasets))
-    color_map = {ds: cmap(i) for i, ds in enumerate(datasets)}
+    colors = _sample_cmap("tab20", len(datasets))
+    color_map = {ds: colors[i] for i, ds in enumerate(datasets)}
 
     fig, ax = plt.subplots(figsize=(8, 6))
     for ds in datasets:
@@ -500,7 +788,8 @@ def plot_summary_genes_vs_mean(best_df: pd.DataFrame,
     ax.legend(title="Dataset", bbox_to_anchor=(1.02, 1), loc="upper left")
     fig.tight_layout()
 
-    outdir = _default_outdir(outdir)
+
+    outdir = Path(outdir)
     path = outdir / filename
     fig.savefig(path, dpi=200, bbox_inches="tight")
 
@@ -511,7 +800,7 @@ def plot_summary_genes_vs_mean(best_df: pd.DataFrame,
 
 
 def plot_summary_patches_vs_mean(best_df: pd.DataFrame,
-                                 outdir: str | None = None,
+                                 outdir: str | None = DEFAULT_SUMMARY_PLOT_DIR,
                                  filename: str = "summary_patches_vs_mean.png",
                                  show: bool = False,
                                  figsize=(9, 7),
@@ -549,8 +838,8 @@ def plot_summary_patches_vs_mean(best_df: pd.DataFrame,
         return None
 
     datasets = sorted(df["dataset"].unique().tolist())
-    cmap = plt.get_cmap("tab20", len(datasets))
-    color_map = {ds: cmap(i) for i, ds in enumerate(datasets)}
+    colors = _sample_cmap("tab20", len(datasets))
+    color_map = {ds: colors[i] for i, ds in enumerate(datasets)}
 
     fig, ax = plt.subplots(figsize=figsize)
     texts = []
@@ -613,7 +902,7 @@ def plot_summary_patches_vs_mean(best_df: pd.DataFrame,
 
     fig.tight_layout()
 
-    outdir = _default_outdir(outdir)
+    outdir = Path(outdir)
     path = outdir / filename
     fig.savefig(path, dpi=200, bbox_inches="tight")
 
@@ -1055,8 +1344,8 @@ def plot_gene_correlation_barplot_grouped(df_genes, group_by='cell_type', show_m
     df_plot = df_plot.sort_values([f'{group_by}_ordered', 'mean_corr'], ascending=[True, False])
     
     # Map colors
-    cmap = plt.get_cmap('tab20', len(group_order))
-    color_map = {grp: cmap(i) for i, grp in enumerate(group_order)}
+    colors = _sample_cmap('tab20', len(group_order))
+    color_map = {grp: colors[i] for i, grp in enumerate(group_order)}
     colors = [color_map[grp] for grp in df_plot[group_by]]
     
     # X positions
@@ -1191,240 +1480,6 @@ def plot_corrs_by_sample(
 
     return fig
 
-# def plot_corrs_by_sample(
-#     df,
-#     dataset_name,
-#     encoder_name,
-#     group_by: str | None = None,
-#     figsize=(16, 6)
-# ):
-#     """
-#     Plot per-split gene correlations grouped by metadata, and return the figure object.
-
-#     Behavior:
-#       - If group_by is None: one box per sample, single color.
-#       - If group_by is categorical: behaves like your original function (box split by hue).
-#       - If group_by is numeric (e.g. 'num_patches'): one box per sample, colored by numeric value with a colorbar.
-
-#     Args:
-#         df (pd.DataFrame): must contain columns:
-#             [split, gene, corr, test_sample, Sample_type, Location, cell_type, condition, ...]
-#         group_by (str or None): column to color/group samples by.
-#         figsize (tuple): figure size.
-
-#     Returns:
-#         matplotlib.figure.Figure
-#     """
-#     import pandas as pd
-#     import seaborn as sns
-#     import matplotlib.pyplot as plt
-#     import matplotlib as mpl
-
-#     df = df.copy()
-
-#     if group_by is not None and group_by not in df.columns:
-#         raise ValueError(f"{group_by} must be a column in df")
-
-#     # ---------------- ordering of x-axis ----------------
-#     if group_by is not None:
-#         # if categorical: order groups by mean corr, then samples within each group
-#         if pd.api.types.is_numeric_dtype(df[group_by]):
-#             # For numeric group_by we still want to order samples by mean corr
-#             sample_means = df.groupby("test_sample")["corr"].mean().sort_values(ascending=False)
-#             x_order = sample_means.index.tolist()
-#         else:
-#             group_means = df.groupby(group_by)["corr"].mean().sort_values(ascending=False)
-#             group_order = group_means.index.tolist()
-#             x_order = []
-#             for grp in group_order:
-#                 samples = (
-#                     df.loc[df[group_by] == grp, "test_sample"]
-#                       .dropna()
-#                       .drop_duplicates()
-#                       .tolist()
-#                 )
-#                 x_order.extend(samples)
-#             x_order = list(dict.fromkeys(x_order))
-#     else:
-#         sample_means = df.groupby("test_sample")["corr"].mean().sort_values(ascending=False)
-#         x_order = sample_means.index.tolist()
-
-#     df["test_sample"] = pd.Categorical(df["test_sample"], categories=x_order, ordered=True)
-
-#     # ---------------- plotting ----------------
-#     fig, ax = plt.subplots(figsize=figsize)
-
-#     if group_by is None:
-#         # original simple single-color boxplot per sample
-#         sns.boxplot(
-#             data=df,
-#             x="test_sample",
-#             y="corr",
-#             color="skyblue",
-#             showfliers=False,
-#             ax=ax,
-#         )
-#         ax.set_xlabel("Test Sample")
-#     else:
-#         # If group_by is numeric: draw one box per sample and color by numeric value
-#         if pd.api.types.is_numeric_dtype(df[group_by]):
-#                 # Compute average numeric value per test_sample
-#             mean_vals = df.groupby("test_sample")[group_by].mean()
-
-#             # Create a colormap
-#             cmap = plt.cm.viridis
-#             norm = plt.Normalize(vmin=df[group_by].min(), vmax=df[group_by].max())
-#             colors = mean_vals.map(lambda x: cmap(norm(x)))
-
-#             # Draw boxplot with palette based on numeric variable
-#             sns.boxplot(
-#                 data=df,
-#                 x="test_sample",
-#                 y="corr",
-#                 order=mean_vals.index,
-#                 palette=colors.to_dict(),
-#                 showfliers=False,
-#                 ax=ax
-#             )
-
-#             # Add colorbar
-#             sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-#             sm.set_array([])
-#             fig.colorbar(sm, ax=ax, label=group_by)
-            
-#             ax.legend(title=group_by, bbox_to_anchor=(1.05, 1), loc="upper left")
-#             ax.set_xlabel(f"Test Sample (grouped by {group_by})")
-
-#         else:
-#             # categorical behavior (original behavior with hue)
-#             sns.boxplot(
-#                 data=df,
-#                 x="test_sample",
-#                 y="corr",
-#                 hue=group_by,
-#                 showfliers=False,
-#                 palette="tab20",
-#                 ax=ax,
-#             )
-#             ax.legend(title=group_by, bbox_to_anchor=(1.05, 1), loc="upper left")
-#             ax.set_xlabel(f"Test Sample (grouped by {group_by})")
-
-#     # ---------------- styling ----------------
-#     plt.xticks(rotation=60, ha="right")
-#     ax.set_ylabel("Gene Correlation")
-#     ax.set_title(f"Per-sample correlation | Data: {dataset_name} | Model: {encoder_name}")
-#     plt.tight_layout()
-
-#     return fig
-
-
-
-# def plot_pearson_vs_sample_metadata(
-#     df_long: pd.DataFrame,
-#     df_splits: pd.DataFrame,
-#     outdir: Path,
-#     sample_col_candidates: list[str] = ["test_sample", "sample_id", "SampleID", "Sample_Id"],
-#     metadata_cols_preference: list[str] | None = None,
-#     show: bool = False,
-#     dpi: int = 200,
-# ) -> Dict[str, Path]:
-#     """
-#     Create scatter plots of per-sample mean Pearson correlation vs sample-level *in-tissue* metadata.
-#     """
-#     outdir = Path(outdir)
-#     outdir.mkdir(parents=True, exist_ok=True)
-#     arts: Dict[str, Path] = {}
-
-#     if metadata_cols_preference is None:
-#         metadata_cols_preference = [
-#             "n_obs_in_tissue",
-#             "mean_total_counts_in_tissue",
-#             "mean_n_genes_by_counts_in_tissue",
-#             "mean_log1p_total_counts_in_tissue",
-#             "mean_log1p_n_genes_by_counts_in_tissue",
-#         ]
-
-#     # determine sample column name
-#     sample_col = _find_col_ci(df_long, sample_col_candidates)
-#     if sample_col is None:
-#         sample_col = _find_col_ci(df_splits, sample_col_candidates)
-#     if sample_col is None:
-#         raise KeyError(
-#             "Could not find a sample id column in df_long or df_splits. "
-#             "Searched: " + ", ".join(sample_col_candidates)
-#         )
-
-#     # compute per-sample mean Pearson — compatible approach
-#     gb = df_long.groupby(sample_col)["corr"]
-#     df_sample_mean = (
-#         gb.agg(["mean", "size"])
-#         .reset_index()
-#         .rename(columns={"mean": "mean_pearson", "size": "n_genes_per_sample"})
-#     )
-
-#     # merge metadata from df_splits
-#     merged = df_sample_mean.merge(
-#         df_splits.drop_duplicates(subset=[sample_col]),
-#         left_on=sample_col,
-#         right_on=sample_col,
-#         how="left",
-#     )
-
-#     # For each requested metadata column, try a case-insensitive lookup in merged
-#     for meta in metadata_cols_preference[:6]:  # produce up to 6 plots (we listed 6)
-#         meta_col = _find_col_ci(merged, [meta])
-#         if meta_col is None:
-#             print(f"[plot_pearson_vs_sample_metadata_in_tissue] metadata column '{meta}' not found - skipping.")
-#             continue
-
-#         df_plot = merged[[sample_col, "mean_pearson", meta_col]].dropna(subset=["mean_pearson", meta_col]).copy()
-#         if df_plot.empty:
-#             print(f"[plot_pearson_vs_sample_metadata_in_tissue] no valid rows for {meta_col} - skipping.")
-#             continue
-
-#         df_plot[meta_col] = pd.to_numeric(df_plot[meta_col], errors="coerce")
-#         df_plot = df_plot.dropna(subset=[meta_col])
-#         if df_plot.empty:
-#             print(f"[plot_pearson_vs_sample_metadata_in_tissue] {meta_col} could not be coerced to numeric - skipping.")
-#             continue
-
-#         fig, ax = plt.subplots(figsize=(9, 6))
-#         ax.scatter(
-#             df_plot[meta_col].to_numpy(dtype=float),
-#             df_plot["mean_pearson"].to_numpy(dtype=float),
-#             s=60, edgecolors="black", linewidths=0.5, alpha=0.9
-#         )
-
-#         ax.set_xlabel(meta_col)
-#         ax.set_ylabel("Mean Pearson correlation (per-sample)")
-#         ax.set_title(f"Mean Pearson per sample vs {meta_col} (in-tissue)")
-#         ax.grid(True, linestyle=":", alpha=0.4)
-
-#         texts = []
-#         for _, r in df_plot.iterrows():
-#             texts.append(ax.text(r[meta_col], r["mean_pearson"], str(r[sample_col]), fontsize=8))
-
-#         try:
-#             adjust_text(
-#                 texts, ax=ax,
-#                 expand_points=(1.2, 1.6),
-#                 expand_text=(1.2, 1.6),
-#                 arrowprops=dict(arrowstyle="-", color="gray", lw=0.5)
-#             )
-#         except Exception:
-#             pass
-
-#         fig.tight_layout()
-#         fname = f"pearson_vs_{meta_col}.png"
-#         path = outdir / fname
-#         fig.savefig(path, dpi=dpi, bbox_inches="tight")
-#         if show:
-#             display(fig)
-#         plt.close(fig)
-
-#         arts[f"pearson_vs_{meta_col}"] = path
-
-#     return arts
 
 def plot_pearson_vs_sample_metadata(
     df_long: pd.DataFrame,
@@ -1480,8 +1535,8 @@ def plot_pearson_vs_sample_metadata(
     # create color mapping if run exists
     if run_col is not None:
         runs = sorted(merged[run_col].dropna().astype(str).unique())
-        cmap = plt.get_cmap("tab20")
-        colors = cmap(np.linspace(0, 1, max(len(runs), 1)))
+        colors = _sample_cmap("tab20", len(runs))
+        color_map = {r: colors[i] for i, r in enumerate(runs)}
         color_map = {r: colors[i] for i, r in enumerate(runs)}
     else:
         runs = []
@@ -1504,29 +1559,14 @@ def plot_pearson_vs_sample_metadata(
 
         fig, ax = plt.subplots(figsize=(9, 6))
 
-        if run_col is not None:
-            for r in runs:
-                sub = df_plot[df_plot[run_col].astype(str) == r]
-                ax.scatter(
-                    sub[meta_col],
-                    sub["mean_pearson"],
-                    s=60,
-                    edgecolors="black",
-                    linewidths=0.5,
-                    alpha=0.9,
-                    color=color_map[r],
-                    label=r,
-                )
-            ax.legend(title="Run", bbox_to_anchor=(1.02, 1), loc="upper left")
-        else:
-            ax.scatter(
-                df_plot[meta_col],
-                df_plot["mean_pearson"],
-                s=60,
-                edgecolors="black",
-                linewidths=0.5,
-                alpha=0.9,
-            )
+        ax.scatter(
+            df_plot[meta_col],
+            df_plot["mean_pearson"],
+            s=60,
+            edgecolors="black",
+            linewidths=0.5,
+            alpha=0.9,
+        )
 
         ax.set_xlabel(meta_col)
         ax.set_ylabel("Mean Pearson correlation (per-sample)")
@@ -1560,6 +1600,1098 @@ def plot_pearson_vs_sample_metadata(
         arts[f"pearson_vs_{meta_col}"] = path
 
     return arts
+
+
+def plot_sample_across_runs(
+    sample_id: str,
+    runs: list | None = None,
+    runs_root: str = DEFAULT_RUNS_ROOT,
+    splits_root: str = DEFAULT_SPLITS_ROOT,
+    outdir: str | Path | None = DEFAULT_SUMMARY_PLOT_DIR,
+    auto_discover: bool = True,
+    show: bool = False,
+    dpi: int = 200,
+) -> tuple[pd.DataFrame, matplotlib.figure.Figure]:
+    """
+    For a given sample_id (e.g. "XeniumPR8S1ROI8"), find that sample in the specified runs
+    (or auto-discover runs under `runs_root`), compute the per-run mean Pearson correlation
+    for that sample (mean across genes) and std / number-of-genes, and plot a bar chart.
+
+    X-axis labels are now "gene_list | dataset" (gene_list discovered from config.json where possible).
+
+    Returns:
+        (df_summary, fig)
+    """
+    import math
+    from pathlib import Path
+    import matplotlib
+    import matplotlib.pyplot as plt
+
+    outdir = Path(outdir) if outdir is not None else Path(".")
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    runs_root = Path(runs_root)
+    candidate_runs = []
+    if runs is None:
+        if not auto_discover:
+            raise ValueError("runs is None and auto_discover is False — nothing to do.")
+        for ent in sorted(runs_root.iterdir()):
+            if ent.is_dir() and ent.name.startswith("run_"):
+                candidate_runs.append(ent.name)
+    else:
+        candidate_runs = list(runs)
+
+    summary_rows = []
+    sample_col_candidates = ["test_sample", "sample_id", "SampleID", "Sample_Id"]
+
+    for run_name in candidate_runs:
+        try:
+            # get test splits for this run
+            try:
+                df_splits = get_test_splits(run_name, runs_root=str(runs_root), splits_root=splits_root)
+            except Exception:
+                continue
+
+            # check if sample present in splits
+            sample_col = _find_col_ci(df_splits, sample_col_candidates)
+            present = False
+            if sample_col is not None:
+                present = df_splits[sample_col].astype(str).isin([sample_id]).any()
+
+            if not present:
+                continue
+
+            # extract best model gene corrs
+            best_info, dataset_name, df_genes = extract_best_model_gene_corrs(run_name, runs_root=str(runs_root), verbose=False)
+
+            # attempt to discover gene_list from config.json under the run dir
+            gene_list_name = ""
+            run_path = Path(runs_root) / run_name
+            for dirpath, _, filenames in os.walk(run_path):
+                if "config.json" in filenames:
+                    try:
+                        with open(Path(dirpath) / "config.json", "r") as cf:
+                            cfg = json.load(cf)
+                        gene_list_name = cfg.get("gene_list") or cfg.get("genes") or ""
+                        # if it's a path, keep only the filename portion
+                        if isinstance(gene_list_name, str) and gene_list_name:
+                            gene_list_name = Path(str(gene_list_name)).name
+                    except Exception:
+                        gene_list_name = ""
+                    break
+            if not gene_list_name:
+                # fallback to using run name so label isn't empty
+                gene_list_name = run_name
+
+            # produce long df merged with test metadata (so it has 'test_sample')
+            df_long = merge_kfold_gene_corrs_with_test_metadata(df_genes, df_splits)
+
+            # locate sample column in the long DF
+            sample_col_long = _find_col_ci(df_long, sample_col_candidates)
+            if sample_col_long is None:
+                continue
+
+            # filter to this sample
+            df_sample = df_long[df_long[sample_col_long].astype(str) == sample_id]
+            if df_sample.empty:
+                continue
+
+            # compute mean and std across genes for that sample
+            mean_pearson = pd.to_numeric(df_sample["corr"], errors="coerce").dropna().mean()
+            std_pearson = pd.to_numeric(df_sample["corr"], errors="coerce").dropna().std()
+            n_genes = df_sample.shape[0]
+
+            summary_rows.append({
+                "run": run_name,
+                "dataset": dataset_name,
+                "gene_list": gene_list_name,
+                "sample_id": sample_id,
+                "mean_pearson": float(mean_pearson) if not math.isnan(mean_pearson) else pd.NA,
+                "std_pearson": float(std_pearson) if not math.isnan(std_pearson) else pd.NA,
+                "n_genes": int(n_genes),
+            })
+
+        except Exception as e:
+            print(f"[plot_sample_across_runs] Skipping run {run_name}: {e}")
+            continue
+
+    if not summary_rows:
+        raise ValueError(f"Sample {sample_id!r} not found in any examined runs under {runs_root} (or provided runs).")
+
+    df_summary = pd.DataFrame(summary_rows).convert_dtypes()
+    df_summary = df_summary.sort_values("mean_pearson", ascending=False).reset_index(drop=True)
+
+    # Prepare labels using gene_list | dataset
+    labels = [(str(g) + " | " + str(d)) for g, d in zip(df_summary["gene_list"], df_summary["dataset"])]
+
+    fig, ax = plt.subplots(figsize=(max(8, len(df_summary) * 0.8), 6))
+    x = np.arange(len(df_summary))
+    means = df_summary["mean_pearson"].astype(float).to_numpy()
+    errs = df_summary["std_pearson"].astype(float).fillna(0.0).to_numpy()
+
+    datasets = sorted(df_summary["dataset"].fillna("Unknown").unique().tolist())
+    color_map = _assemble_color_map(datasets)
+    colors = [color_map.get(ds, (0.4, 0.4, 0.4)) for ds in df_summary["dataset"]]
+
+    bars = ax.bar(x, means, yerr=errs, color=colors, capsize=4, edgecolor="black")
+    for bar, ng in zip(bars, df_summary["n_genes"]):
+        height = bar.get_height()
+        ax.annotate(str(ng), xy=(bar.get_x() + bar.get_width() / 2, height),
+                    xytext=(0, 5), textcoords="offset points", ha="center", va="bottom", fontsize=9)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=45, ha="right")
+    ax.set_ylabel("Mean Pearson correlation (sample)")
+    ax.set_title(f"Sample {sample_id} — mean Pearson across runs (n_genes annotated)")
+    ax.grid(True, axis="y", linestyle=":", alpha=0.4)
+
+    handles = [plt.Rectangle((0, 0), 1, 1, facecolor=color_map[ds],edgecolor="black") for ds in datasets]
+    ax.legend(handles, datasets, title="Dataset", bbox_to_anchor=(1.02, 1), loc="upper left")
+
+    fig.tight_layout()
+
+    fname = outdir / f"sample_{_safe_filename(sample_id)}_across_runs.png"
+    fig.savefig(fname, dpi=dpi, bbox_inches="tight")
+    if show:
+        display(fig)
+    plt.close(fig)
+
+    return df_summary, fig
+
+
+def plot_all_samples_grid_for_dataset(
+    dataset_or_run: str,
+    runs_root: str = DEFAULT_RUNS_ROOT,
+    splits_root: str = DEFAULT_SPLITS_ROOT,
+    outdir: str | Path | None = DEFAULT_SUMMARY_PLOT_DIR,
+    candidate_runs: list | None = None,
+    auto_discover_runs: bool = True,
+    ncols: int = 4,
+    max_samples: int | None = None,
+    figsize_per_subplot: tuple[float, float] = (4, 2.5),
+    dpi: int = 200,
+    show: bool = False,
+) -> tuple[Dict[str, Path], pd.DataFrame]:
+    """
+    For a given dataset name (e.g. "XeniumPR8") or a run folder (e.g. "run_..."),
+    produce one grid image that contains one small barplot per test sample for that
+    dataset/run. Each small barplot shows that sample's mean Pearson ± std across
+    all candidate runs that include that sample.
+
+    Args:
+        dataset_or_run: dataset name (folder under splits_root) OR a run folder name.
+        runs_root: root folder containing run_* directories.
+        splits_root: root folder containing dataset splits, e.g. eval/data/<dataset>/splits.
+        outdir: where to save the combined grid PNG.
+        candidate_runs: optional list of run folder names to consider. If None and
+                        auto_discover_runs=True, scans runs_root for run_* folders.
+        auto_discover_runs: whether to auto-discover runs when candidate_runs is None.
+        ncols: number of columns in grid.
+        max_samples: optional cap on number of samples to plot (useful for very large datasets).
+        figsize_per_subplot: (width, height) of each subplot in inches.
+        dpi: image DPI.
+        show: if True, display the final grid figure.
+
+    Returns:
+        (saved_paths, df_all)
+        - saved_paths: dict {dataset_or_run: Path(saved_png)}
+        - df_all: DataFrame with rows per sample-per-run with ['dataset_or_run','sample','run','dataset','mean_pearson','std_pearson','n_genes','gene_list']
+    """
+    import math
+    from pathlib import Path
+    import matplotlib.pyplot as plt
+    import matplotlib
+    import itertools
+    import warnings
+
+    outdir = Path(outdir) if outdir is not None else Path(DEFAULT_SUMMARY_PLOT_DIR)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    runs_root = Path(runs_root)
+    splits_root = Path(splits_root)
+
+    # 1) Determine sample list for the provided dataset_or_run
+    samples = []
+    # If it's a run folder (starts with run_) prefer reading that run's splits
+    if str(dataset_or_run).startswith("run_"):
+        try:
+            df_splits = get_test_splits(dataset_or_run, runs_root=str(runs_root), splits_root=str(splits_root))
+            sample_col = _find_col_ci(df_splits, ["test_sample", "sample_id", "SampleID", "Sample_Id"])
+            if sample_col is None:
+                raise KeyError("No sample id column found in splits for run.")
+            samples = sorted(df_splits[sample_col].dropna().astype(str).unique().tolist())
+        except Exception as e:
+            raise RuntimeError(f"Failed to read splits for run {dataset_or_run}: {e}")
+        label_name = dataset_or_run
+    else:
+        # treat as dataset name and look under splits_root/<dataset>/splits/test_*.csv
+        ds_dir = splits_root / str(dataset_or_run) / "splits"
+        if not ds_dir.exists():
+            raise FileNotFoundError(f"Splits folder not found for dataset '{dataset_or_run}' at {ds_dir}")
+        test_files = sorted(ds_dir.glob("test_*.csv"))
+        if not test_files:
+            raise FileNotFoundError(f"No test_*.csv files found for dataset '{dataset_or_run}' in {ds_dir}")
+        sample_set = set()
+        for tf in test_files:
+            try:
+                df_t = pd.read_csv(tf)
+                # find sample col
+                sc = _find_col_ci(df_t, ["test_sample", "sample_id", "SampleID", "Sample_Id"])
+                if sc is None:
+                    continue
+                sample_set.update(df_t[sc].dropna().astype(str).tolist())
+            except Exception:
+                continue
+        samples = sorted(sample_set)
+        label_name = dataset_or_run
+
+    if max_samples is not None:
+        samples = samples[:max_samples]
+
+    if not samples:
+        raise ValueError("No samples found to plot.")
+
+    # 2) Determine candidate runs to check (if not provided)
+    if candidate_runs is None:
+        if not auto_discover_runs:
+            raise ValueError("candidate_runs is None and auto_discover_runs is False.")
+        candidate_runs = [p.name for p in sorted(runs_root.glob("run_*")) if p.is_dir()]
+
+    # allow user to pass absolute run names if they included a path: normalize to names
+    candidate_runs = [str(r).split("/")[-1] for r in candidate_runs]
+
+    # Precompute datasets and gene_list for each candidate run (to reuse)
+    run_meta = {}
+    for run_name in candidate_runs:
+        run_path = runs_root / run_name
+        # read dataset_results.json safely to infer dataset_name quickly (best-effort)
+        try:
+            ds_name, _, _ = load_run(str(run_path))  # load_run expects run path or Path; it handles conversion
+        except Exception:
+            ds_name = "Unknown"
+        # try to find gene_list from config.json (best-effort)
+        gene_list_name = ""
+        try:
+            for dirpath, _, filenames in os.walk(run_path):
+                if "config.json" in filenames:
+                    with open(Path(dirpath) / "config.json", "r") as cf:
+                        cfg = json.load(cf)
+                    gene_list_name = cfg.get("gene_list") or cfg.get("genes") or ""
+                    if isinstance(gene_list_name, str):
+                        gene_list_name = Path(gene_list_name).name
+                    break
+        except Exception:
+            gene_list_name = ""
+        run_meta[run_name] = {"dataset": ds_name, "gene_list": gene_list_name}
+
+    # 3) For each sample, collect per-run stats (mean/std/n_genes)
+    rows = []
+    sample_col_candidates = ["test_sample", "sample_id", "SampleID", "Sample_Id"]
+    for sample in samples:
+        for run_name in candidate_runs:
+            try:
+                # get splits for this run to check membership and to enable merge later
+                try:
+                    df_splits = get_test_splits(run_name, runs_root=str(runs_root), splits_root=str(splits_root))
+                except Exception:
+                    # no splits for this run -> skip
+                    continue
+
+                sample_col = _find_col_ci(df_splits, sample_col_candidates)
+                if sample_col is None:
+                    continue
+                if not df_splits[sample_col].astype(str).isin([sample]).any():
+                    # sample not present in this run's test splits
+                    continue
+
+                # extract gene-level correlations for best model of this run
+                try:
+                    best_info, ds_name, df_genes = extract_best_model_gene_corrs(run_name, runs_root=str(runs_root), verbose=False)
+                except FileNotFoundError:
+                    # missing kfold file etc -> skip
+                    continue
+
+                # merge to get per-sample per-split entries
+                try:
+                    df_long = merge_kfold_gene_corrs_with_test_metadata(df_genes, df_splits)
+                except Exception:
+                    continue
+
+                sample_col_long = _find_col_ci(df_long, sample_col_candidates)
+                if sample_col_long is None:
+                    continue
+
+                df_sample = df_long[df_long[sample_col_long].astype(str) == sample]
+                if df_sample.empty:
+                    continue
+
+                mean_pearson = pd.to_numeric(df_sample["corr"], errors="coerce").dropna().mean()
+                std_pearson = pd.to_numeric(df_sample["corr"], errors="coerce").dropna().std()
+                n_genes = int(df_sample.shape[0])
+
+                rows.append({
+                    "dataset_or_run": label_name,
+                    "sample": sample,
+                    "run": run_name,
+                    "dataset": run_meta.get(run_name, {}).get("dataset", ds_name if 'ds_name' in locals() else "Unknown"),
+                    "gene_list": run_meta.get(run_name, {}).get("gene_list", ""),
+                    "mean_pearson": float(mean_pearson) if not math.isnan(mean_pearson) else pd.NA,
+                    "std_pearson": float(std_pearson) if not math.isnan(std_pearson) else pd.NA,
+                    "n_genes": n_genes,
+                })
+            except Exception as e:
+                # skip this run/sample pair on error but continue
+                warnings.warn(f"[plot_all_samples_grid_for_dataset] skipping {sample} in {run_name}: {e}")
+                continue
+
+    if not rows:
+        raise ValueError("No sample/run pairs found to plot. Check candidate runs and splits.")
+
+    df_all = pd.DataFrame(rows).convert_dtypes()
+
+    # 4) Build grid of small plots: one subplot per sample
+    # n_samples = df_all["sample"].nunique()
+    # samples_order = sorted(df_all["sample"].unique().tolist())
+    # ncols = max(1, int(ncols))
+    # nrows = int(math.ceil(n_samples / ncols))
+
+    # sub_w, sub_h = figsize_per_subplot
+    # fig = plt.figure(figsize=(ncols * sub_w, nrows * sub_h))
+    # gs = fig.add_gridspec(nrows, ncols, hspace=0.45, wspace=0.4)
+
+    # # create color map for datasets seen across all runs
+    # datasets_all = sorted(df_all["dataset"].fillna("Unknown").unique().tolist())
+    # color_map = _assemble_color_map(datasets_all)
+
+    # for idx, sample in enumerate(samples_order):
+    #     r = idx // ncols
+    #     c = idx % ncols
+    #     ax = fig.add_subplot(gs[r, c])
+
+    #     df_s = df_all[df_all["sample"] == sample].sort_values("mean_pearson", ascending=False)
+    #     if df_s.empty:
+    #         ax.axis("off")
+    #         continue
+
+    #     x = range(len(df_s))
+    #     means = df_s["mean_pearson"].astype(float).to_numpy()
+    #     errs = df_s["std_pearson"].astype(float).fillna(0.0).to_numpy()
+    #     labels = [f"{_safe_filename(str(gl))} | {_safe_filename(str(ds))}" for gl, ds in zip(df_s["gene_list"], df_s["dataset"])]
+    #     colors = [color_map.get(ds, (0.5,0.5,0.5)) for ds in df_s["dataset"]]
+
+    #     bars = ax.bar(x, means, yerr=errs, color=colors, capsize=3, edgecolor="black", linewidth=0.4)
+    #     # annotate n_genes small above each bar
+    #     for bar, ng in zip(bars, df_s["n_genes"]):
+    #         ax.annotate(str(ng), xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+    #                     xytext=(0, 3), textcoords="offset points", ha="center", va="bottom", fontsize=6)
+
+    #     ax.set_xticks(x)
+    #     # shorten xtick labels if too long
+    #     short_labels = []
+    #     for L in labels:
+    #         if len(L) > 20:
+    #             short_labels.append(L[:20] + "…")
+    #         else:
+    #             short_labels.append(L)
+    #     ax.set_xticklabels(short_labels, rotation=45, ha="right", fontsize=7)
+    #     ax.set_ylim(bottom=min(0.0, float(df_s["mean_pearson"].min()) - 0.05))
+    #     ax.set_title(sample, fontsize=8)
+    #     ax.tick_params(axis='y', labelsize=7)
+    #     ax.set_ylabel("Mean Pearson", fontsize=7)
+
+    # # Remove empty subplots if any
+    # total_plots = nrows * ncols
+    # for idx in range(n_samples, total_plots):
+    #     r = idx // ncols
+    #     c = idx % ncols
+    #     ax = fig.add_subplot(gs[r, c])
+    #     ax.axis("off")
+
+    # # Legend for datasets placed outside
+    # handles = [plt.Rectangle((0, 0), 1, 1, facecolor=color_map[ds],edgecolor="black") for ds in datasets_all]
+    # fig.legend(handles, datasets_all, title="Dataset", bbox_to_anchor=(1.02, 0.95), loc="upper left", fontsize=8)
+
+    # fig.tight_layout(rect=[0, 0, 0.88, 1.0])  # leave space for legend at right
+
+    # -------------------------------------------------------
+    # 4) Build paginated grid: max 6 subplots per page
+    # -------------------------------------------------------
+
+    samples_order = sorted(df_all["sample"].unique().tolist())
+    plots_per_page = 6
+    ncols = 3
+    nrows = 2
+
+    datasets_all = sorted(df_all["dataset"].fillna("Unknown").unique().tolist())
+    color_map = _assemble_color_map(datasets_all)
+
+    pdf_path = outdir / f"{_safe_filename(str(label_name))}_samples_grid.pdf"
+
+    with PdfPages(pdf_path) as pdf:
+        for page_start in range(0, len(samples_order), plots_per_page):
+            page_samples = samples_order[page_start:page_start + plots_per_page]
+
+            fig, axes = plt.subplots(nrows=nrows, ncols=ncols,
+                                    figsize=(ncols * 4, nrows * 3))
+            axes = axes.flatten()
+
+            for ax in axes:
+                ax.axis("off")
+
+            for i, sample in enumerate(page_samples):
+                ax = axes[i]
+                ax.axis("on")
+
+                df_s = df_all[df_all["sample"] == sample].sort_values(
+                    "mean_pearson", ascending=False
+                )
+
+                if df_s.empty:
+                    ax.set_title(sample)
+                    continue
+
+                x = range(len(df_s))
+                means = df_s["mean_pearson"].astype(float).to_numpy()
+                errs = df_s["std_pearson"].astype(float).fillna(0.0).to_numpy()
+
+                labels = [
+                    f"{str(gl)} | {str(ds)}"
+                    for gl, ds in zip(df_s["gene_list"], df_s["dataset"])
+                ]
+
+                colors = [color_map.get(ds, (0.5, 0.5, 0.5))
+                        for ds in df_s["dataset"]]
+
+                bars = ax.bar(x, means, yerr=errs,
+                            color=colors, capsize=3,
+                            edgecolor="black", linewidth=0.5)
+
+                # annotate n_genes
+                for bar, ng in zip(bars, df_s["n_genes"]):
+                    ax.annotate(str(ng),
+                                xy=(bar.get_x() + bar.get_width()/2,
+                                    bar.get_height()),
+                                xytext=(0, 3),
+                                textcoords="offset points",
+                                ha="center", va="bottom",
+                                fontsize=7)
+
+                ax.set_xticks(x)
+                ax.set_xticklabels(labels,
+                                rotation=45,
+                                ha="right",
+                                fontsize=7)
+
+                ax.set_title(sample, fontsize=9)
+                ax.set_ylabel("Mean Pearson", fontsize=8)
+                ax.tick_params(axis="y", labelsize=7)
+
+            fig.tight_layout(rect=[0, 0, 0.9, 1])
+            pdf.savefig(fig)
+            plt.close(fig)
+
+    print(f"Saved multi-page grid to: {pdf_path}")
+
+    # # 5) Save combined image
+    # out_path = outdir / f"{_safe_filename(str(label_name))}_samples_grid.png"
+    # fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
+    # if show:
+    #     display(fig)
+    # plt.close(fig)
+
+    # return {label_name: out_path}, df_all
+
+
+def plot_dataset_mean_across_runs(
+    dataset_or_run: str,
+    runs_root: str = DEFAULT_RUNS_ROOT,
+    splits_root: str = DEFAULT_SPLITS_ROOT,
+    outdir: str | Path | None = DEFAULT_SUMMARY_PLOT_DIR,
+    candidate_runs: list | None = None,
+    auto_discover_runs: bool = True,
+    show: bool = False,
+    dpi: int = 200,
+) -> tuple[pd.DataFrame, "matplotlib.figure.Figure"]:
+    """
+    For a given dataset (or a run folder name), compute per-candidate-run the mean of
+    per-sample mean Pearson correlations (i.e. average across samples belonging to the
+    dataset_or_run). Plot one bar per candidate run showing:
+        bar height = mean across samples of that sample's mean Pearson (in that run)
+        error bar = std across samples (in that run)
+    Bars are labeled as "gene_list | dataset" (gene_list discovered from run config.json when possible).
+    The function saves a PNG to `outdir` and returns a DataFrame with per-run statistics and the Figure.
+
+    Args:
+        dataset_or_run: dataset name (folder under splits_root) OR a run folder name (starts with "run_").
+        runs_root: root folder containing run_* directories.
+        splits_root: root folder containing dataset splits (eval/data/<dataset>/splits).
+        outdir: where to save the plot. Defaults to DEFAULT_SUMMARY_PLOT_DIR.
+        candidate_runs: optional list of run names to consider. If None and auto_discover_runs=True,
+                        scans runs_root for run_* folders.
+        auto_discover_runs: whether to auto-discover runs when candidate_runs is None.
+        show: if True display the figure (Jupyter).
+        dpi: DPI for saved PNG.
+
+    Returns:
+        (df_stats, fig)
+        - df_stats: DataFrame with one row per candidate run and columns:
+            ['run','dataset','gene_list','n_samples','mean_of_sample_means','std_of_sample_means']
+        - fig: matplotlib.figure.Figure (also saved as PNG)
+    """
+    import math
+    from pathlib import Path
+    import matplotlib.pyplot as plt
+    import warnings
+
+    outdir = Path(outdir) if outdir is not None else Path(DEFAULT_SUMMARY_PLOT_DIR)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    runs_root = Path(runs_root)
+    splits_root = Path(splits_root)
+
+    # 1) Determine the sample set for the provided dataset_or_run
+    samples = []
+    sample_col_candidates = ["test_sample", "sample_id", "SampleID", "Sample_Id"]
+
+    if str(dataset_or_run).startswith("run_"):
+        # use that run's splits to collect samples
+        try:
+            df_splits = get_test_splits(dataset_or_run, runs_root=str(runs_root), splits_root=str(splits_root))
+            sample_col = _find_col_ci(df_splits, sample_col_candidates)
+            if sample_col is None:
+                raise KeyError(f"No sample column found in splits for run {dataset_or_run}")
+            samples = sorted(df_splits[sample_col].dropna().astype(str).unique().tolist())
+        except Exception as e:
+            raise RuntimeError(f"Failed to read splits for run {dataset_or_run}: {e}")
+        label_name = dataset_or_run
+    else:
+        # treat as dataset name: read splits under splits_root/<dataset>/splits
+        ds_dir = splits_root / str(dataset_or_run) / "splits"
+        if not ds_dir.exists():
+            raise FileNotFoundError(f"Splits folder not found for dataset '{dataset_or_run}' at {ds_dir}")
+        test_files = sorted(ds_dir.glob("test_*.csv"))
+        if not test_files:
+            raise FileNotFoundError(f"No test_*.csv files found for dataset '{dataset_or_run}' in {ds_dir}")
+        sample_set = set()
+        for tf in test_files:
+            try:
+                df_t = pd.read_csv(tf)
+                sc = _find_col_ci(df_t, sample_col_candidates)
+                if sc is None:
+                    continue
+                sample_set.update(df_t[sc].dropna().astype(str).tolist())
+            except Exception:
+                continue
+        samples = sorted(sample_set)
+        label_name = dataset_or_run
+
+    if not samples:
+        raise ValueError("No samples found for the provided dataset/run.")
+
+    # 2) Candidate runs discovery / normalization
+    if candidate_runs is None:
+        if not auto_discover_runs:
+            raise ValueError("candidate_runs is None and auto_discover_runs is False.")
+        candidate_runs = [p.name for p in sorted(runs_root.glob("run_*")) if p.is_dir()]
+
+    candidate_runs = [str(r).split("/")[-1] for r in candidate_runs]
+
+    # 3) For each candidate run, compute per-sample mean Pearson for the samples set, then compute mean/std across samples
+    results = []
+    for run_name in candidate_runs:
+        try:
+            # load splits for this run to be able to merge per-split info later
+            try:
+                df_splits_run = get_test_splits(run_name, runs_root=str(runs_root), splits_root=str(splits_root))
+            except Exception:
+                # if no splits for this run, we cannot evaluate sample-level metrics — skip.
+                continue
+
+            # check which of our samples are present in this run's test splits
+            sample_col_run = _find_col_ci(df_splits_run, sample_col_candidates)
+            if sample_col_run is None:
+                continue
+
+            samples_present = df_splits_run[sample_col_run].astype(str).dropna().unique().tolist()
+            # intersection with the target sample list
+            samples_in_common = sorted(set(samples) & set(samples_present))
+            if not samples_in_common:
+                # no overlap -> skip
+                continue
+
+            # load gene-level correlations for best model of this run
+            try:
+                best_info, ds_name, df_genes = extract_best_model_gene_corrs(run_name, runs_root=str(runs_root), verbose=False)
+            except Exception:
+                # skip runs missing kfold results
+                continue
+
+            # create long df with per-split entries attached to samples
+            try:
+                df_long = merge_kfold_gene_corrs_with_test_metadata(df_genes, df_splits_run)
+            except Exception:
+                continue
+
+            sample_col_long = _find_col_ci(df_long, sample_col_candidates)
+            if sample_col_long is None:
+                continue
+
+            # For each sample in samples_in_common compute mean across genes
+            per_sample_means = []
+            for s in samples_in_common:
+                df_s = df_long[df_long[sample_col_long].astype(str) == s]
+                if df_s.empty:
+                    continue
+                vals = pd.to_numeric(df_s["corr"], errors="coerce").dropna().to_numpy()
+                if vals.size == 0:
+                    continue
+                per_sample_means.append(float(vals.mean()))
+
+            if not per_sample_means:
+                continue
+
+            # aggregate: mean across samples (and std)
+            mean_across_samples = float(pd.Series(per_sample_means).mean())
+            std_across_samples = float(pd.Series(per_sample_means).std(ddof=0))  # population std
+            n_samples_used = len(per_sample_means)
+
+            # try to discover gene_list for nicer labels
+            gene_list_name = ""
+            run_path = runs_root / run_name
+            try:
+                for dirpath, _, filenames in os.walk(run_path):
+                    if "config.json" in filenames:
+                        with open(Path(dirpath) / "config.json", "r") as cf:
+                            cfg = json.load(cf)
+                        gene_list_name = cfg.get("gene_list") or cfg.get("genes") or ""
+                        if isinstance(gene_list_name, str):
+                            gene_list_name = Path(gene_list_name).name
+                        break
+            except Exception:
+                gene_list_name = ""
+
+            results.append({
+                "run": run_name,
+                "dataset": ds_name,
+                "gene_list": gene_list_name or run_name,
+                "n_samples": n_samples_used,
+                "mean_of_sample_means": mean_across_samples,
+                "std_of_sample_means": std_across_samples,
+            })
+
+        except Exception as e:
+            warnings.warn(f"[plot_dataset_mean_across_runs] skipping run {run_name}: {e}")
+            continue
+
+    if not results:
+        raise ValueError("No candidate runs produced statistics — check candidate_runs and splits.")
+
+    df_stats = pd.DataFrame(results).convert_dtypes()
+    # sort by mean descending
+    df_stats = df_stats.sort_values("mean_of_sample_means", ascending=False).reset_index(drop=True)
+
+    # 4) Plot one bar per run with error bars (std across samples); annotate n_samples above bar
+    fig, ax = plt.subplots(figsize=(max(8, len(df_stats) * 0.8), 6))
+    x = np.arange(len(df_stats))
+    means = df_stats["mean_of_sample_means"].astype(float).to_numpy()
+    errs = df_stats["std_of_sample_means"].astype(float).fillna(0.0).to_numpy()
+    labels = [(str(gl) + " | " + str(ds)) for gl, ds in zip(df_stats["gene_list"], df_stats["dataset"])]
+
+    datasets_seen = sorted(df_stats["dataset"].fillna("Unknown").unique().tolist())
+    color_map = _assemble_color_map(datasets_seen)
+    colors = [color_map.get(ds, (0.4, 0.4, 0.4)) for ds in df_stats["dataset"]]
+
+    bars = ax.bar(x, means, yerr=errs, color=colors, capsize=5, edgecolor="black")
+    for bar, ns in zip(bars, df_stats["n_samples"]):
+        ax.annotate(str(ns), xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                    xytext=(0, 5), textcoords="offset points", ha="center", va="bottom", fontsize=9)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=45, ha="right")
+    ax.set_ylabel("Mean Pearson (average across samples)")
+    ax.set_title(f"Dataset/Run: {dataset_or_run} — mean across samples (per candidate run)")
+    ax.grid(True, axis="y", linestyle=":", alpha=0.4)
+
+    # legend
+    handles = [plt.Rectangle((0, 0), 1, 1, facecolor=color_map[ds],edgecolor="black") for ds in datasets_seen]
+    if handles:
+        ax.legend(handles, datasets_seen, title="Dataset", bbox_to_anchor=(1.02, 1), loc="upper left")
+
+    fig.tight_layout()
+
+    # save
+    fname = outdir / f"{_safe_filename(str(label_name))}_mean_across_runs.png"
+    fig.savefig(fname, dpi=dpi, bbox_inches="tight")
+    if show:
+        display(fig)
+    plt.close(fig)
+
+    return df_stats, fig
+
+
+def plot_dataset_mean_across_runs(
+    dataset_or_run: str,
+    runs_root: str = DEFAULT_RUNS_ROOT,
+    splits_root: str = DEFAULT_SPLITS_ROOT,
+    outdir: str | Path | None = DEFAULT_SUMMARY_PLOT_DIR,
+    candidate_runs: list | None = None,
+    auto_discover_runs: bool = True,
+    show: bool = False,
+    dpi: int = 200,
+) -> tuple[pd.DataFrame, "matplotlib.figure.Figure"]:
+    """
+    For a given dataset (or a run folder name), compute per-candidate-run the mean of
+    per-sample mean Pearson correlations (i.e. average across samples belonging to the
+    dataset_or_run). Plot one bar per candidate run showing:
+        - bar height = mean across samples of that sample's mean Pearson (as before)
+        - error bar = SD computed across ALL gene-level correlations used for those samples
+        - bar annotation = number of UNIQUE genes used for those correlations
+
+    Returns:
+        (df_stats, fig)
+        df_stats contains columns:
+            ['run','dataset','gene_list','n_samples','mean_of_sample_means',
+             'sd_on_genes','n_genes_used']
+    """
+    import math
+    from pathlib import Path
+    import matplotlib.pyplot as plt
+    import warnings
+
+    outdir = Path(outdir) if outdir is not None else Path(DEFAULT_SUMMARY_PLOT_DIR)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    runs_root = Path(runs_root)
+    splits_root = Path(splits_root)
+
+    # 1) Determine the sample set for the provided dataset_or_run
+    samples = []
+    sample_col_candidates = ["test_sample", "sample_id", "SampleID", "Sample_Id"]
+
+    if str(dataset_or_run).startswith("run_"):
+        try:
+            df_splits = get_test_splits(dataset_or_run, runs_root=str(runs_root), splits_root=str(splits_root))
+            sample_col = _find_col_ci(df_splits, sample_col_candidates)
+            if sample_col is None:
+                raise KeyError(f"No sample column found in splits for run {dataset_or_run}")
+            samples = sorted(df_splits[sample_col].dropna().astype(str).unique().tolist())
+        except Exception as e:
+            raise RuntimeError(f"Failed to read splits for run {dataset_or_run}: {e}")
+        label_name = dataset_or_run
+    else:
+        ds_dir = splits_root / str(dataset_or_run) / "splits"
+        if not ds_dir.exists():
+            raise FileNotFoundError(f"Splits folder not found for dataset '{dataset_or_run}' at {ds_dir}")
+        test_files = sorted(ds_dir.glob("test_*.csv"))
+        if not test_files:
+            raise FileNotFoundError(f"No test_*.csv files found for dataset '{dataset_or_run}' in {ds_dir}")
+        sample_set = set()
+        for tf in test_files:
+            try:
+                df_t = pd.read_csv(tf)
+                sc = _find_col_ci(df_t, sample_col_candidates)
+                if sc is None:
+                    continue
+                sample_set.update(df_t[sc].dropna().astype(str).tolist())
+            except Exception:
+                continue
+        samples = sorted(sample_set)
+        label_name = dataset_or_run
+
+    if not samples:
+        raise ValueError("No samples found for the provided dataset/run.")
+
+    # 2) Candidate runs discovery / normalization
+    if candidate_runs is None:
+        if not auto_discover_runs:
+            raise ValueError("candidate_runs is None and auto_discover_runs is False.")
+        candidate_runs = [p.name for p in sorted(runs_root.glob("run_*")) if p.is_dir()]
+
+    candidate_runs = [str(r).split("/")[-1] for r in candidate_runs]
+
+    # 3) For each candidate run, compute per-sample mean Pearson, and compute SD across gene-level corrs
+    results = []
+    for run_name in candidate_runs:
+        try:
+            # load splits for this run
+            try:
+                df_splits_run = get_test_splits(run_name, runs_root=str(runs_root), splits_root=str(splits_root))
+            except Exception:
+                continue
+
+            sample_col_run = _find_col_ci(df_splits_run, sample_col_candidates)
+            if sample_col_run is None:
+                continue
+
+            samples_present = df_splits_run[sample_col_run].astype(str).dropna().unique().tolist()
+            samples_in_common = sorted(set(samples) & set(samples_present))
+            if not samples_in_common:
+                continue
+
+            # load gene-level correlations for best model of this run
+            try:
+                best_info, ds_name, df_genes = extract_best_model_gene_corrs(run_name, runs_root=str(runs_root), verbose=False)
+            except Exception:
+                continue
+
+            # create long df with per-split entries attached to samples
+            try:
+                df_long = merge_kfold_gene_corrs_with_test_metadata(df_genes, df_splits_run)
+            except Exception:
+                continue
+
+            sample_col_long = _find_col_ci(df_long, sample_col_candidates)
+            if sample_col_long is None:
+                continue
+
+            # Filter df_long to rows for the samples_in_common
+            df_filtered = df_long[df_long[sample_col_long].astype(str).isin(samples_in_common)].copy()
+
+            if df_filtered.empty:
+                continue
+
+            # 3a) per-sample means (as before)
+            per_sample_means = (
+                df_filtered.groupby(sample_col_long)["corr"]
+                .agg(lambda s: pd.to_numeric(s, errors="coerce").dropna().mean())
+                .dropna()
+                .to_numpy()
+            )
+            if len(per_sample_means) == 0:
+                continue
+            mean_across_samples = float(pd.Series(per_sample_means).mean())
+
+            # 3b) sd across ALL gene-level correlations used for these samples
+            # convert corr column to numeric and dropna
+            all_corrs = pd.to_numeric(df_filtered["corr"], errors="coerce").dropna().to_numpy()
+            if all_corrs.size == 0:
+                continue
+            # use sample standard deviation (ddof=1). change to ddof=0 if you prefer population SD.
+            sd_on_genes = float(all_corrs.std(ddof=1)) if all_corrs.size > 1 else 0.0
+
+            # number of unique genes used (use 'gene' column if present)
+            if "gene" in df_filtered.columns:
+                n_genes_used = int(pd.Series(df_filtered["gene"].dropna().unique()).size)
+            else:
+                # fallback: count unique gene-sample pairs divided by number of samples (best-effort)
+                n_genes_used = int(max(1, df_filtered.shape[0] // max(1, len(samples_in_common))))
+
+            n_samples_used = len(set(df_filtered[sample_col_long].astype(str).unique().tolist()))
+
+            # discover gene_list for label
+            gene_list_name = ""
+            run_path = runs_root / run_name
+            try:
+                for dirpath, _, filenames in os.walk(run_path):
+                    if "config.json" in filenames:
+                        with open(Path(dirpath) / "config.json", "r") as cf:
+                            cfg = json.load(cf)
+                        gene_list_name = cfg.get("gene_list") or cfg.get("genes") or ""
+                        if isinstance(gene_list_name, str):
+                            gene_list_name = Path(gene_list_name).name
+                        break
+            except Exception:
+                gene_list_name = ""
+
+            results.append({
+                "run": run_name,
+                "dataset": ds_name,
+                "gene_list": gene_list_name or run_name,
+                "n_samples": n_samples_used,
+                "mean_of_sample_means": mean_across_samples,
+                "sd_on_genes": sd_on_genes,
+                "n_genes_used": n_genes_used,
+            })
+
+        except Exception as e:
+            warnings.warn(f"[plot_dataset_mean_across_runs] skipping run {run_name}: {e}")
+            continue
+
+    if not results:
+        raise ValueError("No candidate runs produced statistics — check candidate_runs and splits.")
+
+    df_stats = pd.DataFrame(results).convert_dtypes()
+    df_stats = df_stats.sort_values("mean_of_sample_means", ascending=False).reset_index(drop=True)
+
+    # 4) Plot with sd_on_genes as error bar and annotate n_genes_used on each bar
+    fig, ax = plt.subplots(figsize=(max(8, len(df_stats) * 0.9), 6))
+    x = np.arange(len(df_stats))
+    means = df_stats["mean_of_sample_means"].astype(float).to_numpy()
+    errs = df_stats["sd_on_genes"].astype(float).fillna(0.0).to_numpy()
+    labels = [(str(gl) + " | " + str(ds)) for gl, ds in zip(df_stats["gene_list"], df_stats["dataset"])]
+
+    datasets_seen = sorted(df_stats["dataset"].fillna("Unknown").unique().tolist())
+    color_map = _assemble_color_map(datasets_seen)
+    colors = [color_map.get(ds, (0.4, 0.4, 0.4)) for ds in df_stats["dataset"]]
+
+    bars = ax.bar(x, means, yerr=errs, color=colors, capsize=5, edgecolor="black")
+    for bar, n_genes in zip(bars, df_stats["n_genes_used"]):
+        # annotate number of genes above the bar
+        ax.annotate(n_genes,
+                    xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                    xytext=(0, 5),
+                    textcoords="offset points",
+                    ha="center", va="bottom", fontsize=9)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=45, ha="right")
+    ax.set_ylabel("Mean Pearson (average across samples)")
+    ax.set_title(f"Dataset/Run: {dataset_or_run} — mean across samples (per candidate run)")
+    ax.grid(True, axis="y", linestyle=":", alpha=0.4)
+
+    # legend
+    handles = [plt.Rectangle((0, 0), 1, 1, facecolor=color_map[ds],edgecolor="black") for ds in datasets_seen]
+    if handles:
+        ax.legend(handles, datasets_seen, title="Dataset", bbox_to_anchor=(1.02, 1), loc="upper left")
+
+    fig.tight_layout()
+
+    # save
+    fname = outdir / f"{_safe_filename(str(label_name))}_mean_across_runs.png"
+    fig.savefig(fname, dpi=dpi, bbox_inches="tight")
+    if show:
+        display(fig)
+    plt.close(fig)
+
+    return df_stats, fig
+
+
+from pathlib import Path
+import math
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
+import pandas as pd
+
+def grid_plot_for_datasets(
+    datasets: list,
+    runs_root: str = DEFAULT_RUNS_ROOT,
+    splits_root: str = DEFAULT_SPLITS_ROOT,
+    outdir: str | Path | None = DEFAULT_SUMMARY_PLOT_DIR,
+    candidate_runs: list | None = None,
+    auto_discover_runs: bool = True,
+    per_page: int = 6,       # 6 datasets per page
+    ncols: int = 3,
+    nrows: int = 2,
+    figsize_per_subplot: tuple = (5, 3),
+    dpi: int = 200,
+    show: bool = False,
+):
+    """
+    For each dataset in `datasets`, call plot_dataset_mean_across_runs(dataset, ...) to
+    compute df_stats (per-run summary). Then draw a small subplot per dataset and
+    arrange them into pages of `per_page` (3x2 default). Save multi-page PDF.
+
+    Returns:
+        pdf_path: Path to multi-page PDF
+        df_combined: concatenated DataFrame of all dataset-level stats
+    """
+    outdir = Path(outdir) if outdir is not None else Path(DEFAULT_SUMMARY_PLOT_DIR)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    all_stats = []
+    plotted_datasets = []  # keep order
+
+    # 1) call the dataset-level routine for each requested dataset
+    for ds in datasets:
+        try:
+            df_stats, _ = plot_dataset_mean_across_runs(
+                dataset_or_run=ds,
+                runs_root=runs_root,
+                splits_root=splits_root,
+                outdir=outdir,
+                candidate_runs=candidate_runs,
+                auto_discover_runs=auto_discover_runs,
+                show=False,
+                dpi=dpi,
+            )
+            if df_stats is None or df_stats.empty:
+                print(f"[grid] no stats for dataset {ds} -> skipping")
+                continue
+            # keep dataset name recorded so we can plot it later
+            df_stats["dataset_requested"] = ds
+            all_stats.append(df_stats)
+            plotted_datasets.append(ds)
+        except Exception as e:
+            print(f"[grid] failed for dataset {ds}: {e}")
+            continue
+
+    if not all_stats:
+        raise RuntimeError("No dataset produced stats; nothing to plot.")
+
+    df_combined = pd.concat(all_stats, ignore_index=True).convert_dtypes()
+
+    # 2) Build multi-page PDF with per-dataset small subplots (per_page datasets per page)
+    pdf_path = outdir / "datasets_mean_across_runs_grid.pdf"
+    with PdfPages(pdf_path) as pdf:
+        # iterate pages
+        for page_start in range(0, len(plotted_datasets), per_page):
+            page_ds = plotted_datasets[page_start:page_start + per_page]
+            fig, axes = plt.subplots(nrows=nrows, ncols=ncols,
+                                     figsize=(ncols * figsize_per_subplot[0], nrows * figsize_per_subplot[1]))
+            axes = axes.flatten()
+            # blank all axes first
+            for ax in axes:
+                ax.axis("off")
+
+            for i, ds in enumerate(page_ds):
+                ax = axes[i]
+                ax.axis("on")
+
+                # select the rows corresponding to this dataset (the df_stats produced earlier)
+                df_sub = df_combined[df_combined["dataset_requested"] == ds].sort_values("mean_of_sample_means", ascending=False)
+                if df_sub.empty:
+                    ax.set_title(ds)
+                    continue
+
+                x = range(len(df_sub))
+                means = df_sub["mean_of_sample_means"].astype(float).to_numpy()
+                errs = df_sub["sd_on_genes"].astype(float).fillna(0.0).to_numpy()
+                labels = [(str(gl) + " | " + str(rn)) for gl, rn in zip(df_sub["gene_list"], df_sub["dataset"])]
+                # color per dataset of the compared run (reuse _assemble_color_map)
+                datasets_seen = sorted(df_sub["dataset"].fillna("Unknown").unique().tolist())
+                color_map = _assemble_color_map(datasets_seen)
+                colors = [color_map.get(dsname, (0.5, 0.5, 0.5)) for dsname in df_sub["dataset"]]
+
+                bars = ax.bar(x, means, yerr=errs, color=colors, capsize=4, edgecolor="black")
+                # annotate number of genes used on each bar
+                if "n_genes_used" in df_sub.columns:
+                    for bar, ng in zip(bars, df_sub["n_genes_used"]):
+                        ax.annotate(f"{ng} genes",
+                                    xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                                    xytext=(0, 4),
+                                    textcoords="offset points",
+                                    ha="center", va="bottom", fontsize=7)
+                else:
+                    # fallback: annotate n_samples if present
+                    if "n_samples" in df_sub.columns:
+                        for bar, ns in zip(bars, df_sub["n_samples"]):
+                            ax.annotate(f"{ns} samples",
+                                        xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                                        xytext=(0, 4),
+                                        textcoords="offset points",
+                                        ha="center", va="bottom", fontsize=7)
+
+                ax.set_xticks(x)
+                # shorten overly long labels
+                short_labels = []
+                for L in labels:
+                    Ls = str(L)
+                    short_labels.append(Ls if len(Ls) <= 30 else (Ls[:27] + "…"))
+                ax.set_xticklabels(short_labels, rotation=45, ha="right", fontsize=7)
+
+                ax.set_title(ds, fontsize=9)
+                ax.set_ylabel("Mean Pearson", fontsize=8)
+                ax.grid(True, axis="y", linestyle=":", alpha=0.4)
+                ax.tick_params(axis='y', labelsize=7)
+
+            fig.tight_layout(rect=[0, 0, 0.92, 1.0])  # leave room for legend if needed
+            pdf.savefig(fig)
+            if show:
+                display(fig)
+            plt.close(fig)
+
+    return pdf_path, df_combined
+
 
 
 # -----------------------
@@ -1640,7 +2772,7 @@ def generate_all_plots(
     arts["gene_barplot"] = p
 
     # Histogram
-    fig = plot_gene_correlation_histogram(df_genes, dataset_name, encoder_name)
+    fig = plot_gene_correlation_histogram(df_long, dataset_name, encoder_name)
     p = outdir / "gene_hist.png"
     fig.savefig(p, dpi=200, bbox_inches="tight")
     if show: display(fig)
@@ -1693,7 +2825,7 @@ def generate_all_plots(
         else:
             continue
 
-        print('plot sample-level group by')
+        print('plot sample-level group by', gb)
 
         fig = plot_corrs_by_sample(dplot, dataset_name, encoder_name, group_by=gb)
         p = outdir / f"per_sample_by_{gb}.png"
@@ -1744,9 +2876,6 @@ def generate_all_plots(
 
 
 ## plot gene panels overlap between broad & in house Xenium
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 
 def _find_col(df, candidates, required=True, what="column"):
     """Return the first column from `candidates` that exists in df.columns."""
@@ -1758,7 +2887,6 @@ def _find_col(df, candidates, required=True, what="column"):
                        f"Available: {list(df.columns)}")
     return None
 
-import matplotlib.pyplot as plt
 
 def compare_runs_and_plot(run_a, label_a, run_b, label_b):
     # extract
