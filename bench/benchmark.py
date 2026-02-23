@@ -307,22 +307,35 @@ def predict_single_split(train_split, test_split, args, save_dir, dataset_name, 
     X_train, y_train = all_split_assets['train']['embeddings'], all_split_assets['train']['adata']
     X_test, y_test = all_split_assets['test']['embeddings'], all_split_assets['test']['adata']
     
-    
+    model_bundle ={}
+
     if args.dimreduce == 'PCA':
         from sklearn.decomposition import PCA
         
         print('perform PCA dim reduction')
         pipe = Pipeline([('scaler', StandardScaler()), (f'PCA', PCA(n_components=args.latent_dim, random_state=args.seed))])
         X_train, X_test = torch.Tensor(pipe.fit_transform(X_train)), torch.Tensor(pipe.transform(X_test))
-    
-    
+        model_bundle["pca_pipeline"] = pipe
+
+        # # ---- Save PCA pipeline ----
+        # pca_path = os.path.join(save_dir, "pca.pkl")
+        # joblib.dump(pipe, pca_path)
+        # print(f"PCA pipeline saved in '{pca_path}'")
+      
     probe_results, linprobe_dump, reg = train_test_reg(X_train, X_test, y_train, y_test, random_state=args.seed, genes=genes, method=args.method)
 
-    # Save the trained regression model
-    model_path = os.path.join(save_dir, f'model.pkl')
-    joblib.dump(reg, model_path)
-    print(f"Model saved in '{model_path}'")
+    model_bundle["regression_model"] = reg
 
+    model_path = os.path.join(save_dir, "model.pkl")
+    joblib.dump(model_bundle, model_path)
+
+    print(f"Model (and scaler + PCA if used) saved in '{model_path}'")
+    # # Save the trained regression model
+    # model_path = os.path.join(save_dir, f'model.pkl')
+    # joblib.dump(reg, model_path)
+    # print(f"Model saved in '{model_path}'")
+
+    
     probe_summary = {}
     probe_summary.update({'n_train': len(y_train), 'n_test': len(y_test)})
     probe_summary.update({key: val for key, val in probe_results.items()})
