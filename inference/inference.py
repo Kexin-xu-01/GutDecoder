@@ -10,6 +10,7 @@ from operator import itemgetter
 from abc import abstractmethod
 from tqdm import tqdm
 import glob
+from pathlib import Path
 
 # Core Data manipulation Libraries
 import numpy as np
@@ -32,34 +33,6 @@ from sklearn.decomposition import PCA
 
 from hest.bench.utils.file_utils import read_assets_from_h5
 
-# def read_assets_from_h5(h5_path, keys=None, skip_attrs=False, skip_assets=False):
-#     """
-#     Read data and attributes from an HDF5 file.
-
-#     Parameters:
-#         h5_path (str): Path to the HDF5 file.
-#         keys (list, optional): List of keys to read. Reads all keys if None.
-#         skip_attrs (bool): If True, skip reading attributes.
-#         skip_assets (bool): If True, skip reading data assets.
-
-#     Returns:
-#         tuple: A dictionary of data assets and a dictionary of attributes.
-#     """
-
-#     assets = {}
-#     attrs = {}
-#     with h5py.File(h5_path, 'r') as f:
-#         if keys is None:
-#             keys = list(f.keys())
-#             print(keys)
-
-#         for key in keys:
-#             if not skip_assets:
-#                 assets[key] = f[key][:]
-#             if not skip_attrs and f[key].attrs is not None:
-#                 attrs[key] = dict(f[key].attrs)
-
-#     return assets, attrs
 
 def load_models_from_directories(base_path):
     """
@@ -141,13 +114,16 @@ def load_gene_list(dir_models_and_results):
     Returns:
         gene_list: list of genes.
     """
-    gene_json_path = os.path.join(dir_models_and_results, "split0/summary.json")
+    gene_json_path = Path(os.path.join(dir_models_and_results, "split0/summary.json"))
+    print('loading gene list from ', str(gene_json_path))
 
     if not gene_json_path.exists():
         raise FileNotFoundError(f"summary.json not found at {gene_json_path}")
-
+    
     with open(gene_json_path, "r") as f:
-        gene_names = [entry["name"] for entry in data["pearson_corrs"]]
+        data = json.load(f)   
+
+    gene_names = [entry["name"] for entry in data["pearson_corrs"]]
 
     print(f"Loaded '{len(gene_names)}' genes")
     return gene_names
@@ -167,18 +143,26 @@ def predict_and_aggregate_models(X_test, results_dir):
 
     # Load models from the specified directory
     models = load_models_from_directories(results_dir)
-    print("load models from ", results_dir)
 
-    pca_model = load_pca_models(results_dir)
-    print("load pca models from ", results_dir)
+    #pca_model = load_pca_models(results_dir)
 
     # Initialize a list to store predictions
     predictions = []
 
     # Iterate through each model and make predictions
+    # for split_name in models.keys():
+    #     X_test = pca_model[split_name].transform(X_test)
+    #     preds = models[split_name].predict(X_test)
+    #     predictions.append(preds)
+
     for split_name in models.keys():
-        X_test = pca_model[split_name].transform(X_test)
-        preds = models[split_name].predict(X_test)
+        if "pca_pipeline" in models[split_name]:
+            print('perform Scaling + PCA')
+            X_test_transformed = models[split_name]['pca_pipeline'].transform(X_test)
+        else:
+            X_test_transformed = X_test
+
+        preds = models[split_name]['regression_model'].predict(X_test_transformed)
         predictions.append(preds)
 
     # Stack the predictions into a 2D array (models x samples)
@@ -195,67 +179,6 @@ def predict_and_aggregate_models(X_test, results_dir):
     return average_predictions
 
 
-# In the inference function, the trained model is loaded and used to make inferences on a
-# sample of data that matches the characteristics of the training test.
-# def infer(
-#     test_embed_dir: str,  # Path to a test dataset to perform inference on.
-#     model_directory_path: str  # Path with trained model and results, e.g. /project/simmons_hts/kxu/hest/eval/ST_pred_results/run_26-02-22-12-58-51/pilot/uni_v2
-# ):
-#     ### Prepare Directories ###
-
-#     # Extract the name of the dataset from the file path (without extension)
-#     name_data = os.path.splitext(os.path.basename(test_embed_dir))[0]
-#     print(f"\n-- {name_data} INFERENCE ---------------------------------------------------------------\n")
-#     print(test_embed_dir)
-
-#     # Previous directory where models and results are stored
-#     dir_models_and_results = os.path.join("/project/simmons_hts/kxu/hest/eval/ST_pred_results",model_directory_path)
-#     # Load training configuration parameters
-#     config_path = os.path.join(dir_models_and_results, "split0/config.json")
-#     with open(config_path, 'r') as f:
-#         args_dict = json.load(f)
-#     args = SimpleNamespace(**args_dict)
-
-#     # Directory for processed test dataset (temporary storage)
-#     dir_processed_dataset_test = os.path.join("/tmp", f"processed_dataset_test")
-#     os.makedirs(dir_processed_dataset_test, exist_ok=True)
-
-#     # Set device to GPU if available, else use CPU!!
-#     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-#     ### Preprocess and Embedding Data + Regression inference ###
-
-#     print(f"\n-- {name_data} FETCHING EMBEDDING--\n")
-#     # Generate and load the embeddings for the test data
-#     assets = fetch_embedding(name_data, test_embed_dir, args, device)
-#     print(assets)
-
-#     # Extract embeddings features for prediction
-#     X_test = assets["embeddings"]
-#     print("Embedding shape (X_test):", X_test.shape)
-
-#     print(f"\n-- {name_data} REGRESSION PREDICTIONS--\n")
-#     # Make predictions and aggregate results across cross-validation regression models
-#     average_predictions = predict_and_aggregate_models(X_test, args.results_dir)
-
-#     ### Prepare and Return Predictions ###
-
-#     # Convert the predictions to a DataFrame (the gene expression value must be rounded to two decimal places)
-#     gene_names = load_gene_list(dir_processed_dataset_test)
-#     prediction = pd.DataFrame(np.round(average_predictions, 2), columns=gene_names)
-
-#     # Melt the DataFrame to the expected output for the challenge
-#     #prediction = prediction.melt(id_vars="cell_id", var_name="gene", value_name="prediction")
-#     # prediction = prediction.sort_values(by=["cell_id", "gene"]).reset_index(drop=True)
-
-#     # Free memory by deleting large variables and performing garbage collection
-#     del average_predictions, X_test, assets
-#     gc.collect()
-
-#     print(f"\n-- {name_data} PREDICTION DONE\n")
-
-#     # Return the final prediction DataFrame
-#     return prediction
 
 def infer(
     test_embed_dir: str,  # either a directory containing sample_name.h5 files or a single .h5 file
@@ -268,6 +191,8 @@ def infer(
     Returns a list of saved file paths.
     """
 
+    os.makedirs(out_dir, exist_ok=True)
+
     # Resolve sample file list
     if os.path.isdir(test_embed_dir):
         sample_paths = sorted(glob.glob(os.path.join(test_embed_dir, "*.h5")))
@@ -279,6 +204,8 @@ def infer(
 
     # Previous directory where models and results are stored 
     dir_models_and_results = os.path.join("/project/simmons_hts/kxu/hest/eval/ST_pred_results", model_directory_path)
+
+    print("Using models from ", dir_models_and_results)
 
     # Load training configuration parameters once
     config_path = os.path.join(dir_models_and_results, "split0", "config.json")
@@ -315,7 +242,7 @@ def infer(
         average_predictions = predict_and_aggregate_models(X_test, dir_models_and_results)
 
         # Convert the predictions to a DataFrame (rounded to 2 decimal places)
-        gene_names = load_gene_list(dir_processed_dataset_test)
+        gene_names = load_gene_list(dir_models_and_results)
         # prediction = pd.DataFrame(np.round(average_predictions, 2), index=coords, columns=gene_names)
         # prediction = prediction.reset_index(names="coords")
 
@@ -337,8 +264,7 @@ def infer(
         prediction = prediction.reset_index()            # x and y become columns
         prediction["barcode"] = prediction.apply(lambda r: f"({int(r['x'])}x{int(r['y'])})", axis=1)
 
-        # If you still want the MultiIndex, set it again (optional)
-        prediction = prediction.set_index(["x", "y"])
+
 
         # Save prediction CSV 
         out_filename = f"{name_data}_predictions.csv"
