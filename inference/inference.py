@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from scipy.stats import pearsonr, ConstantInputWarning
+import math
 
 # Visualization Library
 import matplotlib.pyplot as plt
@@ -32,6 +33,8 @@ from sklearn.linear_model import Ridge  # Regression model
 from sklearn.decomposition import PCA
 
 from hest.bench.utils.file_utils import read_assets_from_h5
+
+import scanpy as sc
 
 
 def load_models_from_directories(base_path):
@@ -250,28 +253,66 @@ def infer(
         print("coords shape:", coords.shape)
         assert len(coords) == average_predictions.shape[0], "coords and predictions must have same number of rows"
 
-        # Create MultiIndex for the DataFrame
-        index = pd.MultiIndex.from_arrays([coords[:, 0], coords[:, 1]], names=["x", "y"])
 
-        # Build prediction DataFrame with MultiIndex
+        # Build prediction DataFrame 
         prediction = pd.DataFrame(
-            np.round(average_predictions, 2),
-            index=index,
+            np.round(average_predictions, 5),
             columns=gene_names
         )
 
-        # Also expose x and y as columns and add a barcode string "(x,y)"
-        prediction = prediction.reset_index()            # x and y become columns
-        prediction["barcode"] = prediction.apply(lambda r: f"({int(r['x'])}x{int(r['y'])})", axis=1)
+        meta = pd.DataFrame({
+            "x": coords[:, 0].astype(int),  # or .astype(float) if subpixel
+            "y": coords[:, 1].astype(int)
+        })
 
-
+        meta["barcode"] = meta.apply(lambda r: f"{int(r['x'])}x{int(r['y'])}", axis=1)
 
         # Save prediction CSV 
-        out_filename = f"{name_data}_predictions.csv"
-        out_path = os.path.join(out_dir, out_filename)
-        prediction.to_csv(out_path, index=False)
+        # prediction_csv = pd.concat([prediction, meta], axis=1)
+        # out_filename = f"{name_data}.csv"
+        # out_path = os.path.join(out_dir, 'csv')
+        # os.makedirs(out_path, exist_ok=True)
+        # out_file = os.path.join(out_path, out_filename)
+        # prediction_csv.to_csv(out_file, index=False)
 
-        print(f"\n-- {name_data} PREDICTION SAVED: {out_path}\n")
+        # print(f"\n-- {name_data} PREDICTION CSV SAVED: {out_path}\n")
+
+        # Save prediction adata
+        # pixel_size_he = 0.5
+        # spot_size_um = 112 
+        patch_pixel = 224
+
+        y_max = meta['y'].max()
+        y_min = meta['y'].min()
+        x_max = meta['x'].max()
+        x_min = meta['x'].min()
+
+        #n = ((x_max - x_min) / (spot_size_um / pixel_size_he))
+        n = ((x_max - x_min) / patch_pixel)
+        n = math.ceil(n)
+
+        adata = sc.AnnData(prediction)
+        adata.var_names = adata.var_names.astype(str)
+        print('Some adata var_names are ', adata.var_names[0:6])
+        adata.obsm['spatial'] = meta[["x","y"]].values
+        adata.obs['in_tissue'] = True
+        adata.obs['pxl_col_in_fullres'] = meta['x'].values
+        adata.obs['pxl_row_in_fullres'] = meta['y'].values
+        adata.obs['array_col'] = np.arange(len(adata.obs)) % n
+        adata.obs['array_row'] = np.arange(len(adata.obs)) // n
+        adata.obs.index = [str(row).zfill(3) + 'x' + str(col).zfill(3) for row, col in  zip(adata.obs['array_row'], adata.obs['array_col'])]
+        sc.pp.filter_cells(adata, min_counts=1)
+        #adata.obs.index = [str(row).zfill(7) + 'x' + str(col).zfill(7) for row, col in  zip(adata.obs['pxl_row_in_fullres'], adata.obs['pxl_col_in_fullres'])]
+        print(adata)
+
+        out_filename = f"{name_data}.h5ad"
+        out_path = os.path.join(out_dir, 'adata')
+        os.makedirs(out_path, exist_ok=True)
+        out_file = os.path.join(out_path, out_filename)
+        adata.write(out_file)
+
+        print(f"\n-- {name_data} PREDICTION ADATA SAVED: {out_path}\n")
+
 
         # free memory and continue
         del average_predictions, X_test, assets, prediction
