@@ -24,17 +24,16 @@ from matplotlib.collections import PatchCollection
 from matplotlib.patches import Rectangle
 
 # Spatial Data Processing
-import h5py  # For handling HDF5 data files
+import h5py  
+import scanpy as sc
 
 # Frameworks for ML and DL models
 import torch
-import timm  # timm: A library to load pretrained SOTA computer vision models (e.g. classification, feature extraction, ...)
-from sklearn.linear_model import Ridge  # Regression model
+import timm  
+from sklearn.linear_model import Ridge  
 from sklearn.decomposition import PCA
 
 from hest.bench.utils.file_utils import read_assets_from_h5
-
-import scanpy as sc
 
 
 def load_models_from_directories(base_path):
@@ -59,51 +58,6 @@ def load_models_from_directories(base_path):
 
     return models
 
-
-def load_pca_models(base_path):
-    """
-    Load all trained regression models (one model for each cross-validation split)
-    Load 'model.pkl' from each directory within the base_path.
-
-    :param base_path: The parent directory containing split subdirectories.
-    :return: A dictionary where keys are directory names and values are the loaded models.
-    """
-
-    models = {}
-    for name in os.listdir(base_path):
-        dir_path = os.path.join(base_path, name)
-        if os.path.isdir(dir_path):
-            model_path = os.path.join(dir_path, 'pca.pkl')
-            if os.path.exists(model_path):
-                models[name] = joblib.load(model_path)
-                print(f"Loaded model from {model_path}")
-            else:
-                print(f"'pca.pkl' not found in {dir_path}")
-
-    return models
-
-def fetch_embedding(sample_path, args, device):
-    """
-    Embedding of the images using the specified encoder and load the resulting data.
-
-    Args:
-    - name_data (str): The name of the data to process.
-    - dir_processed_dataset_test (str): Directory where the processed test dataset is stored.
-    - test_embed_dir (str): Directory where the embeddings should be saved, e.g. /project/simmons_hts/kxu/xenium/he/adjacent_nec/trident_processed/20x_224px_0px_overlap/features_uni_v2
-    - args (namespace): Arguments object containing parameters like encoder, batch_size, etc.
-    - device (torch.device): The device (CPU or GPU) to perform computations on.
-
-    Returns:
-    - assets (dict): Dictionary containing the 'barcodes', 'coords', and 'embeddings' from the embedded data.
-    """
-
-    # Define the embedding output path
-    #embed_path = os.path.join(test_embed_dir, f'{name_data}.h5')
-
-    # Load the embeddings and related assets
-    assets, _ = read_assets_from_h5(sample_path)
-
-    return assets
 
 def load_gene_list(dir_models_and_results):
     """
@@ -147,18 +101,11 @@ def predict_and_aggregate_models(X_test, results_dir):
     # Load models from the specified directory
     models = load_models_from_directories(results_dir)
 
-    #pca_model = load_pca_models(results_dir)
-
-    # Initialize a list to store predictions
     predictions = []
-
-    # Iterate through each model and make predictions
-    # for split_name in models.keys():
-    #     X_test = pca_model[split_name].transform(X_test)
-    #     preds = models[split_name].predict(X_test)
-    #     predictions.append(preds)
+    model_names = []
 
     for split_name in models.keys():
+        model_names.append(split_name)
         if "pca_pipeline" in models[split_name]:
             print('perform Scaling + PCA')
             X_test_transformed = models[split_name]['pca_pipeline'].transform(X_test)
@@ -168,19 +115,20 @@ def predict_and_aggregate_models(X_test, results_dir):
         preds = models[split_name]['regression_model'].predict(X_test_transformed)
         predictions.append(preds)
 
-    # Stack the predictions into a 2D array (models x samples)
+    # Stack the predictions 
     predictions = np.stack(predictions)
 
     # Aggregate predictions by calculating the mean across all models
     average_predictions = np.mean(predictions, axis=0)
 
+    sd_predictions = np.std(predictions, axis=0)
+
     # Set any negative predictions to 0
-    average_predictions = np.where(average_predictions < 0, 0.0, average_predictions)
+    # average_predictions = np.where(average_predictions < 0, 0.0, average_predictions)
 
     del models
 
-    return average_predictions
-
+    return average_predictions, sd_predictions, predictions, model_names
 
 
 def infer(
@@ -232,9 +180,7 @@ def infer(
         print(sample_path)
 
         print(f"\n-- {name_data} FETCHING EMBEDDING--\n")
-        # NOTE: fetch_embedding previously expected (name_data, test_embed_dir, args, device)
-        # here we pass the specific sample_path as the embedding source
-        assets = fetch_embedding(sample_path, args, device)
+        assets, _ = read_assets_from_h5(sample_path)
 
         # Extract embeddings features for prediction
         X_test = assets['features']
@@ -242,7 +188,7 @@ def infer(
 
         print(f"\n-- {name_data} REGRESSION PREDICTIONS--\n")
         # Make predictions and aggregate results across cross-validation regression models
-        average_predictions = predict_and_aggregate_models(X_test, dir_models_and_results)
+        average_predictions, sd_predictions, per_model_predictions, model_names = predict_and_aggregate_models(X_test, dir_models_and_results)
 
         # Convert the predictions to a DataFrame (rounded to 2 decimal places)
         gene_names = load_gene_list(dir_models_and_results)
@@ -252,7 +198,6 @@ def infer(
         coords = assets["coords"]  # numpy array shape (N,2)
         print("coords shape:", coords.shape)
         assert len(coords) == average_predictions.shape[0], "coords and predictions must have same number of rows"
-
 
         # Build prediction DataFrame 
         prediction = pd.DataFrame(
@@ -267,6 +212,39 @@ def infer(
 
         meta["barcode"] = meta.apply(lambda r: f"{int(r['x'])}x{int(r['y'])}", axis=1)
 
+        # # Save prediction CSV 
+        # prediction_sd = pd.DataFrame(
+        #     np.round(sd_predictions, 5),
+        #     columns=gene_names
+        # )
+        # prediction_sd_csv = pd.concat([meta, prediction_sd], axis=1)
+        # out_filename = f"{name_data}_pred_sd.csv"
+        # out_path = os.path.join(out_dir, 'csv')
+        # os.makedirs(out_path, exist_ok=True)
+        # out_file = os.path.join(out_path, out_filename)
+        # prediction_sd_csv.to_csv(out_file, index=False)
+
+        # print(f"\n-- {name_data} PREDICTION SD CSV SAVED: {out_path}\n")
+
+        
+        # # save per model predictions
+        # h5_path = os.path.join(out_path, f"{name_data}_pred_per_model.h5")
+
+        # # per_model_predictions: np.ndarray shape (n_models, n_cells, n_genes)
+        # with h5py.File(h5_path, "w") as f:
+        #     # choose chunks that make sense for your access pattern, e.g., chunk on models or cells
+        #     # e.g., chunk = (1, min(1000, n_cells), min(100, n_genes))
+        #     dset = f.create_dataset(
+        #         "per_model", data=per_model_predictions,
+        #         compression="gzip", compression_opts=4,  # or "lzf"
+        #         chunks=(1, max(1, per_model_predictions.shape[1]//10), max(1, per_model_predictions.shape[2]//10))
+        #     )
+        #     f.create_dataset("model_names", data=np.array(list(map(str, model_names)), dtype="S"))
+        #     f.create_dataset("gene_names", data=np.array(gene_names, dtype="S"))
+        #     f.create_dataset("coords", data=coords)
+
+        # print(f"\n-- {name_data} PREDICTION PER MODEL h5py SAVED: {out_path}\n")
+
         # Save prediction CSV 
         # prediction_csv = pd.concat([prediction, meta], axis=1)
         # out_filename = f"{name_data}.csv"
@@ -280,6 +258,8 @@ def infer(
         # Save prediction adata
         # pixel_size_he = 0.5
         # spot_size_um = 112 
+
+        # Normalise coordinates
         patch_pixel = 224
 
         y_max = meta['y'].max()
@@ -301,9 +281,23 @@ def infer(
         adata.obs['array_col'] = np.arange(len(adata.obs)) % n
         adata.obs['array_row'] = np.arange(len(adata.obs)) // n
         adata.obs.index = [str(row).zfill(3) + 'x' + str(col).zfill(3) for row, col in  zip(adata.obs['array_row'], adata.obs['array_col'])]
+
+        # --- Add SD into layers ---
+        # layers must be same shape as adata.X: (n_obs, n_vars)
+        adata.layers['pred_sd'] = sd_predictions
         sc.pp.filter_cells(adata, min_counts=1)
+
+        pred_sd = np.asarray(adata.layers["pred_sd"])
+
+        adata.var["mean_expression"] = prediction.mean(axis=0)
+
+        # ---- Mean SD per gene (across spots) ----
+        adata.var["mean_pred_sd_per_gene"] = pred_sd.mean(axis=0)
+
+        # ---- Mean SD per spot (across genes) ----
+        adata.obs["mean_pred_sd_per_spot"] = pred_sd.mean(axis=1)
+
         #adata.obs.index = [str(row).zfill(7) + 'x' + str(col).zfill(7) for row, col in  zip(adata.obs['pxl_row_in_fullres'], adata.obs['pxl_col_in_fullres'])]
-        print(adata)
 
         out_filename = f"{name_data}.h5ad"
         out_path = os.path.join(out_dir, 'adata')
@@ -313,9 +307,7 @@ def infer(
 
         print(f"\n-- {name_data} PREDICTION ADATA SAVED: {out_path}\n")
 
-
-        # free memory and continue
-        del average_predictions, X_test, assets, prediction
+        del average_predictions, X_test, assets, prediction, sd_predictions, per_model_predictions, model_names
         gc.collect()
 
         saved_paths.append(out_path)
