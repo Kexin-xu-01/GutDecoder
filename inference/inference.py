@@ -117,6 +117,7 @@ def predict_and_aggregate_models(X_test, results_dir):
 
     # Stack the predictions 
     predictions = np.stack(predictions)
+    print("predictions has the shape ", predictions.shape)
 
     # Aggregate predictions by calculating the mean across all models
     average_predictions = np.mean(predictions, axis=0)
@@ -212,53 +213,6 @@ def infer(
 
         meta["barcode"] = meta.apply(lambda r: f"{int(r['x'])}x{int(r['y'])}", axis=1)
 
-        # # Save prediction CSV 
-        # prediction_sd = pd.DataFrame(
-        #     np.round(sd_predictions, 5),
-        #     columns=gene_names
-        # )
-        # prediction_sd_csv = pd.concat([meta, prediction_sd], axis=1)
-        # out_filename = f"{name_data}_pred_sd.csv"
-        # out_path = os.path.join(out_dir, 'csv')
-        # os.makedirs(out_path, exist_ok=True)
-        # out_file = os.path.join(out_path, out_filename)
-        # prediction_sd_csv.to_csv(out_file, index=False)
-
-        # print(f"\n-- {name_data} PREDICTION SD CSV SAVED: {out_path}\n")
-
-        
-        # # save per model predictions
-        # h5_path = os.path.join(out_path, f"{name_data}_pred_per_model.h5")
-
-        # # per_model_predictions: np.ndarray shape (n_models, n_cells, n_genes)
-        # with h5py.File(h5_path, "w") as f:
-        #     # choose chunks that make sense for your access pattern, e.g., chunk on models or cells
-        #     # e.g., chunk = (1, min(1000, n_cells), min(100, n_genes))
-        #     dset = f.create_dataset(
-        #         "per_model", data=per_model_predictions,
-        #         compression="gzip", compression_opts=4,  # or "lzf"
-        #         chunks=(1, max(1, per_model_predictions.shape[1]//10), max(1, per_model_predictions.shape[2]//10))
-        #     )
-        #     f.create_dataset("model_names", data=np.array(list(map(str, model_names)), dtype="S"))
-        #     f.create_dataset("gene_names", data=np.array(gene_names, dtype="S"))
-        #     f.create_dataset("coords", data=coords)
-
-        # print(f"\n-- {name_data} PREDICTION PER MODEL h5py SAVED: {out_path}\n")
-
-        # Save prediction CSV 
-        # prediction_csv = pd.concat([prediction, meta], axis=1)
-        # out_filename = f"{name_data}.csv"
-        # out_path = os.path.join(out_dir, 'csv')
-        # os.makedirs(out_path, exist_ok=True)
-        # out_file = os.path.join(out_path, out_filename)
-        # prediction_csv.to_csv(out_file, index=False)
-
-        # print(f"\n-- {name_data} PREDICTION CSV SAVED: {out_path}\n")
-
-        # Save prediction adata
-        # pixel_size_he = 0.5
-        # spot_size_um = 112 
-
         # Normalise coordinates
         patch_pixel = 224
 
@@ -285,7 +239,14 @@ def infer(
         # --- Add SD into layers ---
         # layers must be same shape as adata.X: (n_obs, n_vars)
         adata.layers['pred_sd'] = sd_predictions
-        sc.pp.filter_cells(adata, min_counts=1)
+
+        # Set any negative predictions to 0
+        # average_predictions = np.where(average_predictions < 0, 0.0, average_predictions)
+        # sc.pp.filter_cells(adata, min_counts=1) # this doesn't work with lots of negative prediction
+
+        # filter out spots where all genes are predicted zero
+        nonzero_mask = (np.abs(adata.X).sum(axis=1) > 0)
+        adata = adata[nonzero_mask].copy()
 
         pred_sd = np.asarray(adata.layers["pred_sd"])
 
