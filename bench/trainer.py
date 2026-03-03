@@ -1,11 +1,12 @@
 import numpy as np
-from scipy.stats import pearsonr
+from scipy.stats import pearsonr,spearmanr
 from sklearn.linear_model import Ridge
 import xgboost as xgb
 from tqdm import tqdm
 import torch
 import os
 import warnings
+import torch.nn as nn
 
 os.environ["TQDM_DISABLE"] = "1" # silence training loop
 
@@ -16,6 +17,22 @@ try:
 except Exception:
     cp = None
 
+class MLP(nn.Module):
+    def __init__(self, in_dim, out_dim, hidden_dims=(1024,512), dropout=0.2):
+        super().__init__()
+        layers = []
+        prev = in_dim
+        for h in hidden_dims:
+            layers.append(nn.Linear(prev, h))
+            layers.append(nn.ReLU(inplace=True))
+            layers.append(nn.BatchNorm1d(h))
+            layers.append(nn.Dropout(dropout))
+            prev = h
+        layers.append(nn.Linear(prev, out_dim))
+        self.net = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.net(x)
 
 def can_use_cuml():
     """
@@ -132,7 +149,7 @@ def train_test_reg(X_train, X_test, y_train, y_test,
         reg = Ridge(solver='lsqr',
                     alpha=alpha, 
                     random_state=random_state, 
-                    fit_intercept=False, 
+                    fit_intercept=True, # if no intercept, ridge is forced to go through zero
                     max_iter=max_iter)
         reg.fit(X_train, y_train)
 
@@ -224,6 +241,108 @@ def train_test_reg(X_train, X_test, y_train, y_test,
         reg.fit(X_train, y_train)
         preds_all = reg.predict(X_test)
 
+
+    elif method == 'mlp_torch':
+
+        import numpy as np
+        from torch.utils.data import DataLoader, TensorDataset
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        X_train_np = np.asarray(X_train, dtype=np.float32)
+        y_train_np = np.asarray(y_train, dtype=np.float32)
+        X_test_np  = np.asarray(X_test, dtype=np.float32)
+    
+        y_scaler = StandardScaler()
+            # ensure 2D (n_samples, n_targets)
+        y_train_2d = y_train.reshape(y_train.shape[0], -1)
+        y_train_np = y_scaler.fit_transform(y_train_2d).astype(np.float32)
+
+        in_dim = X_train_np.shape[1]
+        out_dim = y_train_np.shape[1]
+
+        # ---- Instantiate your top-level MLP ----
+        reg = MLP(in_dim=in_dim, out_dim=out_dim).to(device)
+
+        optimizer = torch.optim.AdamW(reg.parameters(), lr=1e-3)
+        criterion = nn.MSELoss()
+
+        train_loader = DataLoader(
+            TensorDataset(
+                torch.tensor(X_train_np),
+                torch.tensor(y_train_np)
+            ),
+            batch_size=128,
+            shuffle=True
+        )
+
+        reg.train()
+        for epoch in range(40):
+            total_loss = 0
+            for xb, yb in train_loader:
+                xb, yb = xb.to(device), yb.to(device)
+
+                preds = reg(xb)
+                loss = criterion(preds, yb)
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                total_loss += loss.item()
+
+            print(f"Epoch {epoch+1}, Loss {total_loss:.4f}")
+
+        # ---- Predict ----
+        reg.eval()
+        with torch.no_grad():
+            preds = reg(torch.tensor(X_test_np).to(device)).cpu().numpy()
+            preds = y_scaler.inverse_transform(preds)
+
+        preds_all = preds
+
+    elif method == 'mlp_sklearn':
+        from sklearn.neural_network import MLPRegressor
+        from sklearn.preprocessing import StandardScaler
+        import numpy as np
+
+        X_train_np = np.asarray(X_train)
+        X_test_np  = np.asarray(X_test)
+        y_train_np = np.asarray(y_train)
+        y_test_np  = np.asarray(y_test)
+
+        # ---- Optional Y scaling (recommended) ----
+        scale_y = True
+        if scale_y:
+            y_scaler = StandardScaler()
+            y_train_np = y_scaler.fit_transform(y_train_np)
+        else:
+            y_scaler = None
+
+        reg = MLPRegressor(
+            hidden_layer_sizes=(1024, 512),
+            activation='relu',
+            solver='adam',
+            alpha=1e-4,
+            batch_size=128,
+            learning_rate_init=1e-3,
+            max_iter=200,
+            early_stopping=True,
+            n_iter_no_change=10,
+            verbose=True,
+            random_state=random_state
+        )
+
+        reg.fit(X_train_np, y_train_np)
+
+        preds = reg.predict(X_test_np)
+
+        if scale_y:
+            preds = y_scaler.inverse_transform(preds)
+
+        preds_all = preds
+
+
     else:
         raise ValueError(f"Unknown method: {method}")
 
@@ -232,46 +351,77 @@ def train_test_reg(X_train, X_test, y_train, y_test,
     r2_scores = []
     pearson_corrs = []
     pearson_genes = []
-    i = 0
-    for target in range(y_test.shape[1]):
-        preds = preds_all[:, target]
-        target_vals = y_test[:, target]
-        l2_error = float(np.mean((preds - target_vals)**2))
-        # compute r2 score (guard against zero-variance target)
-        denom = np.sum((target_vals - np.mean(target_vals))**2)
+    spearman_corrs = []
+    spearman_genes = []
+
+    n_targets = y_test.shape[1]
+    for i in range(n_targets):
+        preds = preds_all[:, i]
+        target_vals = y_test[:, i]
+
+        # L2 / MSE
+        l2_error = float(np.mean((preds - target_vals) ** 2))
+
+        # R^2 (guard against zero variance)
+        denom = np.sum((target_vals - np.mean(target_vals)) ** 2)
         if denom == 0:
             r2_score = float('nan')
         else:
-            r2_score = float(1 - np.sum((target_vals - preds)**2) / denom)
+            r2_score = float(1 - np.sum((target_vals - preds) ** 2) / denom)
 
-        pearson_corr, _ = pearsonr(target_vals, preds)
+        # Pearson (handle constant arrays -> returns nan)
+        try:
+            pearson_corr, _ = pearsonr(target_vals, preds)
+        except Exception:
+            pearson_corr = float('nan')
         if np.isnan(pearson_corr):
-            print(f"Warning: NaN pearson for target {target}")
-            # optionally print debug arrays
-            # print(target_vals)
-            # print(preds)
+            print(f"Warning: NaN pearson for target {i}")
+
+        # Spearman (rank correlation) (handle constant arrays -> returns nan)
+        try:
+            spearman_corr, _ = spearmanr(target_vals, preds)
+        except Exception:
+            spearman_corr = float('nan')
+        if np.isnan(spearman_corr):
+            print(f"Warning: NaN spearman for target {i}")
+
         errors.append(l2_error)
         r2_scores.append(r2_score)
         pearson_corrs.append(pearson_corr)
-        score_dict = {
-            'name': genes[i] if genes is not None and i < len(genes) else f"target_{i}",
-            'pearson_corr': pearson_corr,
-        }
-        pearson_genes.append(score_dict)
-        i += 1
+        spearman_corrs.append(spearman_corr)
 
-    results = {'l2_errors': list(errors), 
-               'r2_scores': list(r2_scores),
-               'pearson_corrs': pearson_genes,
-               'pearson_mean': float(np.nanmean(pearson_corrs)),
-               'pearson_std': float(np.nanstd(pearson_corrs)),
-               'l2_error_q1': float(np.percentile(errors, 25)),
-               'l2_error_q2': float(np.median(errors)),
-               'l2_error_q3': float(np.percentile(errors, 75)),
-               'r2_score_q1': float(np.percentile([v for v in r2_scores if not np.isnan(v)], 25)) if any(not np.isnan(v) for v in r2_scores) else float('nan'),
-               'r2_score_q2': float(np.median([v for v in r2_scores if not np.isnan(v)])) if any(not np.isnan(v) for v in r2_scores) else float('nan'),
-               'r2_score_q3': float(np.percentile([v for v in r2_scores if not np.isnan(v)], 75)) if any(not np.isnan(v) for v in r2_scores) else float('nan'),
-               }
+        gene_name = genes[i] if genes is not None and i < len(genes) else f"target_{i}"
+        pearson_genes.append({
+            'name': gene_name,
+            'pearson_corr': pearson_corr,
+        })
+        spearman_genes.append({
+            'name': gene_name,
+            'spearman_corr': spearman_corr,
+        })
+
+    # build results (robust to all-NaN lists)
+    valid_pearson = [v for v in pearson_corrs if not np.isnan(v)]
+    valid_spearman = [v for v in spearman_corrs if not np.isnan(v)]
+    valid_r2 = [v for v in r2_scores if not np.isnan(v)]
+
+    results = {
+        'l2_errors': list(errors),
+        'r2_scores': list(r2_scores),
+        'pearson_corrs': pearson_genes,
+        'spearman_corrs': spearman_genes,
+        'pearson_mean': float(np.nanmean(pearson_corrs)) if len(pearson_corrs) > 0 else float('nan'),
+        'pearson_std': float(np.nanstd(pearson_corrs)) if len(pearson_corrs) > 0 else float('nan'),
+        'spearman_mean': float(np.nanmean(spearman_corrs)) if len(spearman_corrs) > 0 else float('nan'),
+        'spearman_std': float(np.nanstd(spearman_corrs)) if len(spearman_corrs) > 0 else float('nan'),
+        'l2_error_q1': float(np.percentile(errors, 25)) if len(errors) > 0 else float('nan'),
+        'l2_error_q2': float(np.median(errors)) if len(errors) > 0 else float('nan'),
+        'l2_error_q3': float(np.percentile(errors, 75)) if len(errors) > 0 else float('nan'),
+        'r2_score_q1': float(np.percentile(valid_r2, 25)) if len(valid_r2) > 0 else float('nan'),
+        'r2_score_q2': float(np.median(valid_r2)) if len(valid_r2) > 0 else float('nan'),
+        'r2_score_q3': float(np.percentile(valid_r2, 75)) if len(valid_r2) > 0 else float('nan'),
+    }
+
     dump = {
         'preds_all': preds_all,
         'targets_all': y_test,

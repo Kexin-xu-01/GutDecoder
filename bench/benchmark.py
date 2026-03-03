@@ -60,6 +60,7 @@ parser.add_argument('--alpha', type=float)
 parser.add_argument('--kfold', action='store_true')
 parser.add_argument('--benchmark_encoders', action='store_true')
 parser.add_argument('--normalize', type=bool)
+parser.add_argument('--library_size_normalize', type=bool)
 parser.add_argument('--dimreduce', type=str, help='whenever to perform dimensionality reduction before linear probing, can be "PCA" or None')
 parser.add_argument('--latent_dim', type=int, help='dimensionality reduction latent dimension')
 parser.add_argument('--encoders', nargs='+', help='All the encoders to benchmark')
@@ -103,6 +104,7 @@ class BenchmarkConfig:
     kfold: bool = False
     benchmark_encoders: bool = False
     normalize: bool = True
+    library_size_normalize: bool = True
     dimreduce: Optional[str] = "PCA"
     latent_dim: int = 256
     encoders: list = field(default_factory=lambda: ['resnet50'])
@@ -295,7 +297,7 @@ def predict_single_split(train_split, test_split, args, save_dir, dataset_name, 
             expr_path = os.path.join(bench_data_root, split.iloc[i]['expr_path'])
             assets, _ = read_assets_from_h5(embed_path)
             barcodes = assets['barcodes'].flatten().astype(str).tolist()
-            adata = load_adata(expr_path, genes=genes, barcodes=barcodes, normalize=args.normalize)
+            adata = load_adata(expr_path, genes=genes, barcodes=barcodes, normalize=args.normalize, library_size_normalize=args.library_size_normalize)
             assets['adata'] = adata.values
             split_assets = merge_dict(split_assets, assets)
         for key, val in split_assets.items(): 
@@ -317,10 +319,6 @@ def predict_single_split(train_split, test_split, args, save_dir, dataset_name, 
         X_train, X_test = torch.Tensor(pipe.fit_transform(X_train)), torch.Tensor(pipe.transform(X_test))
         model_bundle["pca_pipeline"] = pipe
 
-        # # ---- Save PCA pipeline ----
-        # pca_path = os.path.join(save_dir, "pca.pkl")
-        # joblib.dump(pipe, pca_path)
-        # print(f"PCA pipeline saved in '{pca_path}'")
       
     probe_results, linprobe_dump, reg = train_test_reg(X_train, X_test, y_train, y_test, random_state=args.seed, genes=genes, method=args.method)
 
@@ -330,10 +328,6 @@ def predict_single_split(train_split, test_split, args, save_dir, dataset_name, 
     joblib.dump(model_bundle, model_path)
 
     print(f"Model (and scaler + PCA if used) saved in '{model_path}'")
-    # # Save the trained regression model
-    # model_path = os.path.join(save_dir, f'model.pkl')
-    # joblib.dump(reg, model_path)
-    # print(f"Model saved in '{model_path}'")
 
     
     probe_summary = {}
