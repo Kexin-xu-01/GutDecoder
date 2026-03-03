@@ -174,7 +174,7 @@ def write_var_k_genes_from_paths(
     from hest.utils import get_k_genes
 
     if exclude_keywords is None:
-        exclude_keywords = ["NegControl", "Codeword", "Intergenic_Region", "Control", "BLANK"]
+        exclude_keywords = ["NegControl", "Codeword", "Intergenic_Region", "Control", "BLANK","Intergenic"]
 
     warnings.filterwarnings("ignore", category=FutureWarning, module="anndata")
 

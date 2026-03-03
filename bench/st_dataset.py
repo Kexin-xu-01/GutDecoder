@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from PIL import Image
 
-def normalize_adata(adata: sc.AnnData, smooth=False) -> sc.AnnData:
+def log_adata(adata: sc.AnnData, smooth=False) -> sc.AnnData:
     """
     Normalize each spot by total gene counts + Logarithmize each spot
     """
@@ -28,18 +28,31 @@ def normalize_adata(adata: sc.AnnData, smooth=False) -> sc.AnnData:
             avg = neighbors.sum() / nb_neighbors
             filtered_adata[index] = avg
     
-    
     # Logarithm of the expression
     sc.pp.log1p(filtered_adata)
 
     return filtered_adata
 
-def load_adata(expr_path, genes = None, barcodes = None, normalize=False):
+def library_size_norm_adata(adata: sc.AnnData) -> sc.AnnData:
+    """
+    Normalize each spot by total gene counts + Logarithmize each spot
+    """
+    filtered_adata = adata.copy()
+    filtered_adata.X = filtered_adata.X.astype(np.float64)
+    
+    # library size normalization
+    sc.pp.normalize_total(filtered_adata, target_sum=1e6)
+
+    return filtered_adata
+
+def load_adata(expr_path, genes = None, barcodes = None, normalize=False, library_size_normalize=False):
     adata = sc.read_h5ad(expr_path)
     if barcodes is not None:
         adata = adata[barcodes]
     if genes is not None:
         adata = adata[:, genes]
+    if library_size_normalize:
+        adata = library_size_norm_adata(adata)
     if normalize:
-        adata = normalize_adata(adata)
+        adata = log_adata(adata)
     return adata.to_df()
