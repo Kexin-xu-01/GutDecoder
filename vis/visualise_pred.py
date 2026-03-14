@@ -16,7 +16,8 @@ from typing import Dict, List, Tuple
 from scipy.stats import pearsonr
 from scipy.sparse import issparse
 
-from hest.vis.plot import *
+from gutdeocder.vis.plot import *
+from gutdecoder.utils.metrics import compute_metrics
 
 
 RUN_ROOT = "/project/simmons_hts/kxu/hest/eval/ST_pred_results"
@@ -735,25 +736,25 @@ def add_formatted_inference_to_adata(
                         ad_idx = idx
                         break
 
-        if ad_idx is None:
-            # fuzzy match by barcode intersection
-            best_idx = None
-            best_inter = 0
-            preds_index_set = set(preds_df.index)
-            for i, ad in enumerate(adata_list):
-                inter = len(preds_index_set.intersection(set(map(str, ad.obs_names))))
-                if inter > best_inter:
-                    best_inter = inter
-                    best_idx = i
-            if best_idx is not None and best_inter > 0:
-                ad_idx = best_idx
-                if verbose:
-                    print(f"[INFO] fuzzy matched sample_key '{sample_key}' -> adata index {ad_idx} by barcode intersection ({best_inter} matches)")
-            else:
-                if verbose:
-                    print(f"[WARN] Could not find matching AnnData for sample_key '{sample_key}'. Skipping.")
-                summary[sample_key] = {'matched': False, 'reason': 'no matching adata found'}
-                continue
+        # if ad_idx is None:
+        #     # fuzzy match by barcode intersection
+        #     best_idx = None
+        #     best_inter = 0
+        #     preds_index_set = set(preds_df.index)
+        #     for i, ad in enumerate(adata_list):
+        #         inter = len(preds_index_set.intersection(set(map(str, ad.obs_names))))
+        #         if inter > best_inter:
+        #             best_inter = inter
+        #             best_idx = i
+        #     if best_idx is not None and best_inter > 0:
+        #         ad_idx = best_idx
+        #         if verbose:
+        #             print(f"[INFO] fuzzy matched sample_key '{sample_key}' -> adata index {ad_idx} by barcode intersection ({best_inter} matches)")
+        #     else:
+        #         if verbose:
+        #             print(f"[WARN] Could not find matching AnnData for sample_key '{sample_key}'. Skipping.")
+        #         summary[sample_key] = {'matched': False, 'reason': 'no matching adata found'}
+        #         continue
 
         # sanitize the matched AnnData in-place before doing anything else
         ad = adata_list[ad_idx]
@@ -785,39 +786,39 @@ def add_formatted_inference_to_adata(
         targets_on_ad = pd.DataFrame(fill_missing_with, index=ad_obs_names, columns=ad_var_names, dtype=float)
 
         # place matched rows / genes
-        if n_matched_barcodes > 0:
-            preds_on_ad.loc[matched_barcodes, common_genes] = preds_df.loc[matched_barcodes, common_genes].values
-            targets_on_ad.loc[matched_barcodes, common_genes] = targets_df.loc[matched_barcodes, common_genes].values
-            method = 'match_by_obs_names'
-        else:
-            # try barcode-like column mapping
-            barcode_col = None
-            for c in ['barcode', 'barcodes', 'cell_barcode', 'cell_id', 'patch_barcode']:
-                if c in ad.obs.columns:
-                    barcode_col = c
-                    break
-            if barcode_col is not None:
-                mapping = {str(v): obs for v, obs in zip(ad.obs[barcode_col].astype(str).values, ad_obs_names)}
-                matched_by_col = [b for b in preds_df.index if b in mapping]
-                for b in matched_by_col:
-                    obsname = mapping[b]
-                    preds_on_ad.loc[obsname, common_genes] = preds_df.loc[b, common_genes].values
-                    targets_on_ad.loc[obsname, common_genes] = targets_df.loc[b, common_genes].values
-                n_matched_barcodes = len(matched_by_col)
-                method = f"match_by_obs['{barcode_col}']"
-            else:
-                if preds_df.shape[0] == ad.n_obs:
-                    preds_on_ad.loc[ad_obs_names, common_genes] = preds_df.loc[:, common_genes].values
-                    targets_on_ad.loc[ad_obs_names, common_genes] = targets_df.loc[:, common_genes].values
-                    n_matched_barcodes = ad.n_obs
-                    method = 'assign_by_order'
-                else:
-                    nplace = min(preds_df.shape[0], ad.n_obs)
-                    obs_slice = ad_obs_names[:nplace]
-                    preds_on_ad.loc[obs_slice, common_genes] = preds_df.iloc[:nplace][common_genes].values
-                    targets_on_ad.loc[obs_slice, common_genes] = targets_df.iloc[:nplace][common_genes].values
-                    n_matched_barcodes = nplace
-                    method = 'best_effort_slice'
+        #if n_matched_barcodes > 0:
+        preds_on_ad.loc[matched_barcodes, common_genes] = preds_df.loc[matched_barcodes, common_genes].values
+        targets_on_ad.loc[matched_barcodes, common_genes] = targets_df.loc[matched_barcodes, common_genes].values
+        method = 'match_by_obs_names'
+        # else:
+        #     # try barcode-like column mapping
+        #     barcode_col = None
+        #     for c in ['barcode', 'barcodes', 'cell_barcode', 'cell_id', 'patch_barcode']:
+        #         if c in ad.obs.columns:
+        #             barcode_col = c
+        #             break
+        #     if barcode_col is not None:
+        #         mapping = {str(v): obs for v, obs in zip(ad.obs[barcode_col].astype(str).values, ad_obs_names)}
+        #         matched_by_col = [b for b in preds_df.index if b in mapping]
+        #         for b in matched_by_col:
+        #             obsname = mapping[b]
+        #             preds_on_ad.loc[obsname, common_genes] = preds_df.loc[b, common_genes].values
+        #             targets_on_ad.loc[obsname, common_genes] = targets_df.loc[b, common_genes].values
+        #         n_matched_barcodes = len(matched_by_col)
+        #         method = f"match_by_obs['{barcode_col}']"
+        #     else:
+        #         if preds_df.shape[0] == ad.n_obs:
+        #             preds_on_ad.loc[ad_obs_names, common_genes] = preds_df.loc[:, common_genes].values
+        #             targets_on_ad.loc[ad_obs_names, common_genes] = targets_df.loc[:, common_genes].values
+        #             n_matched_barcodes = ad.n_obs
+        #             method = 'assign_by_order'
+        #         else:
+        #             nplace = min(preds_df.shape[0], ad.n_obs)
+        #             obs_slice = ad_obs_names[:nplace]
+        #             preds_on_ad.loc[obs_slice, common_genes] = preds_df.iloc[:nplace][common_genes].values
+        #             targets_on_ad.loc[obs_slice, common_genes] = targets_df.iloc[:nplace][common_genes].values
+        #             n_matched_barcodes = nplace
+        #             method = 'best_effort_slice'
 
         # convert to numpy float32 arrays and assign as layers
         pred_arr = preds_on_ad.values.astype(np.float32)
@@ -873,6 +874,57 @@ def add_formatted_inference_to_adata(
 
     return summary
 
+def remove_nan_spots(adata, target_layer="target", inplace=False):
+    """
+    Remove spots where all genes in the target layer are NaN.
+
+    Parameters
+    ----------
+    adata : AnnData
+    target_layer : str
+        Layer name containing ground truth values
+    inplace : bool
+        If True, modifies adata in place.
+        If False, returns a filtered copy.
+
+    Returns
+    -------
+    AnnData (if inplace=False) or None
+    """
+
+    X = np.asarray(adata.layers[target_layer])
+
+    # Identify spots where ALL genes are NaN
+    all_nan_mask = np.all(~np.isfinite(X), axis=1)
+
+    n_remove = int(all_nan_mask.sum())
+    print(f"Removing {n_remove} spots with all-NaN target values")
+
+    if inplace:
+        adata._inplace_subset_obs(~all_nan_mask)
+        return None
+    else:
+        return adata[~all_nan_mask].copy()
+    
+
+def remove_control_probes(adata, exclude_keywords=None, inplace=False):
+    """
+    Remove control probes (e.g. NegControl, BLANK, Codeword) from adata.
+    """
+    if exclude_keywords is None:
+        exclude_keywords = ["NegControl", "Codeword", "Intergenic_Region", "Control", "BLANK", "Intergenic"]
+
+    var_names = adata.var_names.astype(str)
+
+    mask = ~var_names.str.contains("|".join(exclude_keywords), case=False, regex=True)
+
+    n_removed = (~mask).sum()
+    print(f"Removing {n_removed} control probes")
+
+    if inplace:
+        adata._inplace_subset_var(mask)
+    else:
+        return adata[:, mask].copy()
 
 # def save_adata_from_list(adata_list, RUN_ROOT, RUN):
 #     """
@@ -1441,6 +1493,23 @@ def add_inference_to_adata_and_plot(
         overwrite_layers=True,
         verbose=verbose
     )
+
+    # --- Remove spots where all target genes are NaN ---
+    print('Remove spots with all NaN values')
+    adata_list = [
+        remove_nan_spots(adata, target_layer=target_layer_name, inplace=False)
+        for adata in adata_list
+    ]
+
+    # remove control probes
+    print('Remove control probes')
+    adata_list = [
+    remove_control_probes(adata)
+    for adata in adata_list
+    ]
+
+    # --- Remove prediction metrics for per gene & per spot ---
+    results = compute_metrics(adata_list)
 
     # --------------- 5) save the adata list to RUN folder ----------------
     # if verbose: print("[step] saving adata_list to disk")
