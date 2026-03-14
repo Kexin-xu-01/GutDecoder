@@ -16,7 +16,7 @@ from typing import Dict, List, Tuple
 from scipy.stats import pearsonr
 from scipy.sparse import issparse
 
-from gutdeocder.vis.plot import *
+from gutdecoder.vis.plot import *
 from gutdecoder.utils.metrics import compute_metrics
 
 
@@ -736,25 +736,25 @@ def add_formatted_inference_to_adata(
                         ad_idx = idx
                         break
 
-        # if ad_idx is None:
-        #     # fuzzy match by barcode intersection
-        #     best_idx = None
-        #     best_inter = 0
-        #     preds_index_set = set(preds_df.index)
-        #     for i, ad in enumerate(adata_list):
-        #         inter = len(preds_index_set.intersection(set(map(str, ad.obs_names))))
-        #         if inter > best_inter:
-        #             best_inter = inter
-        #             best_idx = i
-        #     if best_idx is not None and best_inter > 0:
-        #         ad_idx = best_idx
-        #         if verbose:
-        #             print(f"[INFO] fuzzy matched sample_key '{sample_key}' -> adata index {ad_idx} by barcode intersection ({best_inter} matches)")
-        #     else:
-        #         if verbose:
-        #             print(f"[WARN] Could not find matching AnnData for sample_key '{sample_key}'. Skipping.")
-        #         summary[sample_key] = {'matched': False, 'reason': 'no matching adata found'}
-        #         continue
+        if ad_idx is None:
+            # fuzzy match by barcode intersection
+            best_idx = None
+            best_inter = 0
+            preds_index_set = set(preds_df.index)
+            for i, ad in enumerate(adata_list):
+                inter = len(preds_index_set.intersection(set(map(str, ad.obs_names))))
+                if inter > best_inter:
+                    best_inter = inter
+                    best_idx = i
+            if best_idx is not None and best_inter > 0:
+                ad_idx = best_idx
+                if verbose:
+                    print(f"[INFO] fuzzy matched sample_key '{sample_key}' -> adata index {ad_idx} by barcode intersection ({best_inter} matches)")
+            else:
+                if verbose:
+                    print(f"[WARN] Could not find matching AnnData for sample_key '{sample_key}'. Skipping.")
+                summary[sample_key] = {'matched': False, 'reason': 'no matching adata found'}
+                continue
 
         # sanitize the matched AnnData in-place before doing anything else
         ad = adata_list[ad_idx]
@@ -786,39 +786,39 @@ def add_formatted_inference_to_adata(
         targets_on_ad = pd.DataFrame(fill_missing_with, index=ad_obs_names, columns=ad_var_names, dtype=float)
 
         # place matched rows / genes
-        #if n_matched_barcodes > 0:
-        preds_on_ad.loc[matched_barcodes, common_genes] = preds_df.loc[matched_barcodes, common_genes].values
-        targets_on_ad.loc[matched_barcodes, common_genes] = targets_df.loc[matched_barcodes, common_genes].values
-        method = 'match_by_obs_names'
-        # else:
-        #     # try barcode-like column mapping
-        #     barcode_col = None
-        #     for c in ['barcode', 'barcodes', 'cell_barcode', 'cell_id', 'patch_barcode']:
-        #         if c in ad.obs.columns:
-        #             barcode_col = c
-        #             break
-        #     if barcode_col is not None:
-        #         mapping = {str(v): obs for v, obs in zip(ad.obs[barcode_col].astype(str).values, ad_obs_names)}
-        #         matched_by_col = [b for b in preds_df.index if b in mapping]
-        #         for b in matched_by_col:
-        #             obsname = mapping[b]
-        #             preds_on_ad.loc[obsname, common_genes] = preds_df.loc[b, common_genes].values
-        #             targets_on_ad.loc[obsname, common_genes] = targets_df.loc[b, common_genes].values
-        #         n_matched_barcodes = len(matched_by_col)
-        #         method = f"match_by_obs['{barcode_col}']"
-        #     else:
-        #         if preds_df.shape[0] == ad.n_obs:
-        #             preds_on_ad.loc[ad_obs_names, common_genes] = preds_df.loc[:, common_genes].values
-        #             targets_on_ad.loc[ad_obs_names, common_genes] = targets_df.loc[:, common_genes].values
-        #             n_matched_barcodes = ad.n_obs
-        #             method = 'assign_by_order'
-        #         else:
-        #             nplace = min(preds_df.shape[0], ad.n_obs)
-        #             obs_slice = ad_obs_names[:nplace]
-        #             preds_on_ad.loc[obs_slice, common_genes] = preds_df.iloc[:nplace][common_genes].values
-        #             targets_on_ad.loc[obs_slice, common_genes] = targets_df.iloc[:nplace][common_genes].values
-        #             n_matched_barcodes = nplace
-        #             method = 'best_effort_slice'
+        if n_matched_barcodes > 0:
+            preds_on_ad.loc[matched_barcodes, common_genes] = preds_df.loc[matched_barcodes, common_genes].values
+            targets_on_ad.loc[matched_barcodes, common_genes] = targets_df.loc[matched_barcodes, common_genes].values
+            method = 'match_by_obs_names'
+        else:
+            # try barcode-like column mapping
+            barcode_col = None
+            for c in ['barcode', 'barcodes', 'cell_barcode', 'cell_id', 'patch_barcode']:
+                if c in ad.obs.columns:
+                    barcode_col = c
+                    break
+            if barcode_col is not None:
+                mapping = {str(v): obs for v, obs in zip(ad.obs[barcode_col].astype(str).values, ad_obs_names)}
+                matched_by_col = [b for b in preds_df.index if b in mapping]
+                for b in matched_by_col:
+                    obsname = mapping[b]
+                    preds_on_ad.loc[obsname, common_genes] = preds_df.loc[b, common_genes].values
+                    targets_on_ad.loc[obsname, common_genes] = targets_df.loc[b, common_genes].values
+                n_matched_barcodes = len(matched_by_col)
+                method = f"match_by_obs['{barcode_col}']"
+            else:
+                if preds_df.shape[0] == ad.n_obs:
+                    preds_on_ad.loc[ad_obs_names, common_genes] = preds_df.loc[:, common_genes].values
+                    targets_on_ad.loc[ad_obs_names, common_genes] = targets_df.loc[:, common_genes].values
+                    n_matched_barcodes = ad.n_obs
+                    method = 'assign_by_order'
+                else:
+                    nplace = min(preds_df.shape[0], ad.n_obs)
+                    obs_slice = ad_obs_names[:nplace]
+                    preds_on_ad.loc[obs_slice, common_genes] = preds_df.iloc[:nplace][common_genes].values
+                    targets_on_ad.loc[obs_slice, common_genes] = targets_df.iloc[:nplace][common_genes].values
+                    n_matched_barcodes = nplace
+                    method = 'best_effort_slice'
 
         # convert to numpy float32 arrays and assign as layers
         pred_arr = preds_on_ad.values.astype(np.float32)
@@ -960,7 +960,7 @@ def remove_control_probes(adata, exclude_keywords=None, inplace=False):
 #     print(f"All AnnData objects saved under {save_dir}")
 
 
-def save_adata_from_list(adata_list, RUN_ROOT, RUN, existing_pred_samples=None, force_overwrite=False):
+def save_adata_from_list(adata_list, RUN_ROOT, RUN, existing_pred_samples=None, force_overwrite=True):
     """
     Save all AnnData objects in adata_list to the run directory.
     Each file saved as <sample_name>.h5ad under os.path.join(RUN_ROOT, 'ST_pred_results', RUN, 'pred').
@@ -1325,7 +1325,7 @@ def add_inference_to_adata_and_plot(
     dpi=100,
     cmap=None,
     verbose=True,
-    force_overwrite: bool = False
+    force_overwrite: bool = True
 ):
     """
     High-level wrapper that:
@@ -1372,40 +1372,14 @@ def add_inference_to_adata_and_plot(
             print("[info] force_overwrite=True -> existing pred h5ads WILL be overwritten and samples WILL be processed")
 
     # # --------------- 2) load adata_list for dataset ----------------
-    # data_dir = os.path.join(base_data_dir, dataset_name, 'adata')
-    # if verbose: print(f"[step] loading adata files from {data_dir}")
-    # adata_list = []
-    # sample_names = []
-    # for fname in os.listdir(data_dir):
-    #     if not fname.endswith(".h5ad"):
-    #         continue
-    #     sample = os.path.splitext(fname)[0]
-    #     fpath = os.path.join(data_dir, fname)
-    #     if verbose: print(f"  loading {fpath}")
-    #     adata = sc.read_h5ad(fpath)
-    #     # store sample name in .obs for later saving and matching
-    #     adata.obs['sample_id'] = sample
-    #     adata_list.append(adata)
-    #     sample_names.append(sample)
-
-    # --------------- 2) load adata_list for dataset, skipping pre-saved samples ----------------
     data_dir = os.path.join(base_data_dir, dataset_name, 'adata')
     if verbose: print(f"[step] loading adata files from {data_dir}")
     adata_list = []
     sample_names = []
-    skipped_preexisting = []
     for fname in os.listdir(data_dir):
         if not fname.endswith(".h5ad"):
             continue
         sample = os.path.splitext(fname)[0]
-        # apply same sanitisation used for saved pred filenames to compare
-        safe_sample = "".join(c if c.isalnum() or c in ('-', '_') else "_" for c in sample)
-        if safe_sample in existing_pred_samples:
-            skipped_preexisting.append(sample)
-            if verbose:
-                print(f"[SKIP LOAD] {sample}: h5ad already present in pred folder -> skipping processing for this sample")
-            continue
-
         fpath = os.path.join(data_dir, fname)
         if verbose: print(f"  loading {fpath}")
         adata = sc.read_h5ad(fpath)
@@ -1414,8 +1388,34 @@ def add_inference_to_adata_and_plot(
         adata_list.append(adata)
         sample_names.append(sample)
 
-    if verbose and skipped_preexisting:
-        print(f"[info] skipped {len(skipped_preexisting)} samples because pred h5ad already exists: {skipped_preexisting}")
+    # --------------- 2) load adata_list for dataset, skipping pre-saved samples ----------------
+    # data_dir = os.path.join(base_data_dir, dataset_name, 'adata')
+    # if verbose: print(f"[step] loading adata files from {data_dir}")
+    # adata_list = []
+    # sample_names = []
+    # skipped_preexisting = []
+    # for fname in os.listdir(data_dir):
+    #     if not fname.endswith(".h5ad"):
+    #         continue
+    #     sample = os.path.splitext(fname)[0]
+    #     # apply same sanitisation used for saved pred filenames to compare
+    #     safe_sample = "".join(c if c.isalnum() or c in ('-', '_') else "_" for c in sample)
+    #     if safe_sample in existing_pred_samples:
+    #         skipped_preexisting.append(sample)
+    #         if verbose:
+    #             print(f"[SKIP LOAD] {sample}: h5ad already present in pred folder -> skipping processing for this sample")
+    #         continue
+
+    #     fpath = os.path.join(data_dir, fname)
+    #     if verbose: print(f"  loading {fpath}")
+    #     adata = sc.read_h5ad(fpath)
+    #     # store sample name in .obs for later saving and matching
+    #     adata.obs['sample_id'] = sample
+    #     adata_list.append(adata)
+    #     sample_names.append(sample)
+
+    # if verbose and skipped_preexisting:
+    #     print(f"[info] skipped {len(skipped_preexisting)} samples because pred h5ad already exists: {skipped_preexisting}")
 
     # --------------- 3) attach patch barcodes to formatted_inference automatically -------------
     # extra sampple matching for broad splits (leave-one-patient-out CV)
