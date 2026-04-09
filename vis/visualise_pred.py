@@ -1509,7 +1509,7 @@ def add_inference_to_adata_and_plot(
     ]
 
     # --- Remove prediction metrics for per gene & per spot ---
-    results = compute_metrics(adata_list)
+    #results = compute_metrics(adata_list)
 
     # --------------- 5) save the adata list to RUN folder ----------------
     # if verbose: print("[step] saving adata_list to disk")

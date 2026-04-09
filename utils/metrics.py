@@ -92,7 +92,7 @@ def _auc_at_cutoff(pred, actual, cutoff):
 # ----------------------------
 # per-gene metrics (saved to adata.var)
 # ----------------------------
-def compute_metrics_per_gene(adata, pred_layer="pred", target_layer="target", auc_cutoffs=(0, 1, 2, 5, 7)):
+def compute_metrics_per_gene(adata, pred_layer="pred", target_layer="target", auc_cutoffs=(0, 1)):
     preds = np.asarray(adata.layers[pred_layer])
     trues = np.asarray(adata.layers[target_layer])
 
