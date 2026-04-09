@@ -7,6 +7,7 @@ import torch
 import os
 import warnings
 import torch.nn as nn
+from sklearn.preprocessing import StandardScaler
 
 os.environ["TQDM_DISABLE"] = "1" # silence training loop
 
@@ -246,6 +247,7 @@ def train_test_reg(X_train, X_test, y_train, y_test,
 
         import numpy as np
         from torch.utils.data import DataLoader, TensorDataset
+        from sklearn.preprocessing import StandardScaler
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

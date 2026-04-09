@@ -370,6 +370,134 @@ def save_all(
     out = plot_cell(st.adata, st.cell_adata, save_dir=save_dir, fname=plot_fname)
     return Path(out)
 
+from pathlib import Path
+from typing import Optional
+
+import matplotlib.pyplot as plt
+import numpy as np
+import scanpy as sc
+
+
+def plot_cell(
+    st_adata: sc.AnnData,
+    adata_labelled: sc.AnnData,
+    save_dir: Path | str,
+    fname: str = "cell_plot.png",
+    spot_color_key: str = "log1p_total_counts",
+    label_key: str = "cell_type",
+    title: Optional[str] = None,
+):
+    """
+    Overlay spatial spots (colored by `spot_color_key`) with labelled cells
+    (colored by `label_key`, e.g. 'cell_type' or 'niche').
+    """
+    save_dir = Path(save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
+    outpath = save_dir / fname
+
+    if "spatial" not in st_adata.obsm_keys():
+        raise KeyError("'spatial' not found in st_adata.obsm")
+    if "spatial" not in adata_labelled.obsm_keys():
+        raise KeyError("'spatial' not found in adata_labelled.obsm")
+    if spot_color_key not in st_adata.obs.columns:
+        raise KeyError(f"'{spot_color_key}' not found in st_adata.obs")
+    if label_key not in adata_labelled.obs.columns:
+        raise KeyError(f"'{label_key}' not found in adata_labelled.obs")
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+
+    # spots
+    sca = ax.scatter(
+        st_adata.obsm["spatial"][:, 0],
+        st_adata.obsm["spatial"][:, 1],
+        c=st_adata.obs[spot_color_key],
+        s=8,
+        alpha=0.6,
+        cmap="viridis",
+        label="spots",
+    )
+
+    # cells colored by requested label key
+    labels = adata_labelled.obs[label_key].astype("category")
+    categories = labels.cat.categories
+    colors = plt.cm.tab20(np.linspace(0, 1, len(categories)))
+
+    for color, cat in zip(colors, categories):
+        m = labels == cat
+        ax.scatter(
+            adata_labelled.obsm["spatial"][m, 0],
+            adata_labelled.obsm["spatial"][m, 1],
+            c=[color],
+            s=2,
+            alpha=0.6,
+            label=str(cat),
+        )
+
+    ax.invert_yaxis()
+    ax.set_title(title or f"Overlay: spots ({spot_color_key}) and cells ({label_key})")
+
+    # legend + colorbar
+    ax.legend(markerscale=4, bbox_to_anchor=(1.05, 1), loc="upper left")
+    fig.subplots_adjust(right=0.8)
+
+    cbar_ax = fig.add_axes([0.82, 0.1, 0.02, 0.35])
+    cbar = fig.colorbar(sca, cax=cbar_ax)
+    cbar.set_label(spot_color_key)
+
+    plt.tight_layout()
+    plt.savefig(outpath, dpi=300, bbox_inches="tight")
+    plt.show()
+    plt.close(fig)
+
+    return outpath
+
+
+def save_all(
+    st,
+    save_dir: Path | str,
+    pyramidal: bool = True,
+    plot_fname: str = "cell_plot.png",
+    spatial_name: str = "",
+    spatial_key: str = "total_counts",
+    cell_label_key: str = "cell_type",
+    plot_overlay: bool = True,
+    **pl_kwargs,
+) -> Path | None:
+    """
+    Save spatial plot, pyramid, and optional overlay figure to `save_dir`.
+
+    Args:
+        st: object with .adata and .save_spatial_plot method
+        save_dir: output directory
+        pyramidal: whether to save pyramidal data
+        plot_fname: filename for overlay plot
+        spatial_name: prefix for spatial plot filename
+        spatial_key: feature to plot in spatial plot
+        cell_label_key: which column in st.cell_adata.obs to color cells by
+                        (e.g. 'cell_type' or 'niche')
+        plot_overlay: whether to make the overlay plot
+        **pl_kwargs: additional keyword arguments for sc.pl.spatial
+    """
+    save_dir = Path(save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    # Delegate to st's own writers
+    st.save_spatial_plot(save_dir, name=spatial_name, key=spatial_key, pl_kwargs=pl_kwargs)
+    st.save(save_dir, pyramidal=pyramidal)
+
+    # Optional overlay, only if cell_adata exists
+    if plot_overlay and getattr(st, "cell_adata", None) is not None:
+        out = plot_cell(
+            st.adata,
+            st.cell_adata,
+            save_dir=save_dir,
+            fname=plot_fname,
+            label_key=cell_label_key,
+        )
+        return Path(out)
+
+    return None
+
 
 # ---------------- rule-based exclusions ----------------
 def _points_in_polygon(px, py, poly_x, poly_y):
