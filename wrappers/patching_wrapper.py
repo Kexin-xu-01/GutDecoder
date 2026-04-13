@@ -6,7 +6,6 @@ from matplotlib.patches import Rectangle
 from PIL import Image
 import dask
 
-
 import numpy as np
 import math
 
@@ -19,6 +18,7 @@ apply_qc_patch(fallback=5)
 import hest
 from hest.HESTData import read_HESTData
 from hest import iter_hest
+
 
 def load_hest_sample(sample_dir: Path):
     """
@@ -58,7 +58,6 @@ def load_hest_sample(sample_dir: Path):
         img=str(image_path),
         metrics_path=str(metrics_path),
         tissue_contours_path=str(tissue_contours_path)
-        # xenium_cell_path=str(cells_path) # no need
     )
     
     print(st)

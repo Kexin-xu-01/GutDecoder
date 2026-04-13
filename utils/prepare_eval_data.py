@@ -230,6 +230,29 @@ def write_var_k_genes_from_paths(
     var_out_path = out_dir / f"var_{k_actual}genes.json"
 
     # ---- Top-k variable/mean genes (now using k_actual)
+    # --- If no common gene, skip ---
+    if k_actual <= 0 or len(filtered_common_genes) == 0:
+        print(
+            f"[WARN] No common genes found after filtering. "
+            f"Skipping get_k_genes(). k_actual={k_actual}, filtered_common={len(filtered_common_genes)}"
+        )
+
+        var_k_genes = []
+        with open(var_out_path, "w") as f:
+            json.dump({"genes": []}, f)
+
+        if all_genes_out_path is None:
+            all_genes_out_path = out_dir / "all_genes.json"
+        with open(all_genes_out_path, "w") as f:
+            json.dump({"genes": all_common_genes}, f)
+
+        if filtered_common_out_path is None:
+            filtered_common_out_path = out_dir / f"common_genes_{min_cells_pct}.json"
+        with open(filtered_common_out_path, "w") as f:
+            json.dump({"genes": filtered_common_genes, "min_cells_pct": min_cells_pct}, f)
+
+        return var_k_genes, all_common_genes, filtered_common_genes, 0, str(var_out_path)
+
     var_k_genes = get_k_genes(
         adata_list,
         k_actual,
@@ -238,7 +261,6 @@ def write_var_k_genes_from_paths(
         min_cells_pct=min_cells_pct,
     )
 
-    # ---- Write other JSONs
     if all_genes_out_path is None:
         all_genes_out_path = out_dir / "all_genes.json"
     with open(all_genes_out_path, "w") as f:
@@ -249,19 +271,10 @@ def write_var_k_genes_from_paths(
     with open(filtered_common_out_path, "w") as f:
         json.dump({"genes": filtered_common_genes, "min_cells_pct": min_cells_pct}, f)
 
-    print(
-        f"[INFO] Wrote {var_out_path} (top-{k_actual}, criteria={criteria}); "
-        f"{all_genes_out_path} (all_common={len(all_common_genes)}); "
-        f"{filtered_common_out_path} (filtered_common={len(filtered_common_genes)}, "
-        f"min_cells_pct={min_cells_pct})"
-    )
-
-    # return the gene lists and the actual k + path used
     return var_k_genes, all_common_genes, filtered_common_genes, k_actual, str(var_out_path)
 
 
 # ---------- main entry ----------
-
 def create_benchmark_data_multislide(
     save_dir: str | Path,
     K: int | str,
@@ -272,158 +285,7 @@ def create_benchmark_data_multislide(
     gene_k: Union[int, str] = 50,
     gene_criteria: str = "var",
     min_cells_pct: float = 0.10,
-    metadata_csv: str = "/project/simmons_hts/kxu/hest/hest_directory.csv",
-    symlink: bool = False,
-    seed: int = 0
-):
-    """
-    Build a HEST benchmark package from both slide1 and slide2 under the XeniumPR1_segger tree
-    (or any set of slide subfolders you pass), without relying on a prebuilt metadata DF.
-
-    Expected layout:
-        <base_root>/slide1/<sample_id>/...
-        <base_root>/slide2/<sample_id>/...
-
-    Output tree:
-      <save_dir>/
-        var_50genes.json
-        splits/...
-        patches/<id>.h5
-        patches/vis/<id>.png
-        adata/<id>.h5ad
-
-    Args:
-        save_dir: destination directory for the assembled benchmark package
-        K: number of folds for HEST's create_splits
-        base_root: base directory containing slide subfolders
-        slide_subdirs: which slide folders to include (defaults to ["slide1", "slide2"])
-        ids: optional list of sample IDs to include (if None, auto-discovers)
-        gene_k: number of variable genes to select
-        gene_criteria: criteria for get_k_genes (e.g., "var")
-        symlink: if True, symlink files instead of copying
-        seed: RNG seed used to deterministically shuffle within groups before splitting
-    """
-    
-    from hest.HESTData import create_splits
-
-    save_dir = Path(save_dir)
-    save_dir.mkdir(parents=True, exist_ok=True)
-
-    # 1) Build slide roots list and discover samples across them
-    base_root = Path(base_root)
-    roots = [base_root / sd for sd in slide_subdirs]
-    print(f"[INFO] Using slide roots: {roots}")
-
-    samples = _discover_samples_from_roots(roots, prefix = prefix, ids=ids)
-    if not samples:
-        raise ValueError(
-            f"No valid samples (with aligned_adata.h5ad) found under any of: {roots}."
-        )
-    discovered_ids = sorted(samples.keys())
-    print(f"[INFO] Discovered {len(discovered_ids)} samples: {discovered_ids}")
-
-    # 2) Minimal metadata DF for splitting (patient from prefix; dataset_title from base folder name)
-    # Load metadata CSV mapping sample_id -> patient_id
-    patient_map = {}
-    meta_df_csv = None
-    if Path(metadata_csv).exists():
-        metadata_csv = pd.read_csv(metadata_csv, dtype=str)
-        meta = pd.DataFrame()
-        meta["dataset_title"] = base_root.name or "xenium"
-        if {"sample_id", "patient_id"}.issubset(meta_df_csv.columns):
-            meta["id"] = meta_df_csv["sample_id"].astype(str).str.strip()
-            meta["patient"] = meta_df_csv["patient_id"].astype(str).str.strip()
-            patient_map = dict(zip(meta_df_csv["sample_id"], meta_df_csv["patient_id"]))
-            print(f"[INFO] Loaded {len(patient_map)} entries from {metadata_csv}")
-        else:
-            print(f"[WARN] metadata_csv missing columns 'sample_id'/'patient_id'; will fallback to automatic patient inference")
-    else:
-        print(f"[WARN] metadata_csv not found: {metadata_csv}; will fallback to automatic patient inference")
-
-
-    # dataset_title = base_root.name or "xenium"
-    # meta = pd.DataFrame(
-    #     {
-    #         "id": discovered_ids,
-    #         "patient": [_infer_patient(s) for s in discovered_ids],
-    #         "dataset_title": [dataset_title] * len(discovered_ids),
-    #     }
-    # )
-
-
-    # 3) Compute var_k genes → var_{k}genes.json
-    adata_paths = [samples[sid]["adata"] for sid in discovered_ids]
-
-    # pass a provisional path; function will choose the final filename and return it
-    provisional_var_json = save_dir / ("var_auto_genes.json" if isinstance(gene_k, str) and gene_k.lower() == "auto" else f"var_{gene_k}genes.json")
-
-    # now call helper and capture the actual k and path returned
-    var_k_genes, all_common_genes, filtered_common_genes, k_actual, var_out_path = write_var_k_genes_from_paths(
-        adata_paths,
-        gene_k,
-        gene_criteria,
-        min_cells_pct,
-        provisional_var_json,
-    )
-
-    print(f"[INFO] Wrote {var_out_path} (top-{k_actual}, criteria={gene_criteria})")
-
-
-    # 4) K-fold splits using HEST's create_splits
-    #    Group by (dataset_title, patient)
-    # --- handle LOOCV (leave-one-(dataset_title,patient)-out) ---
-    if isinstance(K, str) and K.lower() == "loocv":
-        # number of (dataset_title, patient) groups — exactly matches `group` below
-        K = meta.groupby(["dataset_title", "patient"]).ngroups
-        print(f"[INFO] Using leave-one-patient-per-dataset CV: K = {K}")
-
-    group = meta.groupby(["dataset_title", "patient"])["id"].agg(list).to_dict()
-
-    # Deterministic shuffle within each group
-    rng = np.random.RandomState(seed)
-    for key, id_list in group.items():
-        rng.shuffle(id_list)
-
-    splits_dir = save_dir / "splits"
-    splits_dir.mkdir(parents=True, exist_ok=True)
-    create_splits(str(splits_dir), group, K=K)
-    print(f"[INFO] Wrote {K}-fold splits to {splits_dir}")
-
-    # 5) Copy/symlink assets
-    (save_dir / "patches").mkdir(exist_ok=True, parents=True)
-    (save_dir / "patches" / "vis").mkdir(exist_ok=True, parents=True)
-    (save_dir / "adata").mkdir(exist_ok=True, parents=True)
-
-    missing: List[tuple] = []
-    for sid in discovered_ids:
-        info = samples[sid]
-        _transfer(info.get("patch"), save_dir / "patches" / f"{sid}.h5", "patch", symlink, missing)
-        _transfer(info.get("vis"), save_dir / "patches" / "vis" / f"{sid}.png", "vis", symlink, missing)
-        _transfer(info.get("adata"), save_dir / "adata" / f"{sid}.h5ad", "adata", symlink, missing)
-
-    if missing:
-        print("[WARN] Missing files:")
-        for sid, lbl, path in missing:
-            print(f"  - {sid} [{lbl}] → {path}")
-
-    print(f"✅ Benchmark dataset created at {save_dir}")
-
-from pathlib import Path
-from typing import List, Union, Optional
-import numpy as np
-import pandas as pd
-
-def create_benchmark_data_multislide(
-    save_dir: str | Path,
-    K: int | str,
-    prefix: str,
-    base_root: str | Path,
-    slide_subdirs: List[str] | tuple = ("slide1", "slide2"),
-    ids: Optional[List[str]] = None,
-    gene_k: Union[int, str] = 50,
-    gene_criteria: str = "var",
-    min_cells_pct: float = 0.10,
-    metadata_csv: str = "/project/simmons_hts/kxu/hest/hest_directory.csv",
+    metadata_csv: str = "/project/gutdecoder/kxu/hest/hest_directory.csv",
     symlink: bool = False,
     seed: int = 0,
     exclude_ids: Optional[List[str]] = None
@@ -647,7 +509,7 @@ def create_benchmark_data_multirun(
     min_cells_pct: float = 0.10,
     symlink: bool = False,
     seed: int = 0,
-    metadata_csv: str = "/project/simmons_hts/kxu/hest/hest_directory.csv",
+    metadata_csv: str = "/project/gutdecoder/kxu/hest/hest_directory.csv",
     exclude_ids: Optional[List[str]] = None
 ):
     """
@@ -871,8 +733,6 @@ def create_benchmark_data_multirun(
     return meta
 
 
-
-
 def create_benchmark_data_multirun_ex_val(
     save_dir: str | Path,
     K: int | str,
@@ -882,7 +742,7 @@ def create_benchmark_data_multirun_ex_val(
     min_cells_pct: float = 0.10,
     symlink: bool = False,
     seed: int = 0,
-    metadata_csv: str = "/project/simmons_hts/kxu/hest/hest_directory.csv",
+    metadata_csv: str = "/project/gutdecoder/kxu/hest/hest_directory.csv",
     exclude_ids: Optional[List[str]] = None,
     # NEW: map condition name -> list of PR integers (e.g. {"PR123":[1,2,3], "PR45":[4,5]})
     condition_map: Optional[Dict[str, List[int]]] = None,
