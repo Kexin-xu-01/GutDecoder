@@ -285,7 +285,7 @@ def create_benchmark_data_multislide(
     gene_k: Union[int, str] = 50,
     gene_criteria: str = "var",
     min_cells_pct: float = 0.10,
-    metadata_csv: str = "/project/gutdecoder/kxu/hest/hest_directory.csv",
+    metadata_csv: str = "/project/gutdecoder/kxu/hest/metadata/hest_directory.csv",
     symlink: bool = False,
     seed: int = 0,
     exclude_ids: Optional[List[str]] = None
@@ -509,7 +509,7 @@ def create_benchmark_data_multirun(
     min_cells_pct: float = 0.10,
     symlink: bool = False,
     seed: int = 0,
-    metadata_csv: str = "/project/gutdecoder/kxu/hest/hest_directory.csv",
+    metadata_csv: str = "/project/gutdecoder/kxu/hest/metadata/hest_directory.csv",
     exclude_ids: Optional[List[str]] = None
 ):
     """
@@ -697,7 +697,7 @@ def create_benchmark_data_multirun(
     meta = pd.DataFrame({"id": discovered_ids, "patient": patient_ids, "dataset_title": ["XeniumPR"] * len(discovered_ids)})
 
     print(f"[INFO] Built metadata: {len(meta)} samples, {meta['patient'].nunique()} unique patients.")
-    print(meta.head(20).to_string(index=False))
+    print(meta.to_string(index=False))
 
     # write var_k genes (requires adata files to be present in save_dir or accessible)
     adata_paths = [adata_out / f"{sid}.h5ad" for sid in discovered_ids]
@@ -742,7 +742,7 @@ def create_benchmark_data_multirun_ex_val(
     min_cells_pct: float = 0.10,
     symlink: bool = False,
     seed: int = 0,
-    metadata_csv: str = "/project/gutdecoder/kxu/hest/hest_directory.csv",
+    metadata_csv: str = "/project/gutdecoder/kxu/hest/metadata/hest_directory.csv",
     exclude_ids: Optional[List[str]] = None,
     # NEW: map condition name -> list of PR integers (e.g. {"PR123":[1,2,3], "PR45":[4,5]})
     condition_map: Optional[Dict[str, List[int]]] = None,
@@ -935,13 +935,12 @@ def create_benchmark_data_multirun_ex_val(
 
     # If no condition_map provided, set sensible default groups by PR number ranges
     if condition_map is None:
-        # default grouping: PR1-3, PR4-5, PR6-9 (matches your example)
         condition_map = {
-            "PR1-3": [1, 2, 3],
-            "PR4-5": [4, 5],
-            "PR6-9": [6, 7, 8, 9],
+            "IBD": [1, 2, 3],
+            "Coeliac": [4, 5],
+            "NEC": [6, 7, 8, 9, 10],
         }
-        print("[INFO] No condition_map provided; using default PR groups: PR1-3, PR4-5, PR6-9")
+        print("[INFO] No condition_map provided; using default PR groups: PR1-3, PR4-5, PR6-10")
 
     # Create reverse lookup from PR int -> condition name
     pr_to_condition = {}
@@ -982,7 +981,7 @@ def create_benchmark_data_multirun_ex_val(
     if unassigned_samples:
         print(f"[WARN] {len(unassigned_samples)} samples could not be assigned to any condition: {unassigned_samples[:20]}")
 
-    print(meta.head(20).to_string(index=False))
+    print(meta.to_string(index=False))
 
     # write var_k genes (requires adata files to be present in save_dir or accessible)
     adata_paths = [adata_out / f"{sid}.h5ad" for sid in discovered_ids]
