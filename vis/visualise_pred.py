@@ -20,8 +20,8 @@ from gutdecoder.vis.plot import *
 from gutdecoder.utils.metrics import compute_metrics
 
 
-RUN_ROOT = "/project/simmons_hts/kxu/hest/eval/ST_pred_results"
-DATA_ROOT = "/project/simmons_hts/kxu/hest/eval/data/"
+RUN_ROOT = "/project/gutdecoder/kxu/hest/eval/ST_pred_results"
+DATA_ROOT = "/project/gutdecoder/kxu/hest/eval/data/"
 
 
 def load_best_model_inference(run, root_dir=RUN_ROOT):
@@ -303,6 +303,7 @@ def _clean_barcode_raw(x):
 
 def read_patch_meta_from_h5(h5_path, barcode_ds='barcode', coords_ds='coords', verbose=True):
     """Read barcodes + coords from one patches.h5 file and return a cleaned DataFrame."""
+    print(f"[DEBUG] Opening H5 file: {h5_path}")
     with h5py.File(h5_path, "r") as f:
         raw_barcodes = f[barcode_ds][:]
         coords = f[coords_ds][:]
@@ -334,7 +335,7 @@ def expand_split_keys_to_samples(
     formatted_inference: Dict[str, Dict],
     df_test_splits: pd.DataFrame,
     dataset_name: str,
-    base_dir: str = "/project/simmons_hts/kxu/hest/eval/data",
+    base_dir: str = "/project/gutdecoder/kxu/hest/eval/data",
     patches_subdir: str = "patches",
     barcode_ds: str = 'barcode',
     verbose: bool = True
@@ -523,7 +524,7 @@ def expand_split_keys_to_samples(
 def attach_barcodes_to_formatted_inference_auto(
     formatted_inference,
     dataset_name,
-    base_dir="/project/simmons_hts/kxu/hest/eval/data",
+    base_dir="/project/gutdecoder/kxu/hest/eval/data",
     subdir="patches",
     barcode_ds='barcode',
     coords_ds='coords',
@@ -1313,7 +1314,7 @@ def add_inference_to_adata_and_plot(
     RUN_ROOT,
     dataset_name=None,
     gene_lists_to_plot=None,        # dict name-> (dataset, gene_list_name) or list of gene lists
-    base_data_dir="/project/simmons_hts/kxu/hest/eval/data",
+    base_data_dir="/project/gutdecoder/kxu/hest/eval/data",
     patches_subdir="patches",
     adata_subdir_template="{}" ,    # for data dir if you build differently; default expects base_dir/dataset_name/adata
     plot_folder_root='plots/pred',
