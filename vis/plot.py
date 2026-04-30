@@ -21,10 +21,10 @@ CLI
 ---
 python plot.py \
   --run run_25-09-05-16-12-17 \
-  --runs-root /project/simmons_hts/kxu/hest/eval/runs \
-  --splits-root /project/simmons_hts/kxu/hest/eval/data \
-  --curated-xlsx /project/simmons_hts/kxu/hest/curated_gene_list.xlsx \
-  --extra-metadata /project/simmons_hts/kxu/hest/hest_directory.csv \
+  --runs-root /project/gutdecoder/kxu/hest/eval/runs \
+  --splits-root /project/gutdecoder/kxu/hest/eval/data \
+  --curated-xlsx /project/gutdecoder/kxu/hest/curated_gene_list.xlsx \
+  --extra-metadata /project/gutdecoder/kxu/hest/hest_directory.csv \
   --out plots/ --top-n 30 --show
 """
 
@@ -62,12 +62,12 @@ from matplotlib.backends.backend_pdf import PdfPages
 # Defaults / constants
 # -----------------------
 
-DEFAULT_RUNS_ROOT = "/project/simmons_hts/kxu/hest/eval/ST_pred_results"
-DEFAULT_SPLITS_ROOT = "/project/simmons_hts/kxu/hest/eval/data"
-DEFAULT_CURATED_XLSX = "/project/simmons_hts/kxu/hest/curated_gene_list.xlsx"
-DEFAULT_EXTRA_METADATA = "/project/simmons_hts/kxu/hest/hest_directory.csv"
-DEFAULT_BROAD_METADATA = "/project/simmons_hts/kxu/hest/broad_directory.csv"
-DEFAULT_SUMMARY_PLOT_DIR = "/project/simmons_hts/kxu/hest/eval/summary_plots"
+DEFAULT_RUNS_ROOT = "/project/gutdecoder/kxu/hest/eval/ST_pred_results"
+DEFAULT_SPLITS_ROOT = "/project/gutdecoder/kxu/hest/eval/data"
+DEFAULT_CURATED_XLSX = "/project/gutdecoder/kxu/hest/curated_gene_list.xlsx"
+DEFAULT_EXTRA_METADATA = "/project/gutdecoder/kxu/hest/hest_directory.csv"
+DEFAULT_BROAD_METADATA = "/project/gutdecoder/kxu/hest/broad_directory.csv"
+DEFAULT_SUMMARY_PLOT_DIR = "/project/gutdecoder/kxu/hest/eval/summary_plots"
 
 # -----------------------
 # Core IO
@@ -107,8 +107,8 @@ def _sample_cmap(cmap_name: str, n: int):
 
 def add_num_training_patches_mean(
     df_summary: pd.DataFrame,
-    xenium_csv: str = "/project/simmons_hts/kxu/hest/hest_directory.csv",
-    broad_csv: str = "/project/simmons_hts/kxu/hest/broad_directory.csv",
+    xenium_csv: str = "/project/gutdecoder/kxu/hest/hest_directory.csv",
+    broad_csv: str = "/project/gutdecoder/kxu/hest/broad_directory.csv",
 ) -> pd.DataFrame:
     """
     Add a column 'num_training_patches_mean' to df_summary based on dataset rules,
@@ -463,31 +463,6 @@ def plot_summary_bar(best_df: pd.DataFrame,
         display(fig)
 
     return fig
-
-
-def _safe_filename(s: str) -> str:
-    """Make a string safe for filenames."""
-    s = str(s)
-    s = re.sub(r"[^\w\-_\. ]", "_", s)
-    s = re.sub(r"\s+", "_", s)
-    return s.strip("_")
-
-def _default_outdir(outdir):
-    if outdir is None:
-        return Path(".")
-    return Path(outdir)
-
-def _assemble_color_map(keys):
-    """Return color map dict for given keys combining tab20/tab20b/tab20c."""
-    cmap_tab20  = list(plt.get_cmap("tab20").colors)
-    cmap_tab20b = list(plt.get_cmap("tab20b").colors)
-    cmap_tab20c = list(plt.get_cmap("tab20c").colors)
-    combined = cmap_tab20 + cmap_tab20b + cmap_tab20c
-    if len(keys) > len(combined):
-        # repeat if needed
-        repeats = int(np.ceil(len(keys) / len(combined)))
-        combined = combined * repeats
-    return {k: combined[i] for i, k in enumerate(keys)}
 
 
 def _safe_filename(s: str) -> str:
@@ -1014,7 +989,7 @@ def extract_best_model_gene_corrs(run: str,
 # -----------------------
 
 
-def annotate_genes_with_curated(df_genes: pd.DataFrame, path_meta = "/project/simmons_hts/kxu/hest/curated_gene_list.xlsx", case_insensitive: bool = True) -> pd.DataFrame:
+def annotate_genes_with_curated(df_genes: pd.DataFrame, path_meta = "/project/gutdecoder/kxu/hest/curated_gene_list.xlsx", case_insensitive: bool = True) -> pd.DataFrame:
     """
     Minimal annotation:
       - panel: '480' if gene in '480 panel full list', else <NA>
@@ -1270,8 +1245,6 @@ def compare_models(
     if gene_count is not None:
         title += f" ({gene_count} genes)"
     ax.set_title(title)
-
-    fig.tight_layout()
 
     if show:
         display(fig)
@@ -1949,74 +1922,6 @@ def plot_all_samples_grid_for_dataset(
 
     df_all = pd.DataFrame(rows).convert_dtypes()
 
-    # 4) Build grid of small plots: one subplot per sample
-    # n_samples = df_all["sample"].nunique()
-    # samples_order = sorted(df_all["sample"].unique().tolist())
-    # ncols = max(1, int(ncols))
-    # nrows = int(math.ceil(n_samples / ncols))
-
-    # sub_w, sub_h = figsize_per_subplot
-    # fig = plt.figure(figsize=(ncols * sub_w, nrows * sub_h))
-    # gs = fig.add_gridspec(nrows, ncols, hspace=0.45, wspace=0.4)
-
-    # # create color map for datasets seen across all runs
-    # datasets_all = sorted(df_all["dataset"].fillna("Unknown").unique().tolist())
-    # color_map = _assemble_color_map(datasets_all)
-
-    # for idx, sample in enumerate(samples_order):
-    #     r = idx // ncols
-    #     c = idx % ncols
-    #     ax = fig.add_subplot(gs[r, c])
-
-    #     df_s = df_all[df_all["sample"] == sample].sort_values("mean_pearson", ascending=False)
-    #     if df_s.empty:
-    #         ax.axis("off")
-    #         continue
-
-    #     x = range(len(df_s))
-    #     means = df_s["mean_pearson"].astype(float).to_numpy()
-    #     errs = df_s["std_pearson"].astype(float).fillna(0.0).to_numpy()
-    #     labels = [f"{_safe_filename(str(gl))} | {_safe_filename(str(ds))}" for gl, ds in zip(df_s["gene_list"], df_s["dataset"])]
-    #     colors = [color_map.get(ds, (0.5,0.5,0.5)) for ds in df_s["dataset"]]
-
-    #     bars = ax.bar(x, means, yerr=errs, color=colors, capsize=3, edgecolor="black", linewidth=0.4)
-    #     # annotate n_genes small above each bar
-    #     for bar, ng in zip(bars, df_s["n_genes"]):
-    #         ax.annotate(str(ng), xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
-    #                     xytext=(0, 3), textcoords="offset points", ha="center", va="bottom", fontsize=6)
-
-    #     ax.set_xticks(x)
-    #     # shorten xtick labels if too long
-    #     short_labels = []
-    #     for L in labels:
-    #         if len(L) > 20:
-    #             short_labels.append(L[:20] + "…")
-    #         else:
-    #             short_labels.append(L)
-    #     ax.set_xticklabels(short_labels, rotation=45, ha="right", fontsize=7)
-    #     ax.set_ylim(bottom=min(0.0, float(df_s["mean_pearson"].min()) - 0.05))
-    #     ax.set_title(sample, fontsize=8)
-    #     ax.tick_params(axis='y', labelsize=7)
-    #     ax.set_ylabel("Mean Pearson", fontsize=7)
-
-    # # Remove empty subplots if any
-    # total_plots = nrows * ncols
-    # for idx in range(n_samples, total_plots):
-    #     r = idx // ncols
-    #     c = idx % ncols
-    #     ax = fig.add_subplot(gs[r, c])
-    #     ax.axis("off")
-
-    # # Legend for datasets placed outside
-    # handles = [plt.Rectangle((0, 0), 1, 1, facecolor=color_map[ds],edgecolor="black") for ds in datasets_all]
-    # fig.legend(handles, datasets_all, title="Dataset", bbox_to_anchor=(1.02, 0.95), loc="upper left", fontsize=8)
-
-    # fig.tight_layout(rect=[0, 0, 0.88, 1.0])  # leave space for legend at right
-
-    # -------------------------------------------------------
-    # 4) Build paginated grid: max 6 subplots per page
-    # -------------------------------------------------------
-
     samples_order = sorted(df_all["sample"].unique().tolist())
     plots_per_page = 6
     ncols = 3
@@ -2091,15 +1996,6 @@ def plot_all_samples_grid_for_dataset(
             plt.close(fig)
 
     print(f"Saved multi-page grid to: {pdf_path}")
-
-    # # 5) Save combined image
-    # out_path = outdir / f"{_safe_filename(str(label_name))}_samples_grid.png"
-    # fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
-    # if show:
-    #     display(fig)
-    # plt.close(fig)
-
-    # return {label_name: out_path}, df_all
 
 
 def plot_dataset_mean_across_runs(

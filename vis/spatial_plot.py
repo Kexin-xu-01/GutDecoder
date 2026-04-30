@@ -8,7 +8,7 @@ This file contains two primary operations you will use in sequence:
    - Run this **per run / per dataset folder** to create a PDF of images inside that
      dataset directory.
    - Example: for a Xenium run folder `XeniumPR1` run:
-         generate_plot_per_run(base_root="/project/simmons_hts/kxu/hest/xenium_data",
+         generate_plot_per_run(base_root="/project/gutdecoder/kxu/hest/xenium_data",
                                datasets=["XeniumPR1"],
                                match="spatial_plots")         # exact filename spatial_plots.png
      or
@@ -26,9 +26,9 @@ This file contains two primary operations you will use in sequence:
    - After you have generated PDFs for multiple runs, use this to combine them into one
      consolidated PDF (with a title page per run).
    - Example:
-         combine_pdfs(root_dir="/project/simmons_hts/kxu/hest/xenium_data",
+         combine_pdfs(root_dir="/project/gutdecoder/kxu/hest/xenium_data",
                       folder_names=["XeniumPR1","XeniumPR2","XeniumR1"],
-                      output_filename="/project/simmons_hts/kxu/hest/all_spatial_plots.pdf",
+                      output_filename="/project/gutdecoder/kxu/hest/all_spatial_plots.pdf",
                       pdf_name="spatial_plots.pdf")
    - Notes:
        - `pdf_name` should match the filenames created by generate_plot_per_run (e.g. "patch_vis.pdf").
@@ -163,7 +163,7 @@ def generate_plot_per_run(
     cols: int = 4,
     max_show: int | None = None,
     thumb_size: tuple = (800, 800),
-    metadata_path: Path | None = Path("/project/simmons_hts/kxu/hest/xenium_directory.xlsx"),
+    metadata_path: Path | None = Path("/project/gutdecoder/kxu/hest/metadata/xenium_directory.xlsx"),
     match: str = "spatial_plots",    # "spatial_plots", "patch_vis", or any glob pattern
     out_filename: str | None = None, # if None, will be inferred from `match`
     overwrite: bool = False,
