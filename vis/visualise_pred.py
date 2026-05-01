@@ -127,40 +127,40 @@ def load_gene_list(dataset_name, gene_list_name, eval_data_dir=DATA_ROOT):
     print(f"Loaded {gene_list_name} for dataset '{dataset_name}'")
     return data
 
-def format_inference_with_genes(inference_dumps, gene_list):
-    """
-    Attach gene names as column labels for predictions and targets.
+# def format_inference_with_genes(inference_dumps, gene_list):
+#     """
+#     Attach gene names as column labels for predictions and targets.
 
-    Args:
-        inference_dumps (dict): Mapping split_name -> inference data (with 'preds_all' and 'targets_all').
-        gene_list (list): List of gene names.
+#     Args:
+#         inference_dumps (dict): Mapping split_name -> inference data (with 'preds_all' and 'targets_all').
+#         gene_list (list): List of gene names.
 
-    Returns:
-        dict: Mapping split_name -> dict with DataFrames:
-              {'preds': DataFrame, 'targets': DataFrame}
-    """
-    formatted_inference = {}
+#     Returns:
+#         dict: Mapping split_name -> dict with DataFrames:
+#               {'preds': DataFrame, 'targets': DataFrame}
+#     """
+#     formatted_inference = {}
 
-    for split_name, dump in inference_dumps.items():
-        preds = dump["preds_all"]
-        targets = dump["targets_all"]
+#     for split_name, dump in inference_dumps.items():
+#         preds = dump["preds_all"]
+#         targets = dump["targets_all"]
 
-        if preds.shape[1] != len(gene_list):
-            raise ValueError(
-                f"Number of genes ({len(gene_list)}) does not match number of prediction columns ({preds.shape[1]})"
-            )
+#         if preds.shape[1] != len(gene_list):
+#             raise ValueError(
+#                 f"Number of genes ({len(gene_list)}) does not match number of prediction columns ({preds.shape[1]})"
+#             )
 
-        preds_df = pd.DataFrame(preds, columns=gene_list)
-        targets_df = pd.DataFrame(targets, columns=gene_list)
+#         preds_df = pd.DataFrame(preds, columns=gene_list)
+#         targets_df = pd.DataFrame(targets, columns=gene_list)
 
-        formatted_inference[split_name] = {
-            "preds": preds_df,
-            "targets": targets_df
-        }
+#         formatted_inference[split_name] = {
+#             "preds": preds_df,
+#             "targets": targets_df
+#         }
 
-        print(f"{split_name}: preds shape {preds_df.shape}, targets shape {targets_df.shape}")
+#         print(f"{split_name}: preds shape {preds_df.shape}, targets shape {targets_df.shape}")
 
-    return formatted_inference
+#     return formatted_inference
 
 def plot_split_distributions(formatted_inference, plot_type="box", colors=None, figsize=(10,6), max_points=20000, showfliers=False):
     """
@@ -331,262 +331,208 @@ def _count_patches_in_tile_h5(tile_h5_path: str, barcode_ds: str = 'barcode') ->
             raise KeyError(f"Dataset '{barcode_ds}' not found in {tile_h5_path}. Keys: {list(f.keys())}")
         return int(len(f[barcode_ds]))
 
-def expand_split_keys_to_samples(
-    formatted_inference: Dict[str, Dict],
-    df_test_splits: pd.DataFrame,
-    dataset_name: str,
-    base_dir: str = "/project/gutdecoder/kxu/hest/eval/data",
-    patches_subdir: str = "patches",
-    barcode_ds: str = 'barcode',
-    verbose: bool = True
-) -> Dict[str, Dict]:
-    """
-    Replace keys in formatted_inference that look like 'splitN' with per-sample keys.
-    For each splitN:
-      - get list of test samples from df_test_splits[df_test_splits['split']==N]['test_sample']
-      - read patch h5 for each sample to determine #patches
-      - split formatted_inference['splitN']['preds'] and ['targets'] row-wise in the same order
-        using those counts and assign new keys formatted_inference[sample_name] = {...}
-    Returns a new dict (does not mutate input in-place).
-    """
-    out = {}
-    # make quick mapping from split -> list of samples (preserve df order)
-    split_to_samples = {}
-    for s, group in df_test_splits.groupby('split'):
-        split_to_samples[int(s)] = list(group['test_sample'].astype(str).tolist())
+# def expand_split_keys_to_samples(
+#     formatted_inference: Dict[str, Dict],
+#     df_test_splits: pd.DataFrame,
+#     dataset_name: str,
+#     base_dir: str = "/project/gutdecoder/kxu/hest/eval/data",
+#     patches_subdir: str = "patches",
+#     barcode_ds: str = 'barcode',
+#     verbose: bool = True
+# ) -> Dict[str, Dict]:
+#     """
+#     Replace keys in formatted_inference that look like 'splitN' with per-sample keys.
+#     For each splitN:
+#       - get list of test samples from df_test_splits[df_test_splits['split']==N]['test_sample']
+#       - read patch h5 for each sample to determine #patches
+#       - split formatted_inference['splitN']['preds'] and ['targets'] row-wise in the same order
+#         using those counts and assign new keys formatted_inference[sample_name] = {...}
+#     Returns a new dict (does not mutate input in-place).
+#     """
+#     out = {}
+#     # make quick mapping from split -> list of samples (preserve df order)
+#     split_to_samples = {}
+#     for s, group in df_test_splits.groupby('split'):
+#         split_to_samples[int(s)] = list(group['test_sample'].astype(str).tolist())
 
-    patch_dir = os.path.join(base_dir, dataset_name, patches_subdir)
-    if verbose:
-        print(f"[info] using patch_dir = {patch_dir}")
+#     patch_dir = os.path.join(base_dir, dataset_name, patches_subdir)
+#     if verbose:
+#         print(f"[info] using patch_dir = {patch_dir}")
 
-    for key, entry in formatted_inference.items():
-        # keep non-split keys intact
-        if not (isinstance(key, str) and key.lower().startswith('split')):
-            out[key] = entry
-            continue
+#     for key, entry in formatted_inference.items():
+#         # keep non-split keys intact
+#         if not (isinstance(key, str) and key.lower().startswith('split')):
+#             out[key] = entry
+#             continue
 
-        # parse split number
-        try:
-            split_num = int(key.replace('split', '').strip())
-        except Exception:
-            if verbose:
-                print(f"[warn] cannot parse split number from key '{key}', keeping as-is")
-            out[key] = entry
-            continue
+#         # parse split number
+#         try:
+#             split_num = int(key.replace('split', '').strip())
+#         except Exception:
+#             if verbose:
+#                 print(f"[warn] cannot parse split number from key '{key}', keeping as-is")
+#             out[key] = entry
+#             continue
 
-        samples = split_to_samples.get(split_num, [])
-        if len(samples) <= 1:
-            # no splitting necessary; rename to sample if exactly 1
-            if len(samples) == 1:
-                new_key = samples[0]
-                if verbose:
-                    print(f"[info] renaming {key} -> {new_key}")
-                out[new_key] = entry
-            else:
-                # no mapping found for split -> keep key as-is
-                if verbose:
-                    print(f"[warn] no test samples found for split {split_num}; keeping key '{key}' unchanged")
-                out[key] = entry
-            continue
+#         samples = split_to_samples.get(split_num, [])
+#         if len(samples) <= 1:
+#             # no splitting necessary; rename to sample if exactly 1
+#             if len(samples) == 1:
+#                 new_key = samples[0]
+#                 if verbose:
+#                     print(f"[info] renaming {key} -> {new_key}")
+#                 out[new_key] = entry
+#             else:
+#                 # no mapping found for split -> keep key as-is
+#                 if verbose:
+#                     print(f"[warn] no test samples found for split {split_num}; keeping key '{key}' unchanged")
+#                 out[key] = entry
+#             continue
 
-        # multi-sample split: fetch per-sample patch counts
-        sample_patch_counts = []
-        missing = []
-        for sname in samples:
-            tile_path = os.path.join(patch_dir, f"{sname}.h5")
-            if not os.path.isfile(tile_path):
-                missing.append(sname)
-                sample_patch_counts.append(None)
-            else:
-                try:
-                    cnt = _count_patches_in_tile_h5(tile_path, barcode_ds=barcode_ds)
-                    sample_patch_counts.append(int(cnt))
-                except Exception as e:
-                    if verbose:
-                        print(f"[warn] failed to read {tile_path}: {e}")
-                    sample_patch_counts.append(None)
-                    missing.append(sname)
+#         # multi-sample split: fetch per-sample patch counts
+#         sample_patch_counts = []
+#         missing = []
+#         for sname in samples:
+#             tile_path = os.path.join(patch_dir, f"{sname}.h5")
+#             if not os.path.isfile(tile_path):
+#                 missing.append(sname)
+#                 sample_patch_counts.append(None)
+#             else:
+#                 try:
+#                     cnt = _count_patches_in_tile_h5(tile_path, barcode_ds=barcode_ds)
+#                     sample_patch_counts.append(int(cnt))
+#                 except Exception as e:
+#                     if verbose:
+#                         print(f"[warn] failed to read {tile_path}: {e}")
+#                     sample_patch_counts.append(None)
+#                     missing.append(sname)
 
-        preds_df = entry.get('preds')
-        targets_df = entry.get('targets')
-        if preds_df is None or targets_df is None:
-            if verbose:
-                print(f"[warn] split {split_num} missing preds/targets; copying as-is under key '{key}'")
-            out[key] = entry
-            continue
+#         preds_df = entry.get('preds')
+#         targets_df = entry.get('targets')
+#         if preds_df is None or targets_df is None:
+#             if verbose:
+#                 print(f"[warn] split {split_num} missing preds/targets; copying as-is under key '{key}'")
+#             out[key] = entry
+#             continue
 
-        total_rows = preds_df.shape[0]
-        if verbose:
-            print(f"[info] splitting {key} ({total_rows} rows) into samples: {samples}")
+#         total_rows = preds_df.shape[0]
+#         if verbose:
+#             print(f"[info] splitting {key} ({total_rows} rows) into samples: {samples}")
 
-        # If all patch counts known and sum matches total_rows, do exact slicing
-        if all(c is not None for c in sample_patch_counts):
-            ssum = sum(sample_patch_counts)
-            if ssum == total_rows:
-                # exact match -> slice in order
-                idx = 0
-                for sname, cnt in zip(samples, sample_patch_counts):
-                    end = idx + cnt
-                    out[sname] = {
-                        'preds': preds_df.iloc[idx:end].copy().reset_index(drop=False).set_index(pd.Index(preds_df.index[idx:end])),
-                        'targets': targets_df.iloc[idx:end].copy().reset_index(drop=False).set_index(pd.Index(targets_df.index[idx:end]))
-                    }
-                    # Actually preserve original index (we'll overwrite later when we attach barcodes)
-                    out[sname]['preds'].index = preds_df.index[idx:end]
-                    out[sname]['targets'].index = targets_df.index[idx:end]
-                    if verbose:
-                        print(f"  -> {sname}: rows {idx}:{end} ({cnt})")
-                    idx = end
-                continue
-            else:
-                if verbose:
-                    print(f"[warn] sum of patch counts {ssum} != preds rows {total_rows}. Will attempt fallback split.")
-        else:
-            if verbose:
-                print(f"[warn] some patch counts missing for split {split_num}: missing {missing}. Will attempt fallback split.")
+#         # If all patch counts known and sum matches total_rows, do exact slicing
 
-        # Fallback: try to split by available counts where possible and then proportionally split remainder
-        known = [(s, c) for s, c in zip(samples, sample_patch_counts) if c is not None]
-        unknown = [s for s, c in zip(samples, sample_patch_counts) if c is None]
+#         # --- STRICT MODE: no guessing, no fallback ---
+#         if not all(c is not None for c in sample_patch_counts):
+#             raise ValueError(
+#                 f"[FATAL] split {split_num}: missing patch counts for samples {missing}"
+#             )
 
-        # start by assigning known counts
-        slices = {}
-        idx = 0
-        for s, c in known:
-            slices[s] = (idx, idx + c)
-            idx += c
+#         ssum = sum(sample_patch_counts)
+#         if ssum != total_rows:
+#             raise ValueError(
+#                 f"[FATAL] split {split_num}: sum(embed_counts)={ssum} != preds_rows={total_rows}\n"
+#                 f"Counts: {dict(zip(samples, sample_patch_counts))}"
+#             )
 
-        remaining_rows = total_rows - idx
-        if remaining_rows < 0:
-            # counts overshoot, fallback: proportional slicing across all samples based on known counts
-            if verbose:
-                print(f"[warn] known counts overshoot total_rows. Doing proportional split across all samples by available counts.")
-            # compute proportions from known counts but include unknown as equal share
-            base_counts = [c if c is not None else 1 for c in sample_patch_counts]
-            base_sum = sum(base_counts)
-            assigned = 0
-            idx = 0
-            for i_s, s in enumerate(samples):
-                alloc = int(round(total_rows * base_counts[i_s] / float(base_sum)))
-                end = min(total_rows, idx + alloc)
-                slices[s] = (idx, end)
-                assigned += (end - idx)
-                idx = end
-            # ensure we consumed all rows (adjust last)
-            last_s = samples[-1]
-            start, _ = slices[last_s]
-            slices[last_s] = (start, total_rows)
-        else:
-            # distribute remaining_rows among unknown samples evenly (or proportional to known)
-            n_unknown = len(unknown)
-            if n_unknown == 0:
-                # all known but sum < total_rows; append remainder to last sample
-                last_s = samples[-1]
-                s0, e0 = slices.get(last_s, (None, None))
-                if s0 is None:
-                    slices[last_s] = (0, total_rows)
-                else:
-                    slices[last_s] = (s0, total_rows)
-            else:
-                # simple even split among unknowns
-                per = remaining_rows // n_unknown
-                extra = remaining_rows % n_unknown
-                for i, s in enumerate(unknown):
-                    start = idx
-                    add = per + (1 if i < extra else 0)
-                    end = start + add
-                    slices[s] = (start, end)
-                    idx = end
-                # if any remaining rows (numerical drift), append to last unknown
-                if idx < total_rows:
-                    last_u = unknown[-1]
-                    s0, e0 = slices[last_u]
-                    slices[last_u] = (s0, total_rows)
+#         # exact match -> slice in order
+#         idx = 0
+#         for sname, cnt in zip(samples, sample_patch_counts):
+#             end = idx + cnt
+#             out[sname] = {
+#                 'preds': preds_df.iloc[idx:end].copy(),
+#                 'targets': targets_df.iloc[idx:end].copy()
+#             }
+#             # preserve index
+#             out[sname]['preds'].index = preds_df.index[idx:end]
+#             out[sname]['targets'].index = targets_df.index[idx:end]
 
-        # now build out entries using slices
-        for s in samples:
-            start, end = slices[s]
-            # clamp
-            start = max(0, int(start))
-            end = max(start, int(min(total_rows, end)))
-            out[s] = {}
-            out[s]['preds'] = preds_df.iloc[start:end].copy()
-            out[s]['targets'] = targets_df.iloc[start:end].copy()
-            # keep their index for now (we will set index to barcodes when we attach later)
-            if verbose:
-                print(f"  fallback -> {s}: rows {start}:{end} (len {end-start})")
+#             if verbose:
+#                 print(f"  -> {sname}: rows {idx}:{end} ({cnt})")
 
-    if verbose:
-        print(f"[done] expanded splits: produced {len(out)} sample entries")
-    return out
+#             idx = end
+
+#     if verbose:
+#         print(f"[done] expanded splits: produced {len(out)} sample entries")
+#     return out
 
 
-def attach_barcodes_to_formatted_inference_auto(
-    formatted_inference,
-    dataset_name,
-    base_dir="/project/gutdecoder/kxu/hest/eval/data",
-    subdir="patches",
-    barcode_ds='barcode',
-    coords_ds='coords',
-    verbose=True,
-):
-    """
-    Automatically attach barcodes to each formatted_inference entry.
+# def attach_barcodes_to_formatted_inference_auto(
+#     formatted_inference,
+#     dataset_name,
+#     base_dir="/project/gutdecoder/kxu/hest/eval/data",
+#     subdir="patches",
+#     barcode_ds='barcode',
+#     coords_ds='coords',
+#     verbose=True,
+# ):
+#     """
+#     Automatically attach barcodes to each formatted_inference entry.
 
-    Looks for patch files under:
-        {base_dir}/{dataset_name}/{subdir}/
-    Expects files like:
-        {sample_id}.h5  (matching keys in formatted_inference)
+#     Looks for patch files under:
+#         {base_dir}/{dataset_name}/{subdir}/
+#     Expects files like:
+#         {sample_id}.h5  (matching keys in formatted_inference)
 
-    For each sample key found, reads barcodes+coords, cleans them,
-    and sets them as the index of preds/targets.
-    Returns dict sample_key -> patch_meta_df
-    """
-    patch_dir = os.path.join(base_dir, dataset_name, subdir)
-    if not os.path.isdir(patch_dir):
-        raise FileNotFoundError(f"Patch directory not found: {patch_dir}")
+#     For each sample key found, reads barcodes+coords, cleans them,
+#     and sets them as the index of preds/targets.
+#     Returns dict sample_key -> patch_meta_df
+#     """
+#     patch_dir = os.path.join(base_dir, dataset_name, subdir)
+#     if not os.path.isdir(patch_dir):
+#         raise FileNotFoundError(f"Patch directory not found: {patch_dir}")
 
-    patch_meta_map = {}
+#     patch_meta_map = {}
 
-    for sample_key, entry in formatted_inference.items():
-        # expected file path
-        patch_path = os.path.join(patch_dir, f"{sample_key}.h5")
-        if not os.path.isfile(patch_path):
-            if verbose:
-                print(f"[skip] {sample_key}: no patch file {patch_path}")
-            continue
+#     for sample_key, entry in formatted_inference.items():
+#         # expected file path
+#         patch_path = os.path.join(patch_dir, f"{sample_key}.h5")
+#         if not os.path.isfile(patch_path):
+#             if verbose:
+#                 print(f"[skip] {sample_key}: no patch file {patch_path}")
+#             continue
 
-        # read patch metadata
-        patch_meta_df = read_patch_meta_from_h5(patch_path, barcode_ds, coords_ds, verbose=verbose)
-        patch_meta_map[sample_key] = patch_meta_df
+#         # read patch metadata
+#         patch_meta_df = read_patch_meta_from_h5(patch_path, barcode_ds, coords_ds, verbose=verbose)
+#         patch_meta_map[sample_key] = patch_meta_df
 
-        preds_df = entry.get("preds")
-        targets_df = entry.get("targets")
-        if preds_df is None or targets_df is None:
-            if verbose:
-                print(f"[warn] {sample_key}: missing preds/targets")
-            continue
+#         preds_df = entry.get("preds")
+#         targets_df = entry.get("targets")
+#         if preds_df is None or targets_df is None:
+#             if verbose:
+#                 print(f"[warn] {sample_key}: missing preds/targets")
+#             continue
 
-        n_b = len(patch_meta_df)
-        n_p, n_t = preds_df.shape[0], targets_df.shape[0]
-        if n_p != n_b or n_t != n_b:
-            if verbose:
-                print(f"[warn] {sample_key}: mismatch (pred={n_p}, target={n_t}, barcodes={n_b})")
-        min_len = min(n_b, n_p, n_t)
-        used_barcodes = patch_meta_df["barcode"].iloc[:min_len].astype(str).tolist()
+#         n_b = len(patch_meta_df)
+#         n_p, n_t = preds_df.shape[0], targets_df.shape[0]
+#         if n_p != n_b or n_t != n_b:
+#             if verbose:
+#                 print(f"[warn] {sample_key}: mismatch (pred={n_p}, target={n_t}, barcodes={n_b})")
+#         min_len = min(n_b, n_p, n_t)
+#         used_barcodes = patch_meta_df["barcode"].iloc[:min_len].astype(str).tolist()
 
-        formatted_inference[sample_key]["preds"] = preds_df.iloc[:min_len].copy()
-        formatted_inference[sample_key]["targets"] = targets_df.iloc[:min_len].copy()
-        formatted_inference[sample_key]["preds"].index = used_barcodes
-        formatted_inference[sample_key]["targets"].index = used_barcodes
+#         formatted_inference[sample_key]["preds"] = preds_df.iloc[:min_len].copy()
+#         formatted_inference[sample_key]["targets"] = targets_df.iloc[:min_len].copy()
+#         formatted_inference[sample_key]["preds"].index = used_barcodes
+#         formatted_inference[sample_key]["targets"].index = used_barcodes
 
-        if verbose:
-            print(f"[ok] {sample_key}: attached {min_len} barcodes")
+#         # remove duplicate barcodes 
+#         formatted_inference[sample_key]["preds"] = (
+#             formatted_inference[sample_key]["preds"]
+#             .loc[~formatted_inference[sample_key]["preds"].index.duplicated(keep="first")]
+#         )
 
-    if verbose:
-        print(f"[done] processed {len(patch_meta_map)} samples from {patch_dir}")
+#         formatted_inference[sample_key]["targets"] = (
+#             formatted_inference[sample_key]["targets"]
+#             .loc[~formatted_inference[sample_key]["targets"].index.duplicated(keep="first")]
+#         )
 
-    return patch_meta_map
+#         if verbose:
+#             print(f"[ok] {sample_key}: attached {min_len} barcodes")
+
+#     if verbose:
+#         print(f"[done] processed {len(patch_meta_map)} samples from {patch_dir}")
+
+#     return patch_meta_map
 
 
 def add_formatted_inference_to_adata(
@@ -786,6 +732,27 @@ def add_formatted_inference_to_adata(
         preds_on_ad = pd.DataFrame(fill_missing_with, index=ad_obs_names, columns=ad_var_names, dtype=float)
         targets_on_ad = pd.DataFrame(fill_missing_with, index=ad_obs_names, columns=ad_var_names, dtype=float)
 
+        print(f"\n[DEBUG] sample: {sample_key}")
+        print(f"preds_df rows: {len(preds_df)}")
+        print(f"unique preds_df barcodes: {preds_df.index.nunique()}")
+        print(f"adata obs: {len(ad_obs_names)}")
+        print(f"matched barcodes: {len(matched_barcodes)}")
+
+        # --- collapse duplicates ---
+        if preds_df.index.has_duplicates:
+            if verbose:
+                print(f"[FIX] collapsing duplicate barcodes for {sample_key}")
+                print(f"  before: {len(preds_df)} rows, {preds_df.index.nunique()} unique")
+
+            preds_df = preds_df.groupby(preds_df.index).mean()
+            targets_df = targets_df.groupby(targets_df.index).mean()
+
+            if verbose:
+                print(f"  after: {len(preds_df)} rows")
+
+        # recompute matched barcodes AFTER dedup
+        matched_barcodes = sorted(list(set(preds_df.index).intersection(ad_obs_names)))
+
         # place matched rows / genes
         if n_matched_barcodes > 0:
             preds_on_ad.loc[matched_barcodes, common_genes] = preds_df.loc[matched_barcodes, common_genes].values
@@ -926,39 +893,6 @@ def remove_control_probes(adata, exclude_keywords=None, inplace=False):
         adata._inplace_subset_var(mask)
     else:
         return adata[:, mask].copy()
-
-# def save_adata_from_list(adata_list, RUN_ROOT, RUN):
-#     """
-#     Save all AnnData objects in adata_list to the run directory.
-#     Each file saved as <sample_name>.h5ad under os.path.join(RUN_ROOT, RUN).
-
-#     Parameters
-#     ----------
-#     adata_list : list[AnnData]
-#         list of AnnData objects
-#     RUN_ROOT : str or Path
-#         base directory for runs
-#     RUN : str
-#         subfolder name for this run
-#     filename_prefix : str or None
-#         optional string to prefix all filenames (e.g. 'inferred_')
-#     """
-#     save_dir = os.path.join(RUN_ROOT, 'ST_pred_results', RUN, 'pred')
-#     os.makedirs(save_dir, exist_ok=True)
-
-#     for i, ad in enumerate(adata_list):
-#         # try to infer sample name
-#         if 'sample_id' in ad.obs.columns:
-#             sample_name = str(ad.obs['sample_id'].iat[0])
-#         else:
-#             sample_name = f"{i}"
-
-#         out_path = os.path.join(save_dir, f"{sample_name}.h5ad")
-
-#         ad.write(out_path)
-#         print(f"[OK] Saved {sample_name} → {out_path}")
-
-#     print(f"All AnnData objects saved under {save_dir}")
 
 
 def save_adata_from_list(adata_list, RUN_ROOT, RUN, existing_pred_samples=None, force_overwrite=True):
@@ -1308,6 +1242,124 @@ def save_spatial_pred_target_pdfs_for_adata_list(
         print(f"[DONE] saved PDFs to {outdir}")
     return results
 
+def format_inference_with_genes(inference_dumps, gene_list):
+    """                                                                                                          
+    Attach gene names as column labels for predictions and targets.
+    Also propagates per-sample barcode metadata from the dump (test_sample_ids,                                  
+    test_sample_barcodes) when present, so downstream slicing is exact.                                          
+    """
+    formatted_inference = {}                                                                                     
+                                                                                                                
+    for split_name, dump in inference_dumps.items():
+        preds = dump["preds_all"]                                                                                
+        targets = dump["targets_all"]
+
+        if preds.shape[1] != len(gene_list):                                                                     
+            raise ValueError(
+                f"Number of genes ({len(gene_list)}) does not match number of prediction columns ({preds.shape[1]})"
+            )
+                                                                                                                
+        entry = {
+            "preds": pd.DataFrame(preds, columns=gene_list),                                                     
+            "targets": pd.DataFrame(targets, columns=gene_list),
+        }                                                                                                        
+
+        if "test_sample_ids" in dump and "test_sample_barcodes" in dump:                                         
+            entry["test_sample_ids"] = list(dump["test_sample_ids"])
+            entry["test_sample_barcodes"] = [list(map(str, b)) for b in dump["test_sample_barcodes"]]            
+
+        formatted_inference[split_name] = entry                                                                  
+        print(f"{split_name}: preds shape {entry['preds'].shape}, targets shape {entry['targets'].shape}")
+                                                                                                                
+    return formatted_inference         
+
+
+def expand_split_keys_to_samples(formatted_inference: Dict[str, Dict],                                           
+                                verbose: bool = True) -> Dict[str, Dict]:
+    """                                                                                                          
+    Replace 'splitN' keys with per-sample keys, slicing preds/targets by per-sample
+    barcode counts from the dump's test_sample_barcodes, and setting the barcode list                            
+    as the row index of preds/targets.                                                                           
+                                                                                                                
+    Requires the dump (and therefore each formatted_inference['splitN']) to carry                                
+    'test_sample_ids' and 'test_sample_barcodes'. Re-run inference with the patched                              
+    bench/benchmark.py to populate these.                                                                        
+    """                                                                                                          
+    out = {}                                                                                                     
+                
+    for key, entry in formatted_inference.items():
+        if not (isinstance(key, str) and key.lower().startswith('split')):
+            out[key] = entry                                                                                     
+            continue
+                                                                                                                
+        if 'test_sample_ids' not in entry or 'test_sample_barcodes' not in entry:                                
+            raise KeyError(
+                f"{key}: inference dump is missing 'test_sample_ids' / 'test_sample_barcodes'. "                 
+                f"Re-run inference with the patched benchmark.py."                                               
+            )
+                                                                                                                
+        sample_ids = entry['test_sample_ids']
+        sample_barcodes = entry['test_sample_barcodes']
+        preds_df = entry['preds']                                                                                
+        targets_df = entry['targets']
+                                                                                                                
+        total_rows = preds_df.shape[0]
+        ssum = sum(len(b) for b in sample_barcodes)
+        if ssum != total_rows:                                                                                   
+            per_sample = list(zip(sample_ids, [len(b) for b in sample_barcodes]))
+            raise ValueError(                                                                                    
+                f"{key}: sum of test_sample_barcodes ({ssum}) != preds rows ({total_rows}). "
+                f"Per-sample counts: {per_sample}. Dump is internally inconsistent."                             
+            )                                                                                                    
+
+        if verbose:                                                                                              
+            print(f"[info] splitting {key} ({total_rows} rows) into {len(sample_ids)} samples")
+                                                                                                                
+        idx = 0
+        for sid, barcodes in zip(sample_ids, sample_barcodes):                                                   
+            end = idx + len(barcodes)
+            sub_preds = preds_df.iloc[idx:end].copy()
+            sub_targets = targets_df.iloc[idx:end].copy()                                                        
+            bc_str = list(map(str, barcodes))
+            sub_preds.index = bc_str                                                                             
+            sub_targets.index = bc_str
+            out[sid] = {'preds': sub_preds, 'targets': sub_targets}                                              
+            if verbose:                                                                                          
+                print(f"  -> {sid}: rows {idx}:{end} ({len(barcodes)})")
+            idx = end                                                                                            
+                
+    if verbose:                                                                                                  
+        print(f"[done] expanded splits: produced {len(out)} sample entries")
+    return out  
+
+def attach_barcodes_to_formatted_inference_auto(formatted_inference, verbose=True):
+    """                                                                                                          
+    Build patch_meta_map from the barcode index that expand_split_keys_to_samples already
+    attached to each per-sample preds/targets DataFrame. No file I/O.                                            
+                                                                                                                
+    Returns dict sample_key -> patch_meta_df (columns: barcode, coord_x, coord_y).                               
+    coord_x/coord_y are NaN here — pull spatial coords from the AnnData if you need them                         
+    downstream (the original patches.h5-based source is no longer used).                                         
+    """                                                                                                          
+    patch_meta_map = {}                                                                                          
+    for sample_key, entry in formatted_inference.items():                                                        
+        preds_df = entry.get('preds')
+        if preds_df is None:                                                                                     
+            if verbose:
+                print(f"[skip] {sample_key}: no preds")                                                          
+            continue
+        barcodes = list(map(str, preds_df.index))
+        patch_meta_map[sample_key] = pd.DataFrame({
+            'barcode': barcodes,
+            'coord_x': np.nan,
+            'coord_y': np.nan,
+        })
+        if verbose:
+            print(f"[ok] {sample_key}: {len(barcodes)} barcodes")
+    if verbose:
+        print(f"[done] processed {len(patch_meta_map)} samples")
+    return patch_meta_map 
+
 # wrapper
 def add_inference_to_adata_and_plot(
     RUN,
@@ -1389,56 +1441,21 @@ def add_inference_to_adata_and_plot(
         adata_list.append(adata)
         sample_names.append(sample)
 
-    # --------------- 2) load adata_list for dataset, skipping pre-saved samples ----------------
-    # data_dir = os.path.join(base_data_dir, dataset_name, 'adata')
-    # if verbose: print(f"[step] loading adata files from {data_dir}")
-    # adata_list = []
-    # sample_names = []
-    # skipped_preexisting = []
-    # for fname in os.listdir(data_dir):
-    #     if not fname.endswith(".h5ad"):
-    #         continue
-    #     sample = os.path.splitext(fname)[0]
-    #     # apply same sanitisation used for saved pred filenames to compare
-    #     safe_sample = "".join(c if c.isalnum() or c in ('-', '_') else "_" for c in sample)
-    #     if safe_sample in existing_pred_samples:
-    #         skipped_preexisting.append(sample)
-    #         if verbose:
-    #             print(f"[SKIP LOAD] {sample}: h5ad already present in pred folder -> skipping processing for this sample")
-    #         continue
-
-    #     fpath = os.path.join(data_dir, fname)
-    #     if verbose: print(f"  loading {fpath}")
-    #     adata = sc.read_h5ad(fpath)
-    #     # store sample name in .obs for later saving and matching
-    #     adata.obs['sample_id'] = sample
-    #     adata_list.append(adata)
-    #     sample_names.append(sample)
-
-    # if verbose and skipped_preexisting:
-    #     print(f"[info] skipped {len(skipped_preexisting)} samples because pred h5ad already exists: {skipped_preexisting}")
 
     # --------------- 3) attach patch barcodes to formatted_inference automatically -------------
     # extra sampple matching for broad splits (leave-one-patient-out CV)
     if verbose: print("[step] expand split keys into per-sample formatted_inference entries (handles LOO CV)")
-    formatted_inference = expand_split_keys_to_samples(
-        formatted_inference,
-        df_test_splits,
-        dataset_name=dataset_name,
-        base_dir=base_data_dir,
-        patches_subdir=patches_subdir,
-        barcode_ds='barcode',
-        verbose=verbose
-    )
-
-    # if verbose: print("[step] attach barcodes to formatted_inference using patches directory")
-    # patch_meta_map = attach_barcodes_to_formatted_inference_auto(
+    # formatted_inference = expand_split_keys_to_samples(
     #     formatted_inference,
+    #     df_test_splits,
     #     dataset_name=dataset_name,
     #     base_dir=base_data_dir,
-    #     subdir=patches_subdir,
+    #     patches_subdir=patches_subdir,
+    #     barcode_ds='barcode',
     #     verbose=verbose
     # )
+    formatted_inference = expand_split_keys_to_samples(formatted_inference, verbose=verbose)
+
 
     if verbose:
         print("[step] attach barcodes to formatted_inference using patches directory")
@@ -1463,12 +1480,16 @@ def add_inference_to_adata_and_plot(
         filtered_formatted_inference = formatted_inference
 
     patch_meta_map = attach_barcodes_to_formatted_inference_auto(
-        filtered_formatted_inference,
-        dataset_name=dataset_name,
-        base_dir=base_data_dir,
-        subdir=patches_subdir,
-        verbose=verbose
-)
+          filtered_formatted_inference, verbose=verbose
+      )
+
+#     patch_meta_map = attach_barcodes_to_formatted_inference_auto(
+#         filtered_formatted_inference,
+#         dataset_name=dataset_name,
+#         base_dir=base_data_dir,
+#         subdir=patches_subdir,
+#         verbose=verbose
+# )
 
     if existing_pred_samples and not force_overwrite:
         removed = []

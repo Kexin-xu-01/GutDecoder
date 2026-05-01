@@ -288,7 +288,10 @@ def predict_single_split(train_split, test_split, args, save_dir, dataset_name, 
     print(f'using gene_list {gene_list}')
     with open(os.path.join(bench_data_root, gene_list), 'r') as f:
         genes = json.load(f)['genes']
-            
+#new
+    test_sample_ids = []                                                                                         
+    test_sample_barcodes = []
+  #new     
     for split_key, split in zip(['train', 'test'], [train_df, test_df]):
         split_assets = {}
         for i in tqdm(range(len(split))):
@@ -300,6 +303,12 @@ def predict_single_split(train_split, test_split, args, save_dir, dataset_name, 
             adata = load_adata(expr_path, genes=genes, barcodes=barcodes, normalize=args.normalize, library_size_normalize=args.library_size_normalize)
             assets['adata'] = adata.values
             split_assets = merge_dict(split_assets, assets)
+
+# new
+            if split_key == 'test':                                                                              
+                test_sample_ids.append(sample_id)                                                                
+                test_sample_barcodes.append(barcodes)
+#new
         for key, val in split_assets.items(): 
             split_assets[key] = np.concatenate(val, axis=0)
         
@@ -321,6 +330,11 @@ def predict_single_split(train_split, test_split, args, save_dir, dataset_name, 
 
       
     probe_results, linprobe_dump, reg = train_test_reg(X_train, X_test, y_train, y_test, random_state=args.seed, genes=genes, method=args.method)
+    
+    # ----- NEW: stash per-sample barcode metadata so viz can align preds_all without re-deriving ----- 
+    linprobe_dump['test_sample_ids'] = test_sample_ids
+    linprobe_dump['test_sample_barcodes'] = test_sample_barcodes    
+
 
     model_bundle["regression_model"] = reg
 
