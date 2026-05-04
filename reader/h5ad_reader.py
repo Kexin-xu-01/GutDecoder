@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -12,7 +11,6 @@ import matplotlib.pyplot as plt
 from hest import XeniumReader 
 import dask
 dask.config.set({'dataframe.query-planning': False})
-from pathlib import Path
 
 #import cucim
 #from cucim import CuImage
@@ -283,99 +281,6 @@ def fast_spatial(
     else:
         plt.show()
         return None
-
-def plot_cell(
-    st_adata: sc.AnnData,
-    adata_labelled: sc.AnnData,
-    save_dir: Path | str,
-    fname: str = "cell_plot.png",
-    spot_color_key: str = "log1p_total_counts",
-    cell_type_key: str = "cell_type",
-):
-    """Overlay spatial spots (colored by `spot_color_key`) with labelled cells (colored by `cell_type_key`)."""
-    save_dir = Path(save_dir)
-    save_dir.mkdir(parents=True, exist_ok=True)
-    outpath = save_dir / fname
-
-    fig, ax = plt.subplots(figsize=(8, 8))
-
-    # spots
-    if spot_color_key not in st_adata.obs.columns:
-        raise KeyError(f"'{spot_color_key}' not found in st_adata.obs")
-    sca = ax.scatter(
-        st_adata.obsm["spatial"][:, 0],
-        st_adata.obsm["spatial"][:, 1],
-        c=st_adata.obs[spot_color_key],
-        s=8, alpha=0.6, cmap="viridis", label="spots",
-    )
-
-    # cells colored by cell type
-    if cell_type_key not in adata_labelled.obs.columns:
-        raise KeyError(f"'{cell_type_key}' not found in adata_labelled.obs")
-    cell_types = adata_labelled.obs[cell_type_key].astype("category")
-    colors = plt.cm.tab20(np.linspace(0, 1, len(cell_types.cat.categories)))
-    for color, ct in zip(colors, cell_types.cat.categories):
-        m = cell_types == ct
-        ax.scatter(
-            adata_labelled.obsm["spatial"][m, 0],
-            adata_labelled.obsm["spatial"][m, 1],
-            c=[color], s=2, alpha=0.6, label=str(ct)
-        )
-
-    ax.invert_yaxis()
-    ax.set_title("Overlay: spots (counts) and cells (labels)")
-
-    # legend + colorbar
-    ax.legend(markerscale=4, bbox_to_anchor=(1.05, 1), loc="upper left")
-    fig.subplots_adjust(right=0.8)
-    cbar_ax = fig.add_axes([0.82, 0.1, 0.02, 0.35])
-    cbar = fig.colorbar(sca, cax=cbar_ax)
-    cbar.set_label(spot_color_key)
-
-    plt.tight_layout()
-    plt.savefig(outpath, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    plt.show()
-    return outpath
-
-def save_all(
-    st,
-    save_dir: Path | str,
-    pyramidal: bool = True,
-    plot_fname: str = "cell_plot.png",
-    spatial_name: str = "",
-    spatial_key: str = "total_counts",
-    **pl_kwargs,
-) -> Path:
-    """
-    Save spatial plot, pyramid, and overlay figure to `save_dir` and return the overlay path.
-    
-    Args:
-        st: object with .adata and .save_spatial_plot method
-        save_dir (Path | str): Directory to save output
-        pyramidal (bool): Whether to save pyramidal data
-        plot_fname (str): Filename for overlay plot
-        spatial_name (str): Prefix for spatial plot filename
-        spatial_key (str): Feature to plot in spatial plot
-        **pl_kwargs: Additional keyword arguments for sc.pl.spatial
-    """
-    save_dir = Path(save_dir)
-    save_dir.mkdir(parents=True, exist_ok=True)
-
-    # Delegate to st's own writers
-    st.save_spatial_plot(save_dir, name=spatial_name, key=spatial_key, pl_kwargs=pl_kwargs)
-    st.save(save_dir, pyramidal=pyramidal)
-
-    # Our overlay
-    out = plot_cell(st.adata, st.cell_adata, save_dir=save_dir, fname=plot_fname)
-    return Path(out)
-
-from pathlib import Path
-from typing import Optional
-
-import matplotlib.pyplot as plt
-import numpy as np
-import scanpy as sc
 
 
 def plot_cell(
