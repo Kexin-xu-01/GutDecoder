@@ -24,7 +24,7 @@ python plot.py \
   --runs-root /project/gutdecoder/kxu/hest/eval/runs \
   --splits-root /project/gutdecoder/kxu/hest/eval/data \
   --curated-xlsx /project/gutdecoder/kxu/hest/curated_gene_list.xlsx \
-  --extra-metadata /project/gutdecoder/kxu/hest/hest_directory.csv \
+  --extra-metadata /project/gutdecoder/kxu/hest/metadata/hest_directory.csv \
   --out plots/ --top-n 30 --show
 """
 
@@ -35,7 +35,7 @@ import json
 import os
 import glob
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List, Union
 import re
 
 import numpy as np
@@ -44,19 +44,12 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib import cm
 
-from pathlib import Path
-import numpy as np
-import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 from PIL import Image
 from IPython.display import display
-import re
 import warnings
 
-from IPython.display import display
 from adjustText import adjust_text
-
-from matplotlib.backends.backend_pdf import PdfPages
-
 
 # -----------------------
 # Defaults / constants
@@ -65,8 +58,8 @@ from matplotlib.backends.backend_pdf import PdfPages
 DEFAULT_RUNS_ROOT = "/project/gutdecoder/kxu/hest/eval/ST_pred_results"
 DEFAULT_SPLITS_ROOT = "/project/gutdecoder/kxu/hest/eval/data"
 DEFAULT_CURATED_XLSX = "/project/gutdecoder/kxu/hest/curated_gene_list.xlsx"
-DEFAULT_EXTRA_METADATA = "/project/gutdecoder/kxu/hest/hest_directory.csv"
-DEFAULT_BROAD_METADATA = "/project/gutdecoder/kxu/hest/broad_directory.csv"
+DEFAULT_EXTRA_METADATA = "/project/gutdecoder/kxu/hest/metadata/hest_directory.csv"
+DEFAULT_BROAD_METADATA = "/project/gutdecoder/kxu/hest/metadata/broad_directory.csv"
 DEFAULT_SUMMARY_PLOT_DIR = "/project/gutdecoder/kxu/hest/eval/summary_plots"
 
 # -----------------------
@@ -94,8 +87,8 @@ def _sample_cmap(cmap_name: str, n: int):
     Return `n` RGBA colors sampled evenly from matplotlib colormap `cmap_name`.
     Safer than plt.get_cmap(name, n) on older matplotlib versions.
     """
-    import numpy as _np
-    import matplotlib.pyplot as _plt
+    # import numpy as _np
+    # import matplotlib.pyplot as _plt
 
     cmap = _plt.get_cmap(cmap_name)
     # guard: at least 1 color
@@ -107,8 +100,8 @@ def _sample_cmap(cmap_name: str, n: int):
 
 def add_num_training_patches_mean(
     df_summary: pd.DataFrame,
-    xenium_csv: str = "/project/gutdecoder/kxu/hest/hest_directory.csv",
-    broad_csv: str = "/project/gutdecoder/kxu/hest/broad_directory.csv",
+    xenium_csv: str = "/project/gutdecoder/kxu/hest/metadata/hest_directory.csv",
+    broad_csv: str = "/project/gutdecoder/kxu/hest/metadata/broad_directory.csv",
 ) -> pd.DataFrame:
     """
     Add a column 'num_training_patches_mean' to df_summary based on dataset rules,
@@ -989,7 +982,7 @@ def extract_best_model_gene_corrs(run: str,
 # -----------------------
 
 
-def annotate_genes_with_curated(df_genes: pd.DataFrame, path_meta = "/project/gutdecoder/kxu/hest/curated_gene_list.xlsx", case_insensitive: bool = True) -> pd.DataFrame:
+def annotate_genes_with_curated(df_genes: pd.DataFrame, path_meta = "/project/gutdecoder/kxu/hest/metadata/curated_gene_list.xlsx", case_insensitive: bool = True) -> pd.DataFrame:
     """
     Minimal annotation:
       - panel: '480' if gene in '480 panel full list', else <NA>
@@ -1022,11 +1015,7 @@ def annotate_genes_with_curated(df_genes: pd.DataFrame, path_meta = "/project/gu
     # 2) build the three mapping frames (one row per gene)
     # panel (480 list)
     if "480 panel full list" in m.columns:
-        df_panel = (
-            m[["480 panel full list"]]
-            .dropna()
-            .rename(columns={"480 panel full list": "gene"})
-        )
+        df_panel = (m[["480 panel full list"]].dropna().rename(columns={"480 panel full list": "gene"}))
         df_panel["panel"] = "480"
         df_panel = df_panel.drop_duplicates(subset=["gene"])
     else:
@@ -1375,7 +1364,7 @@ def plot_corrs_by_sample(
     dataset_name,
     encoder_name,
     group_by: str | None = None,
-    figsize=(16, 6)
+    figsize=(18, 6)
 ):
     """
     Plot per-split gene correlations grouped by metadata, and return the figure object.
@@ -1458,7 +1447,7 @@ def plot_pearson_vs_sample_metadata(
     df_long: pd.DataFrame,
     df_splits: pd.DataFrame,
     outdir: Path,
-    sample_col_candidates: list[str] = ["test_sample", "sample_id", "SampleID", "Sample_Id"],
+    sample_col_candidates: list[str] = ["test_sample", "sample_id", "SampleID"],
     metadata_cols_preference: list[str] | None = None,
     show: bool = False,
     dpi: int = 200,
@@ -1615,7 +1604,7 @@ def plot_sample_across_runs(
         candidate_runs = list(runs)
 
     summary_rows = []
-    sample_col_candidates = ["test_sample", "sample_id", "SampleID", "Sample_Id"]
+    sample_col_candidates = ["test_sample", "sample_id", "SampleID"]
 
     for run_name in candidate_runs:
         try:
@@ -1789,7 +1778,7 @@ def plot_all_samples_grid_for_dataset(
     if str(dataset_or_run).startswith("run_"):
         try:
             df_splits = get_test_splits(dataset_or_run, runs_root=str(runs_root), splits_root=str(splits_root))
-            sample_col = _find_col_ci(df_splits, ["test_sample", "sample_id", "SampleID", "Sample_Id"])
+            sample_col = _find_col_ci(df_splits, ["test_sample", "sample_id", "SampleID"])
             if sample_col is None:
                 raise KeyError("No sample id column found in splits for run.")
             samples = sorted(df_splits[sample_col].dropna().astype(str).unique().tolist())
@@ -1809,7 +1798,7 @@ def plot_all_samples_grid_for_dataset(
             try:
                 df_t = pd.read_csv(tf)
                 # find sample col
-                sc = _find_col_ci(df_t, ["test_sample", "sample_id", "SampleID", "Sample_Id"])
+                sc = _find_col_ci(df_t, ["test_sample", "sample_id", "SampleID""])
                 if sc is None:
                     continue
                 sample_set.update(df_t[sc].dropna().astype(str).tolist())
@@ -1859,7 +1848,7 @@ def plot_all_samples_grid_for_dataset(
 
     # 3) For each sample, collect per-run stats (mean/std/n_genes)
     rows = []
-    sample_col_candidates = ["test_sample", "sample_id", "SampleID", "Sample_Id"]
+    sample_col_candidates = ["test_sample", "sample_id", "SampleID"]
     for sample in samples:
         for run_name in candidate_runs:
             try:
@@ -2047,7 +2036,7 @@ def plot_dataset_mean_across_runs(
 
     # 1) Determine the sample set for the provided dataset_or_run
     samples = []
-    sample_col_candidates = ["test_sample", "sample_id", "SampleID", "Sample_Id"]
+    sample_col_candidates = ["test_sample", "sample_id", "SampleID"]
 
     if str(dataset_or_run).startswith("run_"):
         # use that run's splits to collect samples
@@ -2262,7 +2251,7 @@ def plot_dataset_mean_across_runs(
 
     # 1) Determine the sample set for the provided dataset_or_run
     samples = []
-    sample_col_candidates = ["test_sample", "sample_id", "SampleID", "Sample_Id"]
+    sample_col_candidates = ["test_sample", "sample_id", "SampleID"]
 
     if str(dataset_or_run).startswith("run_"):
         try:
@@ -2452,11 +2441,8 @@ def plot_dataset_mean_across_runs(
     return df_stats, fig
 
 
-from pathlib import Path
-import math
-import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
-import pandas as pd
+
 
 def grid_plot_for_datasets(
     datasets: list,
@@ -2594,11 +2580,7 @@ def grid_plot_for_datasets(
 # High-level workflow
 # -----------------------
 
-from pathlib import Path
-from typing import Dict, List, Optional, Union
-import pandas as pd
-import matplotlib.pyplot as plt
-from IPython.display import display
+
 
 
 def generate_all_plots(
