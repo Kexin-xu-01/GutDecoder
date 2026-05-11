@@ -12,6 +12,7 @@ from PIL import Image, ImageDraw, ImageFont
 import scanpy as sc
 
 from hest.utils import load_wsi, register_downscale_img
+from loguru import logger
 
 
 def save_spatial_plot(adata: sc.AnnData, save_path: str, name: str='', key='total_counts', pl_kwargs={}):
@@ -48,8 +49,7 @@ def add_image(adata_path: str, wsi_path: str, pixel_size: float = 0.221):
     if 'total_counts' not in adata.var_names and len(adata) > 0:
         sc.pp.calculate_qc_metrics(adata, inplace=True)
 
-    print(f"[add_image] Added QC metrics / downscale for {os.path.basename(adata_path)} "
-          f"(downscale factor={downscale_factor})")
+    logger.info(f"Added QC metrics / downscale for {os.path.basename(adata_path)} (factor={downscale_factor})")
 
     return adata
 
@@ -80,7 +80,7 @@ def save_adata(adata, out_dir: str, name_data: Optional[str] = None):
     out_file = os.path.join(out_path, out_filename)
     adata.write(out_file)
 
-    print(f"\n-- {name_data} PREDICTION ADATA SAVED: {out_file}\n")
+    logger.info(f"Adata saved: {out_file}")
     return out_file
 
 
@@ -212,7 +212,7 @@ def combine_run_plots_to_pdf(
     pages[0].save(out_pdf, "PDF", resolution=300.0,
                   save_all=True, append_images=pages[1:])
 
-    print(f"Saved PDF: {out_pdf}")
+    logger.info(f"Saved PDF: {out_pdf}")
     return out_pdf
 
 
@@ -236,7 +236,7 @@ def process_run(run_dir: str,
 
     h5ad_paths = sorted(glob.glob(os.path.join(adata_dir, "*.h5ad")))
     if len(h5ad_paths) == 0:
-        print(f"[process_run] No .h5ad files found in {adata_dir}")
+        logger.warning(f"No .h5ad files found in {adata_dir}")
         return [], []
 
     saved_adata_paths = []
@@ -248,7 +248,7 @@ def process_run(run_dir: str,
 
     for h5ad in h5ad_paths:
         sample_name = os.path.splitext(os.path.basename(h5ad))[0]
-        print(f"[process_run] Processing sample: {sample_name}")
+        logger.info(f"Processing sample: {sample_name}")
 
         # path where processed adata would be saved
         processed_adata_path = os.path.join(processed_adata_dir, f"{sample_name}.h5ad")
@@ -256,7 +256,7 @@ def process_run(run_dir: str,
 
         # If processed adata already exists, skip add_image step
         if os.path.exists(processed_adata_path):
-            print(f"  - SKIP: processed adata already exists at {processed_adata_path}")
+            logger.info(f"Skipping {sample_name}: already processed")
             saved_adata_paths.append(processed_adata_path)
 
             # Look for spatial plot PNG 
@@ -268,18 +268,17 @@ def process_run(run_dir: str,
 
             if os.path.exists(spatial_png_path):
                 spatial_plot_dirs.append(spatial_png_path)
-                print(f"  - Found existing spatial plot: {spatial_png_path}")
+                logger.debug(f"Existing spatial plot: {spatial_png_path}")
             else:
                 spatial_plot_dirs.append(None)
-                print(f"  - WARNING: spatial plot PNG not found for {sample_name} "
-                    f"(expected {spatial_png_path})")
+                logger.warning(f"Spatial plot PNG not found for {sample_name} (expected {spatial_png_path})")
 
             continue
 
         # find matching WSI
         wsi_path = _find_matching_wsi(sample_name, wsi_root)
         if wsi_path is None:
-            print(f"  - WARNING: no matching WSI found for {sample_name} in {wsi_root}. Skipping.")
+            logger.warning(f"No matching WSI for {sample_name} in {wsi_root}. Skipping.")
             continue
 
         try:
@@ -287,9 +286,9 @@ def process_run(run_dir: str,
             saved_adata, plot_dir, conf_plot_dir = add_image_to_adata_and_save(h5ad, wsi_path, run_dir, pixel_size=pixel_size)
             saved_adata_paths.append(saved_adata)
             spatial_plot_dirs.append(plot_dir)
-            print(f"  - Done: saved adata -> {saved_adata}, plots -> {plot_dir}")
+            logger.info(f"Done: adata={saved_adata}, plots={plot_dir}")
         except Exception as e:
-            print(f"  - ERROR processing {sample_name}: {e}")
+            logger.error(f"Error processing {sample_name}: {e}")
             # record failure with None so caller can inspect lengths
             saved_adata_paths.append(None)
             spatial_plot_dirs.append(None)
@@ -298,9 +297,9 @@ def process_run(run_dir: str,
     try:
         # call the combine function; ensure it's available in this module or imported
         combine_run_plots_to_pdf(run_dir, out_pdf=out_pdf, rows_per_page=4)
-        print(f"[process_run] Combined PDF saved to {out_pdf}")
+        logger.info(f"Combined PDF saved to {out_pdf}")
     except Exception as e:
-        print(f"[process_run] ERROR while creating combined PDF: {e}")
+        logger.error(f"Error creating combined PDF: {e}")
 
     return saved_adata_paths, spatial_plot_dirs
 

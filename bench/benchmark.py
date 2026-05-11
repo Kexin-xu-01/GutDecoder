@@ -36,37 +36,31 @@ from hest.bench.utils.file_utils import (read_assets_from_h5, save_hdf5,
                                          save_pkl)
 from hest.bench.utils.utils import merge_dict, get_current_time
 
-# Generic training settings - note that defaults are set in BenchmarkConfig
-parser = argparse.ArgumentParser(description='Configurations for linear probing')
-### optimizer settings ###
-parser.add_argument('--seed', type=int,
-                    help='random seed for reproducible experiment')
-parser.add_argument('--overwrite', action='store_true',
-                    help='overwrite existing results')
-parser.add_argument('--bench_data_root', type=str, help='root directory containing all the datasets')
-parser.add_argument('--embed_dataroot', type=str)
-parser.add_argument('--weights_root', type=str)
-parser.add_argument('--private_weights_root', type=str)
-parser.add_argument('--results_dir', type=str)
-parser.add_argument('--exp_code', type=str)
-
-### specify encoder settings ### 
-parser.add_argument('--batch_size', type=int, help='Batch size')
-parser.add_argument('--num_workers', type=int, help='Number of workers for dataloader')
-
-### specify dataset settings ###
-parser.add_argument('--gene_list', type=str)
-parser.add_argument('--method', type=str)
-parser.add_argument('--alpha', type=float)
-parser.add_argument('--kfold', action='store_true')
-parser.add_argument('--benchmark_encoders', action='store_true')
-parser.add_argument('--normalize', type=bool)
-parser.add_argument('--library_size_normalize', type=bool)
-parser.add_argument('--dimreduce', type=str, help='whenever to perform dimensionality reduction before linear probing, can be "PCA" or None')
-parser.add_argument('--latent_dim', type=int, help='dimensionality reduction latent dimension')
-parser.add_argument('--encoders', nargs='+', help='All the encoders to benchmark')
-parser.add_argument('--datasets', nargs='+', help='Datasets from bench_data_root to use during benchmark')
-parser.add_argument('--config', type=str, help='Path to a benchmark config file, arguments provided in the config file will overwrite the command line args')
+def _parse_args():
+    parser = argparse.ArgumentParser(description='Configurations for linear probing')
+    parser.add_argument('--seed', type=int)
+    parser.add_argument('--overwrite', action='store_true')
+    parser.add_argument('--bench_data_root', type=str)
+    parser.add_argument('--embed_dataroot', type=str)
+    parser.add_argument('--weights_root', type=str)
+    parser.add_argument('--private_weights_root', type=str)
+    parser.add_argument('--results_dir', type=str)
+    parser.add_argument('--exp_code', type=str)
+    parser.add_argument('--batch_size', type=int)
+    parser.add_argument('--num_workers', type=int)
+    parser.add_argument('--gene_list', type=str)
+    parser.add_argument('--method', type=str)
+    parser.add_argument('--alpha', type=float)
+    parser.add_argument('--kfold', action='store_true')
+    parser.add_argument('--benchmark_encoders', action='store_true')
+    parser.add_argument('--normalize', type=bool)
+    parser.add_argument('--library_size_normalize', type=bool)
+    parser.add_argument('--dimreduce', type=str)
+    parser.add_argument('--latent_dim', type=int)
+    parser.add_argument('--encoders', nargs='+')
+    parser.add_argument('--datasets', nargs='+')
+    parser.add_argument('--config', type=str)
+    return parser.parse_args()
             
 @dataclass
 class BenchmarkConfig:
@@ -499,7 +493,5 @@ def benchmark(encoder: torch.nn.Module, enc_transf: Callable, precision: torch.d
     
     
 if __name__ == '__main__':
-    cli_args = parser.parse_args()
-        
-    benchmark(None, None, None, cli_args)
+    benchmark(None, None, None, _parse_args())
     
