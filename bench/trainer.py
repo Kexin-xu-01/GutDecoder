@@ -179,7 +179,7 @@ def _train_mlp_torch(X_train, X_test, y_train):
     return y_scaler.inverse_transform(preds), reg
 
 
-def _train_mlp_sklearn(X_train, X_test, y_train):
+def _train_mlp_sklearn(X_train, X_test, y_train, random_state=0):
     from sklearn.neural_network import MLPRegressor
 
     y_scaler = StandardScaler()
@@ -188,7 +188,7 @@ def _train_mlp_sklearn(X_train, X_test, y_train):
         hidden_layer_sizes=(1024, 512), activation='relu', solver='adam',
         alpha=1e-4, batch_size=128, learning_rate_init=1e-3,
         max_iter=200, early_stopping=True, n_iter_no_change=10,
-        verbose=False, random_state=0,
+        verbose=False, random_state=random_state,
     )
     reg.fit(np.asarray(X_train), y_tr)
     preds = y_scaler.inverse_transform(reg.predict(np.asarray(X_test)))
@@ -284,7 +284,9 @@ def train_test_reg(X_train, X_test, y_train, y_test,
         preds_all, reg = fn(X_train, X_test, y_train, random_state)
     elif method == 'xgboost':
         preds_all, reg = fn(X_train, X_test, y_train, random_state)
-    else:
+    elif method == 'mlp_sklearn':
+        preds_all, reg = fn(X_train, X_test, y_train, random_state)
+    else:  # mlp_torch
         preds_all, reg = fn(X_train, X_test, y_train)
 
     results, dump = _compute_metrics(preds_all, y_test, genes)
