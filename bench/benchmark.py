@@ -16,7 +16,7 @@ import torch.multiprocessing
 import yaml
 from hestcore.segmentation import get_path_relative
 from loguru import logger
-from sklearn.discriminant_analysis import StandardScaler
+from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from tqdm import tqdm
 import joblib
@@ -27,6 +27,7 @@ from gutdecoder.bench.cpath_model_zoo.inference_models import (
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 from hestcore.datasets import H5HESTDataset
+from torch.utils.data import DataLoader
 from huggingface_hub import snapshot_download
 
 from gutdecoder.bench.st_dataset import load_adata
@@ -288,10 +289,10 @@ def predict_single_split(train_split, test_split, args, save_dir, dataset_name, 
     print(f'using gene_list {gene_list}')
     with open(os.path.join(bench_data_root, gene_list), 'r') as f:
         genes = json.load(f)['genes']
-#new
-    test_sample_ids = []                                                                                         
+
+    test_sample_ids = []
     test_sample_barcodes = []
-  #new     
+
     for split_key, split in zip(['train', 'test'], [train_df, test_df]):
         split_assets = {}
         for i in tqdm(range(len(split))):
@@ -304,11 +305,10 @@ def predict_single_split(train_split, test_split, args, save_dir, dataset_name, 
             assets['adata'] = adata.values
             split_assets = merge_dict(split_assets, assets)
 
-# new
-            if split_key == 'test':                                                                              
-                test_sample_ids.append(sample_id)                                                                
+            if split_key == 'test':
+                test_sample_ids.append(sample_id)
                 test_sample_barcodes.append(barcodes)
-#new
+
         for key, val in split_assets.items(): 
             split_assets[key] = np.concatenate(val, axis=0)
         

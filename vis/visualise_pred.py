@@ -16,7 +16,7 @@ from typing import Dict, List, Tuple
 from scipy.stats import pearsonr
 from scipy.sparse import issparse
 
-from gutdecoder.vis.plot import *
+from gutdecoder.vis.plot import extract_best_model_gene_corrs, get_test_splits
 from gutdecoder.utils.metrics import compute_metrics
 
 
