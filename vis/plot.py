@@ -51,16 +51,14 @@ import warnings
 
 from adjustText import adjust_text
 
-# -----------------------
-# Defaults / constants
-# -----------------------
-
-DEFAULT_RUNS_ROOT = "/project/gutdecoder/kxu/hest/eval/ST_pred_results"
-DEFAULT_SPLITS_ROOT = "/project/gutdecoder/kxu/hest/eval/data"
-DEFAULT_CURATED_XLSX = "/project/gutdecoder/kxu/hest/curated_gene_list.xlsx"
-DEFAULT_EXTRA_METADATA = "/project/gutdecoder/kxu/hest/metadata/hest_directory.csv"
-DEFAULT_BROAD_METADATA = "/project/gutdecoder/kxu/hest/metadata/broad_directory.csv"
-DEFAULT_SUMMARY_PLOT_DIR = "/project/gutdecoder/kxu/hest/eval/summary_plots"
+from gutdecoder.config import (
+    RESULTS_ROOT as DEFAULT_RUNS_ROOT,
+    DATA_ROOT as DEFAULT_SPLITS_ROOT,
+    CURATED_XLSX as DEFAULT_CURATED_XLSX,
+    HEST_METADATA_CSV as DEFAULT_EXTRA_METADATA,
+    BROAD_METADATA_CSV as DEFAULT_BROAD_METADATA,
+    SUMMARY_PLOT_DIR as DEFAULT_SUMMARY_PLOT_DIR,
+)
 
 # -----------------------
 # Core IO

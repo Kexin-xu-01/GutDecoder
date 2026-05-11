@@ -18,10 +18,7 @@ from scipy.sparse import issparse
 
 from gutdecoder.vis.plot import extract_best_model_gene_corrs, get_test_splits
 from gutdecoder.utils.metrics import compute_metrics
-
-
-RUN_ROOT = "/project/gutdecoder/kxu/hest/eval/ST_pred_results"
-DATA_ROOT = "/project/gutdecoder/kxu/hest/eval/data/"
+from gutdecoder.config import RESULTS_ROOT as RUN_ROOT, DATA_ROOT
 
 
 def load_best_model_inference(run, root_dir=RUN_ROOT):

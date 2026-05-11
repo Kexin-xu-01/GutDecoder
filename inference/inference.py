@@ -16,6 +16,8 @@ import torch
 from sklearn.decomposition import PCA
 
 from hest.bench.utils.file_utils import read_assets_from_h5
+from gutdecoder.config import RESULTS_ROOT as _DEFAULT_RESULTS_ROOT
+from loguru import logger
 
 
 def load_models_from_directories(base_path):
@@ -34,9 +36,9 @@ def load_models_from_directories(base_path):
             model_path = os.path.join(dir_path, 'model.pkl')
             if os.path.exists(model_path):
                 models[name] = joblib.load(model_path)
-                print(f"Loaded model from {model_path}")
+                logger.info(f"Loaded model from {model_path}")
             else:
-                print(f"'model.pkl' not found in {dir_path}")
+                logger.warning(f"'model.pkl' not found in {dir_path}")
 
     return models
 
@@ -54,7 +56,7 @@ def load_gene_list(dir_models_and_results):
         gene_list: list of genes.
     """
     gene_json_path = Path(os.path.join(dir_models_and_results, "split0/summary.json"))
-    print('loading gene list from ', str(gene_json_path))
+    logger.info(f"Loading gene list from {gene_json_path}")
 
     if not gene_json_path.exists():
         raise FileNotFoundError(f"summary.json not found at {gene_json_path}")
@@ -64,7 +66,7 @@ def load_gene_list(dir_models_and_results):
 
     gene_names = [entry["name"] for entry in data["pearson_corrs"]]
 
-    print(f"Loaded '{len(gene_names)}' genes")
+    logger.info(f"Loaded {len(gene_names)} genes")
     return gene_names
 
 def predict_and_aggregate_models(X_test, results_dir):
@@ -89,7 +91,7 @@ def predict_and_aggregate_models(X_test, results_dir):
     for split_name in models.keys():
         model_names.append(split_name)
         if "pca_pipeline" in models[split_name]:
-            print('perform Scaling + PCA')
+            logger.info('Applying scaling + PCA')
             X_test_transformed = models[split_name]['pca_pipeline'].transform(X_test)
         else:
             X_test_transformed = X_test
@@ -99,7 +101,7 @@ def predict_and_aggregate_models(X_test, results_dir):
 
     # Stack the predictions 
     predictions = np.stack(predictions)
-    print("predictions has the shape ", predictions.shape)
+    logger.info(f"Predictions shape: {predictions.shape}")
 
     # Aggregate predictions by calculating the mean across all models
     average_predictions = np.mean(predictions, axis=0)
@@ -112,9 +114,6 @@ def predict_and_aggregate_models(X_test, results_dir):
     del models
 
     return average_predictions, sd_predictions, predictions, model_names
-
-
-_DEFAULT_RESULTS_ROOT = "/project/simmons_hts/kxu/hest/eval/ST_pred_results"
 
 
 def infer(
@@ -147,17 +146,13 @@ def infer(
 
     dir_models_and_results = os.path.join(results_root, model_directory_path)
 
-    print("Using models from ", dir_models_and_results)
+    logger.info(f"Using models from {dir_models_and_results}")
 
     # Load training configuration parameters once
     config_path = os.path.join(dir_models_and_results, "split0", "config.json")
     with open(config_path, "r") as f:
         args_dict = json.load(f)
     args = SimpleNamespace(**args_dict)
-
-    # Directory for processed test dataset (temporary storage) 
-    dir_processed_dataset_test = os.path.join("/tmp", "processed_dataset_test")
-    os.makedirs(dir_processed_dataset_test, exist_ok=True)
 
     # Set device once
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -167,17 +162,17 @@ def infer(
     for sample_path in sample_paths:
         # Extract sample name (without extension) from the file path
         name_data = os.path.splitext(os.path.basename(sample_path))[0]
-        print(f"\n-- {name_data} INFERENCE ---------------------------------------------------------------\n")
-        print(sample_path)
+        logger.info(f"Running inference for {name_data}")
+        logger.debug(f"Sample path: {sample_path}")
 
-        print(f"\n-- {name_data} FETCHING EMBEDDING--\n")
+        logger.debug(f"Fetching embedding for {name_data}")
         assets, _ = read_assets_from_h5(sample_path)
 
         # Extract embeddings features for prediction
         X_test = assets['features']
-        print("Embedding shape (X_test):", X_test.shape)
+        logger.debug(f"Embedding shape: {X_test.shape}")
 
-        print(f"\n-- {name_data} REGRESSION PREDICTIONS--\n")
+        logger.debug(f"Running regression predictions for {name_data}")
         # Make predictions and aggregate results across cross-validation regression models
         average_predictions, sd_predictions, per_model_predictions, model_names = predict_and_aggregate_models(X_test, dir_models_and_results)
 
@@ -187,7 +182,7 @@ def infer(
         # prediction = prediction.reset_index(names="coords")
 
         coords = assets["coords"]  # numpy array shape (N,2)
-        print("coords shape:", coords.shape)
+        logger.debug(f"Coords shape: {coords.shape}")
         assert len(coords) == average_predictions.shape[0], "coords and predictions must have same number of rows"
 
         # Build prediction DataFrame 
@@ -217,7 +212,7 @@ def infer(
 
         adata = sc.AnnData(prediction)
         adata.var_names = adata.var_names.astype(str)
-        print('Some adata var_names are ', adata.var_names[0:6])
+        logger.debug(f"First var_names: {list(adata.var_names[:6])}")
         adata.obsm['spatial'] = meta[["x","y"]].values
         adata.obs['in_tissue'] = True
         adata.obs['pxl_col_in_fullres'] = meta['x'].values
@@ -256,12 +251,12 @@ def infer(
         out_file = os.path.join(out_path, out_filename)
         adata.write(out_file)
 
-        print(f"\n-- {name_data} PREDICTION ADATA SAVED: {out_path}\n")
+        logger.info(f"Prediction adata saved: {out_path}")
 
         del average_predictions, X_test, assets, prediction, sd_predictions, per_model_predictions, model_names
         gc.collect()
 
         saved_paths.append(out_path)
 
-    print(f"\n-- Finished processing {len(sample_paths)} sample(s).\n")
+    logger.info(f"Finished processing {len(sample_paths)} sample(s)")
     return saved_paths
