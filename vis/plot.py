@@ -1798,7 +1798,7 @@ def plot_all_samples_grid_for_dataset(
             try:
                 df_t = pd.read_csv(tf)
                 # find sample col
-                sc = _find_col_ci(df_t, ["test_sample", "sample_id", "SampleID""])
+                sc = _find_col_ci(df_t, ["test_sample", "sample_id", "SampleID"])
                 if sc is None:
                     continue
                 sample_set.update(df_t[sc].dropna().astype(str).tolist())
