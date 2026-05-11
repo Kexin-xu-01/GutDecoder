@@ -1,31 +1,17 @@
-# Import libraries
-# Core Python Libraries
 import os
 import argparse
 from typing import Optional, List, Tuple
 import json
-import warnings
-import gc
-import joblib
-from types import SimpleNamespace
 import glob
 from pathlib import Path
 
-# Core Data manipulation Libraries
 import numpy as np
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 
-
-# Spatial Data Processing
-import h5py  
 import scanpy as sc
 
-
-from hest.bench.utils.file_utils import read_assets_from_h5
-from hest.utils import (load_wsi, register_downscale_img)
-from hestcore.wsi import WSI
-from hest.HESTData import save_spatial_plot
+from hest.utils import load_wsi, register_downscale_img
 
 
 def save_spatial_plot(adata: sc.AnnData, save_path: str, name: str='', key='total_counts', pl_kwargs={}):

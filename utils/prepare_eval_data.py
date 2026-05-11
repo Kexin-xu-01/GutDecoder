@@ -19,6 +19,26 @@ from hest.HESTData import create_splits
 
 
 # ---------- helpers ----------
+def coerce_bool(x) -> bool:
+    if isinstance(x, bool):
+        return x
+    if isinstance(x, (int, float)):
+        return bool(x)
+    return str(x).lower() not in ("0", "false", "no", "none", "")
+
+
+def _int_or_str_lower(val):
+    """Return val as int if possible, otherwise as lowercased str. Keeps None as-is."""
+    if val is None:
+        return None
+    if isinstance(val, int):
+        return val
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return str(val).lower()
+
+
 def _sanitize_tag(s: str, maxlen: int = 8) -> str:
     s2 = re.sub(r'[^A-Za-z0-9]', '', s)
     return s2.upper()[:maxlen] or "R"
@@ -167,12 +187,6 @@ def write_var_k_genes_from_paths(
     Returns:
         (var_k_genes, all_common_genes, filtered_common_genes, k_actual, var_out_path)
     """
-    import json, warnings
-    import numpy as np
-    import scanpy as sc
-    from pathlib import Path
-    from hest.utils import get_k_genes
-
     if exclude_keywords is None:
         exclude_keywords = ["NegControl", "Codeword", "Intergenic_Region", "Control", "BLANK","Intergenic"]
 
@@ -299,8 +313,6 @@ def create_benchmark_data_multislide(
     Returns:
         meta (pd.DataFrame) with columns: id, patient, dataset_title
     """
-    from hest.HESTData import create_splits
-
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -535,8 +547,6 @@ def create_benchmark_data_multirun(
     Returns:
         pd.DataFrame meta (columns: id, patient, dataset_title)
     """
-    from hest.HESTData import create_splits
-
     save_dir = Path(save_dir)
     eval_dirs = [Path(x) for x in eval_dirs]
     # sanitise and check inputs
@@ -578,7 +588,7 @@ def create_benchmark_data_multirun(
                     sid = stem_clean
                     discovered_ids.add(sid)
                     sample_sources.setdefault(sid, {}).setdefault("vis", []).append(f)
-                    
+
     # ---- Apply exclusion ----
     if exclude_ids:
         exclude_set = set(exclude_ids)
@@ -776,8 +786,6 @@ def create_benchmark_data_multirun_ex_val(
     Returns:
         pd.DataFrame meta (columns: id, patient, dataset_title, condition)
     """
-    from hest.HESTData import create_splits  # keep original dependency
-
     save_dir = Path(save_dir)
     eval_dirs = [Path(x) for x in eval_dirs]
     # sanitise and check inputs

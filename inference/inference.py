@@ -1,36 +1,18 @@
-# Import libraries
-# Core Python Libraries
 import os
 import json
-import warnings
 import gc
 import joblib
 from types import SimpleNamespace
-from operator import itemgetter
-from abc import abstractmethod
-from tqdm import tqdm
 import glob
 from pathlib import Path
 
-# Core Data manipulation Libraries
 import numpy as np
 import pandas as pd
-from scipy.stats import pearsonr, ConstantInputWarning
 import math
 
-# Visualization Library
-import matplotlib.pyplot as plt
-from matplotlib.collections import PatchCollection
-from matplotlib.patches import Rectangle
-
-# Spatial Data Processing
-import h5py  
 import scanpy as sc
 
-# Frameworks for ML and DL models
 import torch
-import timm  
-from sklearn.linear_model import Ridge  
 from sklearn.decomposition import PCA
 
 from hest.bench.utils.file_utils import read_assets_from_h5
@@ -132,20 +114,29 @@ def predict_and_aggregate_models(X_test, results_dir):
     return average_predictions, sd_predictions, predictions, model_names
 
 
+_DEFAULT_RESULTS_ROOT = "/project/simmons_hts/kxu/hest/eval/ST_pred_results"
+
+
 def infer(
-    test_embed_dir: str,  # either a directory containing sample_name.h5 files or a single .h5 file
-    model_directory_path: str,  # Path with trained model and results (same as before)
-    out_dir: str # path to save output prediction, e.g. /project/simmons_hts/kxu/hest/inference/uni_v2
+    test_embed_dir: str,
+    model_directory_path: str,
+    out_dir: str,
+    results_root: str = _DEFAULT_RESULTS_ROOT,
 ):
     """
     Find all sample_name.h5 files under `test_embed_dir`, run inference for each sample,
-    and save a CSV named '<sample_name>_predictions.csv' next to the .h5 file.
+    and save predictions as .h5ad files under out_dir/adata/.
     Returns a list of saved file paths.
+
+    Args:
+        test_embed_dir: directory containing <sample_name>.h5 embedding files.
+        model_directory_path: path relative to results_root containing trained models.
+        out_dir: directory where output .h5ad files are written.
+        results_root: root directory where training results are stored.
     """
 
     os.makedirs(out_dir, exist_ok=True)
 
-    # Resolve sample file list
     if os.path.isdir(test_embed_dir):
         sample_paths = sorted(glob.glob(os.path.join(test_embed_dir, "*.h5")))
     else:
@@ -154,8 +145,7 @@ def infer(
     if not sample_paths:
         raise FileNotFoundError(f"No .h5 files found in {test_embed_dir!r}")
 
-    # Previous directory where models and results are stored 
-    dir_models_and_results = os.path.join("/project/simmons_hts/kxu/hest/eval/ST_pred_results", model_directory_path)
+    dir_models_and_results = os.path.join(results_root, model_directory_path)
 
     print("Using models from ", dir_models_and_results)
 

@@ -134,15 +134,9 @@ def train_test_reg(X_train, X_test, y_train, y_test,
     Returns:
         results (dict), dump (dict), reg (estimator or list of estimators)
     """
-    import numpy as np
-    from sklearn.linear_model import Ridge
-    from scipy.stats import pearsonr
-    from tqdm import tqdm
-
     reg = None  # ensure variable exists
 
     if method == 'ridge':
-        # default alpha if not provided
         if alpha is None:
             alpha = 100 / (X_train.shape[1] * y_train.shape[1])
 
@@ -157,11 +151,6 @@ def train_test_reg(X_train, X_test, y_train, y_test,
         preds_all = reg.predict(X_test)
 
     elif method in ('random-forest', 'rf'):
-        # Try to use RAPIDS cuML if available and X is on GPU / RAPIDS environment,
-        # otherwise fall back to sklearn's RandomForestRegressor.
-        import warnings
-        import os
-
         use_cuml = can_use_cuml()
 
         if use_cuml:
@@ -226,7 +215,6 @@ def train_test_reg(X_train, X_test, y_train, y_test,
             reg = regs  # list of per-target sklearn regressors
 
     elif method == 'xgboost':
-        import xgboost as xgb
         reg = xgb.XGBRegressor(
             n_estimators=100,
             learning_rate=0.1,
@@ -244,10 +232,7 @@ def train_test_reg(X_train, X_test, y_train, y_test,
 
 
     elif method == 'mlp_torch':
-
-        import numpy as np
         from torch.utils.data import DataLoader, TensorDataset
-        from sklearn.preprocessing import StandardScaler
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -305,8 +290,6 @@ def train_test_reg(X_train, X_test, y_train, y_test,
 
     elif method == 'mlp_sklearn':
         from sklearn.neural_network import MLPRegressor
-        from sklearn.preprocessing import StandardScaler
-        import numpy as np
 
         X_train_np = np.asarray(X_train)
         X_test_np  = np.asarray(X_test)
