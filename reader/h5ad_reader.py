@@ -739,11 +739,12 @@ def rule_based_spot_exclusion(
         # prepare a subsetted AnnData view for plotting
         try:
             ad_subset = st.adata[final_keep]
-            sc.pl.spatial(
+            fig=sc.pl.spatial(
                 st.adata[final_keep],
                 img_key="downscaled_fullres",
                 color="total_counts",
                 title="In-tissue spots (after rule exclusions)",
+                return_fig=True
             )
 
             if save_path is not None:
