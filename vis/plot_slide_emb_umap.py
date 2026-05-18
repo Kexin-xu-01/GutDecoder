@@ -83,30 +83,18 @@ def load_metadata(
 
     return xenium_meta, hest_meta
 
-
-def build_merged_table(
-    feat_df: pd.DataFrame,
-    xenium_meta: pd.DataFrame,
-    hest_meta: pd.DataFrame,
-    sample_id_col: str = "Sample_ID",
+def load_metadata(
+    hest_meta_path: Path,
     hest_id_col: str = "sample_id",
 ) -> pd.DataFrame:
-    merged = feat_df.merge(xenium_meta, left_on="sample_id", right_on=sample_id_col, how="left")
-    merged = merged.merge(
-        hest_meta,
-        left_on="sample_id",
-        right_on=hest_id_col,
-        how="left",
-        suffixes=("", "_hest"),
-    )
+    hest_meta = pd.read_csv(hest_meta_path)
 
-    if "run_disease" in merged.columns or "run_disease_hest" in merged.columns:
-        merged["run_disease"] = coalesce_series(merged, ["run_disease", "run_disease_hest"])
+    if hest_id_col not in hest_meta.columns:
+        raise KeyError(f"{hest_id_col!r} not in hest metadata columns")
 
-    if "tissue_type" not in merged.columns:
-        raise KeyError("'tissue_type' was not found in xenium_directory.xlsx after merge")
+    hest_meta[hest_id_col] = hest_meta[hest_id_col].astype("string")
 
-    return merged
+    return hest_meta
 
 
 def compute_umap(X: np.ndarray, random_state: int = 0) -> np.ndarray:
@@ -195,7 +183,7 @@ def _plot_page(ax, emb, series, title, is_numeric: bool):
 
 
 def make_umap_pdf(
-    merged: pd.DataFrame,
+    meta: pd.DataFrame,
     out_pdf: Path,
     categorical_cols: list[str],
     numeric_cols: list[str],
@@ -206,15 +194,15 @@ def make_umap_pdf(
 ):
     out_pdf.parent.mkdir(parents=True, exist_ok=True)
 
-    cat_cols = [c for c in categorical_cols if c in merged.columns]
-    num_cols = [c for c in numeric_cols if c in merged.columns]
-    group_by_cols = [c for c in group_by_cols if c in merged.columns]
+    cat_cols = [c for c in categorical_cols if c in meta.columns]
+    num_cols = [c for c in numeric_cols if c in meta.columns]
+    group_by_cols = [c for c in group_by_cols if c in meta.columns]
 
     with PdfPages(out_pdf) as pdf:
         # -----------------------
         # Overall pages
         # -----------------------
-        global_X = np.stack(merged[feature_col].to_numpy())
+        global_X = np.stack(meta[feature_col].to_numpy())
         global_emb = compute_umap(global_X)
 
         for col in cat_cols:
@@ -222,7 +210,7 @@ def make_umap_pdf(
             _plot_page(
                 ax,
                 global_emb,
-                merged[col],
+                meta[col],
                 f"Overall: {col}",
                 is_numeric=False,
             )
@@ -236,7 +224,7 @@ def make_umap_pdf(
             _plot_page(
                 ax,
                 global_emb,
-                merged[col],
+                meta[col],
                 f"Overall: {col}",
                 is_numeric=True,
             )
@@ -249,11 +237,11 @@ def make_umap_pdf(
         # Grouped pages
         # -----------------------
         for group_col in group_by_cols:
-            group_vals = pd.Series(merged[group_col]).astype("string").fillna("NA")
+            group_vals = pd.Series(meta[group_col]).astype("string").fillna("NA")
             groups = [g for g in pd.unique(group_vals) if g != "NA"]
 
             for g in sorted(groups, key=lambda x: str(x)):
-                sub = merged[group_vals == g].copy()
+                sub = meta[group_vals == g].copy()
                 if len(sub) < 2:
                     print(f"Skipping {group_col}={g}: too few samples ({len(sub)})")
                     continue
