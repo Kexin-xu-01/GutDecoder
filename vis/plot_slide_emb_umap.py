@@ -65,25 +65,6 @@ def load_features(h5_root: Path, feature_key: str = "features") -> pd.DataFrame:
 
 
 def load_metadata(
-    xenium_meta_path: Path,
-    hest_meta_path: Path,
-    sample_id_col: str = "Sample_ID",
-    hest_id_col: str = "sample_id",
-) -> pd.DataFrame:
-    xenium_meta = pd.read_excel(xenium_meta_path, engine="openpyxl")
-    hest_meta = pd.read_csv(hest_meta_path)
-
-    if sample_id_col not in xenium_meta.columns:
-        raise KeyError(f"{sample_id_col!r} not in xenium metadata columns")
-    if hest_id_col not in hest_meta.columns:
-        raise KeyError(f"{hest_id_col!r} not in hest metadata columns")
-
-    xenium_meta[sample_id_col] = xenium_meta[sample_id_col].astype("string")
-    hest_meta[hest_id_col] = hest_meta[hest_id_col].astype("string")
-
-    return xenium_meta, hest_meta
-
-def load_metadata(
     hest_meta_path: Path,
     hest_id_col: str = "sample_id",
 ) -> pd.DataFrame:
@@ -145,7 +126,7 @@ def plot_categorical(ax, emb, values, title):
 
     ncol = 1 if n <= 20 else 2 if n <= 50 else 3 if n <= 100 else 4
     ax.legend(
-        fontsize=6,
+        fontsize=8,
         markerscale=1.2,
         frameon=False,
         ncol=ncol,
@@ -206,7 +187,7 @@ def make_umap_pdf(
         global_emb = compute_umap(global_X)
 
         for col in cat_cols:
-            fig, ax = plt.subplots(figsize=(10, 7))
+            fig, ax = plt.subplots(figsize=(7, 5))
             _plot_page(
                 ax,
                 global_emb,
@@ -220,7 +201,7 @@ def make_umap_pdf(
             plt.close(fig)
 
         for col in num_cols:
-            fig, ax = plt.subplots(figsize=(10, 7))
+            fig, ax = plt.subplots(figsize=(7, 5))
             _plot_page(
                 ax,
                 global_emb,
@@ -252,7 +233,7 @@ def make_umap_pdf(
                     emb = global_emb[group_vals == g]
 
                 for col in cat_cols:
-                    fig, ax = plt.subplots(figsize=(10, 7))
+                    fig, ax = plt.subplots(figsize=(7, 5))
                     _plot_page(
                         ax,
                         emb,
@@ -266,7 +247,7 @@ def make_umap_pdf(
                     plt.close(fig)
 
                 for col in num_cols:
-                    fig, ax = plt.subplots(figsize=(10, 7))
+                    fig, ax = plt.subplots(figsize=(7, 5))
                     _plot_page(
                         ax,
                         emb,
