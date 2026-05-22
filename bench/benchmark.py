@@ -60,6 +60,8 @@ def _parse_args():
     parser.add_argument('--encoders', nargs='+')
     parser.add_argument('--datasets', nargs='+')
     parser.add_argument('--config', type=str)
+    parser.add_argument('--slide_emb_root', type=str)
+    parser.add_argument('--fusion', type=str)
     return parser.parse_args()
             
 @dataclass
@@ -105,6 +107,8 @@ class BenchmarkConfig:
     encoders: list = field(default_factory=lambda: ['resnet50'])
     datasets: list = field(default_factory=lambda: ['IDC'])
     config: Optional[str] = None
+    slide_emb_root: Optional[str] = None
+    fusion: Optional[str] = "concat"
 
 def get_path(path):
     src = get_path_relative(__file__, '../../../../')
@@ -115,7 +119,7 @@ def get_path(path):
     return new_path
 
 
-def benchmark_grid(args, device, model_names, datasets: List[str], save_dir, slide_encoder_root, fusion, custom_encoder=None) -> Tuple[list, dict]:
+def benchmark_grid(args, device, model_names, datasets: List[str], save_dir, slide_emb_root, fusion, custom_encoder=None) -> Tuple[list, dict]:
     """ Execute predict_folds for each encoders and datasets and dump the results in a nested directory structure """
     
     dataset_perfs = []
@@ -126,7 +130,7 @@ def benchmark_grid(args, device, model_names, datasets: List[str], save_dir, sli
             logger.info(f'HESTBench task: {dataset}, Encoder: {model_name}')
             exp_save_dir = os.path.join(save_dir, dataset, model_name)
             os.makedirs(exp_save_dir, exist_ok=True)
-            enc_results = predict_folds(args, exp_save_dir, model_name, dataset, device, bench_data_root, slide_encoder_root, fusion, custom_encoder)
+            enc_results = predict_folds(args, exp_save_dir, model_name, dataset, device, bench_data_root, slide_emb_root, fusion, custom_encoder)
             
             enc_perfs.append({
                 'encoder_name': model_name,
@@ -466,7 +470,7 @@ def predict_single_split_tile_slide_fusion(
     bench_data_root,
     custom_encoder,
     extract_tiles,
-    slide_encoder_root,
+    slide_emb_root,
     fusion="concat",
 ):
     """
@@ -482,7 +486,7 @@ def predict_single_split_tile_slide_fusion(
 
     Parameters
     ----------
-    slide_encoder_root : str
+    slide_emb_root : str
 
         /project/gutdecoder/kxu/xenium/he/xenium/trident_processed/hest/20x_512px_0px_overlap/slide_features_titan
 
@@ -566,7 +570,7 @@ def predict_single_split_tile_slide_fusion(
     os.makedirs(save_dir, exist_ok=True)
 
     config_dict = vars(args).copy()
-    config_dict["slide_encoder_root"] = slide_encoder_root
+    config_dict["slide_emb_root"] = slide_emb_root
     config_dict["fusion"] = fusion
 
     with open(os.path.join(save_dir, "config.json"), "w") as f:
@@ -599,7 +603,7 @@ def predict_single_split_tile_slide_fusion(
             expr_path = os.path.join(bench_data_root, split.iloc[i]["expr_path"])
 
             slide_h5_path = os.path.join(
-                slide_encoder_root,
+                slide_emb_root,
                 f"{sample_id}.h5",
             )
 
@@ -712,11 +716,11 @@ def predict_single_split_tile_slide_fusion(
 
     # Also record fusion info
     linprobe_dump["fusion"] = fusion
-    linprobe_dump["slide_encoder_root"] = slide_encoder_root
+    linprobe_dump["slide_emb_root"] = slide_emb_root
 
     model_bundle["regression_model"] = reg
     model_bundle["fusion"] = fusion
-    model_bundle["slide_encoder_root"] = slide_encoder_root
+    model_bundle["slide_emb_root"] = slide_emb_root
 
     model_path = os.path.join(save_dir, "model.pkl")
     joblib.dump(model_bundle, model_path)
@@ -776,25 +780,25 @@ def predict_single_split(
     bench_data_root,
     custom_encoder,
     extract_tiles,
-    slide_encoder_root=None,
+    slide_emb_root=None,
     fusion="concat",
 ):
     """
     Predict a single split.
 
-    If slide_encoder_root is None:
+    If slide_emb_root is None:
         - behaves like the original tile-only version
         - uses only tile-level embeddings
 
-    If slide_encoder_root is provided:
+    If slide_emb_root is provided:
         - reads slide-level H5 from:
-            slide_encoder_root/{sample_id}.h5
+            slide_emb_root/{sample_id}.h5
         - repeats the slide embedding for every barcode/tile
         - fuses tile + slide embeddings by concatenation
 
     Parameters
     ----------
-    slide_encoder_root : str or None
+    slide_emb_root : str or None
         Optional path to slide-level H5 embeddings.
 
         Example:
@@ -806,7 +810,7 @@ def predict_single_split(
         Currently only "concat".
     """
 
-    use_slide_embedding = slide_encoder_root is not None
+    use_slide_embedding = slide_emb_root is not None
 
     # -------------------------
     # Resolve split paths
@@ -883,7 +887,7 @@ def predict_single_split(
     os.makedirs(save_dir, exist_ok=True)
 
     config_dict = vars(args).copy()
-    config_dict["slide_encoder_root"] = slide_encoder_root
+    config_dict["slide_emb_root"] = slide_emb_root
     config_dict["use_slide_embedding"] = use_slide_embedding
     config_dict["fusion"] = fusion if use_slide_embedding else None
 
@@ -925,7 +929,7 @@ def predict_single_split(
             # Optional slide-level fusion
             if use_slide_embedding:
                 slide_h5_path = os.path.join(
-                    slide_encoder_root,
+                    slide_emb_root,
                     f"{sample_id}.h5",
                 )
 
@@ -1045,12 +1049,12 @@ def predict_single_split(
 
     # Record whether slide fusion was used
     linprobe_dump["use_slide_embedding"] = use_slide_embedding
-    linprobe_dump["slide_encoder_root"] = slide_encoder_root
+    linprobe_dump["slide_emb_root"] = slide_emb_root
     linprobe_dump["fusion"] = fusion if use_slide_embedding else None
 
     model_bundle["regression_model"] = reg
     model_bundle["use_slide_embedding"] = use_slide_embedding
-    model_bundle["slide_encoder_root"] = slide_encoder_root
+    model_bundle["slide_emb_root"] = slide_emb_root
     model_bundle["fusion"] = fusion if use_slide_embedding else None
 
     model_path = os.path.join(save_dir, "model.pkl")
@@ -1083,7 +1087,7 @@ def predict_single_split(
     return probe_results
 
         
-def predict_folds(args, exp_save_dir, model_name, dataset_name, device, bench_data_root, slide_encoder_root,fusion, custom_encoder):
+def predict_folds(args, exp_save_dir, model_name, dataset_name, device, bench_data_root, slide_emb_root,fusion, custom_encoder):
     """ Predict all folds for a given model """
     split_dir = os.path.join(bench_data_root, 'splits')
     #if not os.path.exists(split_dir):
@@ -1100,7 +1104,7 @@ def predict_folds(args, exp_save_dir, model_name, dataset_name, device, bench_da
         os.makedirs(kfold_save_dir, exist_ok=True)
         extract_tiles = True if i == 0 else False
         linprobe_results = predict_single_split(train_split, test_split, args, kfold_save_dir, dataset_name, model_name, device=device, bench_data_root=bench_data_root, custom_encoder=custom_encoder, extract_tiles=extract_tiles,
-                                                slide_encoder_root = slide_encoder_root, fusion=fusion)
+                                                slide_emb_root = slide_emb_root, fusion=fusion)
         libprobe_results_arr.append(linprobe_results)
         
         
@@ -1196,10 +1200,10 @@ def benchmark(encoder: torch.nn.Module, enc_transf: Callable, precision: torch.d
         
     encoders += args.encoders
 
-    slide_encoder_root = args.slide_encoder_root
+    slide_emb_root = args.slide_emb_root
     fusion = args.fusion
     
-    dataset_perfs, perf_per_enc = benchmark_grid(args, device, encoders, datasets, save_dir=save_dir,  slide_encoder_root=slide_encoder_root, fusion=fusion, custom_encoder=custom_encoder)
+    dataset_perfs, perf_per_enc = benchmark_grid(args, device, encoders, datasets, save_dir=save_dir,  slide_emb_root=slide_emb_root, fusion=fusion, custom_encoder=custom_encoder)
     
     return dataset_perfs, perf_per_enc
     
