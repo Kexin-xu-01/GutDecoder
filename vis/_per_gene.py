@@ -63,8 +63,8 @@ def plot_gene_correlation_barplot_grouped(df_genes, group_by='cell_type', show_m
     Returns:
         matplotlib.figure.Figure: Figure object for further saving or manipulation.
     """
-    if group_by not in ['cell_type', 'condition', 'panel','tcr','coeliac','run_id']:
-        raise ValueError("group_by must be 'cell_type' or 'condition' or 'panel' or 'tcr' or'coeliac' or 'run_id'")
+    if group_by not in ['cell_type', 'condition', 'panel','tcr','coeliac','run']:
+        raise ValueError("group_by must be 'cell_type' or 'condition' or 'panel' or 'tcr' or'coeliac' or 'run'")
 
     # Filter out rows where grouping column is NA
     df_plot = df_genes[df_genes[group_by].notna()].copy()
