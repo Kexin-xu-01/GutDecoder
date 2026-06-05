@@ -160,8 +160,9 @@ def add_image(adata_path: str, wsi_path: str, pixel_size: float = 0.221):
 
     # calculate QC metrics if missing (guarded)
     # Note: behavior depends on your scanpy version; this mirrors your original code.
-    if 'total_counts' not in adata.var_names and len(adata) > 0:
-        sc.pp.calculate_qc_metrics(adata, inplace=True)
+    if "total_counts" not in adata.obs.columns and len(adata) > 0:
+        safe_percent_top = [n for n in [50, 100, 200, 500] if n <= adata.n_vars] or None
+        sc.pp.calculate_qc_metrics(adata, percent_top=safe_percent_top, inplace=True)
 
     logger.info(f"Added QC metrics / downscale for {os.path.basename(adata_path)} (factor={downscale_factor})")
 
@@ -369,24 +370,36 @@ def process_run(run_dir: str,
         processed_spatial_dir = os.path.join(processed_spatial_dir_root, sample_name)
 
         # If processed adata already exists, skip add_image step
+        spatial_png_path = os.path.join(run_dir, "spatial_plots", f"{sample_name}_spatial_plots.png")
+        conf_png_path = os.path.join(run_dir, "confidence_plots", f"{sample_name}_spatial_plots.png")
+        plots_exist = os.path.exists(spatial_png_path) and os.path.exists(conf_png_path)
+
         if os.path.exists(processed_adata_path):
-            logger.info(f"Skipping {sample_name}: already processed")
-            saved_adata_paths.append(processed_adata_path)
-
-            # Look for spatial plot PNG 
-            spatial_png_path = os.path.join(
-                run_dir,
-                "spatial_plots",
-                f"{sample_name}_spatial_plots.png"
-            )
-
-            if os.path.exists(spatial_png_path):
+            if plots_exist:
+                logger.info(f"Skipping {sample_name}: already processed and plots exist")
+                saved_adata_paths.append(processed_adata_path)
                 spatial_plot_dirs.append(spatial_png_path)
-                logger.debug(f"Existing spatial plot: {spatial_png_path}")
-            else:
-                spatial_plot_dirs.append(None)
-                logger.warning(f"Spatial plot PNG not found for {sample_name} (expected {spatial_png_path})")
+                continue
 
+            logger.info(f"Adata exists for {sample_name}, regenerating missing spatial plots")
+            try:
+                adata = sc.read_h5ad(processed_adata_path)
+                if "total_counts" not in adata.obs.columns and len(adata) > 0:
+                    safe_percent_top = [n for n in [50, 100, 200, 500] if n <= adata.n_vars] or None
+                    sc.pp.calculate_qc_metrics(adata, percent_top=safe_percent_top, inplace=True)
+                spatial_plot_dir = os.path.join(run_dir, "spatial_plots")
+                os.makedirs(spatial_plot_dir, exist_ok=True)
+                save_spatial_plot(adata, save_path=spatial_plot_dir, name=sample_name)
+                conf_plot_dir = os.path.join(run_dir, "confidence_plots")
+                os.makedirs(conf_plot_dir, exist_ok=True)
+                save_spatial_plot(adata, save_path=conf_plot_dir, key="mean_pred_sd_per_spot", name=sample_name)
+                saved_adata_paths.append(processed_adata_path)
+                spatial_plot_dirs.append(spatial_plot_dir)
+                logger.info(f"Done: plots regenerated for {sample_name}")
+            except Exception as e:
+                logger.error(f"Error regenerating plots for {sample_name}: {e}")
+                saved_adata_paths.append(processed_adata_path)
+                spatial_plot_dirs.append(None)
             continue
 
         # find matching WSI
