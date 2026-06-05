@@ -14,6 +14,117 @@ import scanpy as sc
 from hest.utils import load_wsi, register_downscale_img
 from loguru import logger
 
+def get_wsi_size(wsi):
+    """
+    Best-effort extraction of WSI width/height for hestcore.wsi.NumpyWSI and other WSI wrappers.
+    Returns (width, height) or (None, None).
+    """
+    # Common OpenSlide/PIL-style attributes
+    for attr in ["dimensions", "level_dimensions"]:
+        if hasattr(wsi, attr):
+            try:
+                val = getattr(wsi, attr)
+                if attr == "level_dimensions" and len(val) > 0:
+                    return tuple(val[0])
+                if attr == "dimensions" and len(val) == 2:
+                    return tuple(val)
+            except Exception:
+                pass
+
+    # Common image-array attributes on wrappers
+    for attr in ["img", "image", "array", "np_img", "numpy_img", "slide", "data"]:
+        if hasattr(wsi, attr):
+            try:
+                arr = getattr(wsi, attr)
+                if hasattr(arr, "shape") and len(arr.shape) >= 2:
+                    h, w = arr.shape[:2]
+                    return int(w), int(h)
+                if hasattr(arr, "size") and len(arr.size) == 2:
+                    return tuple(arr.size)
+            except Exception:
+                pass
+
+    # Methods that may return an image or array
+    for method in ["get_img", "get_image", "get_thumbnail", "get_numpy", "numpy"]:
+        if hasattr(wsi, method):
+            try:
+                fn = getattr(wsi, method)
+                obj = fn() if method not in ["get_thumbnail"] else fn()
+                if hasattr(obj, "shape") and len(obj.shape) >= 2:
+                    h, w = obj.shape[:2]
+                    return int(w), int(h)
+                if hasattr(obj, "size") and len(obj.size) == 2:
+                    return tuple(obj.size)
+            except Exception:
+                pass
+
+    return None, None
+
+def debug_wsi_object(wsi):
+    """Log useful public attributes/methods of an unknown WSI wrapper."""
+    try:
+        public_attrs = [a for a in dir(wsi) if not a.startswith("_")]
+        logger.info(f"WSI public attrs/methods: {public_attrs[:80]}")
+    except Exception as e:
+        logger.warning(f"Could not inspect WSI object: {e}")
+
+
+def debug_spatial_alignment(adata, wsi):
+    logger.info(f"--- Debug spatial alignment ---")
+    logger.info(f"adata shape: {adata.shape}")
+    logger.info(f"WSI type: {type(wsi)}")
+
+    wsi_width, wsi_height = get_wsi_size(wsi)
+    if wsi_width is not None and wsi_height is not None:
+        logger.info(f"WSI size inferred: width={wsi_width}, height={wsi_height}")
+    else:
+        logger.warning("Could not infer WSI size from this WSI object")
+        debug_wsi_object(wsi)
+
+    coords = None
+    if "spatial" in adata.obsm:
+        coords = np.asarray(adata.obsm["spatial"])
+        logger.info(
+            f"obsm['spatial'] x range: {np.nanmin(coords[:, 0])} - {np.nanmax(coords[:, 0])}"
+        )
+        logger.info(
+            f"obsm['spatial'] y range: {np.nanmin(coords[:, 1])} - {np.nanmax(coords[:, 1])}"
+        )
+        logger.info(f"obsm['spatial'] first 5 rows:\n{coords[:5]}")
+
+        if wsi_width is not None and wsi_height is not None:
+            x_min, x_max = np.nanmin(coords[:, 0]), np.nanmax(coords[:, 0])
+            y_min, y_max = np.nanmin(coords[:, 1]), np.nanmax(coords[:, 1])
+            if x_min < 0 or y_min < 0 or x_max >= wsi_width or y_max >= wsi_height:
+                logger.error(
+                    "Spatial coordinates are outside WSI bounds: "
+                    f"x=[{x_min}, {x_max}] vs width={wsi_width}; "
+                    f"y=[{y_min}, {y_max}] vs height={wsi_height}"
+                )
+            else:
+                logger.info("Spatial coordinates are within inferred WSI bounds")
+    else:
+        logger.warning("No adata.obsm['spatial'] found")
+
+    logger.info(f"obs columns: {list(adata.obs.columns)}")
+
+    for col in [
+        "array_row", "array_col", "pxl_row_in_fullres", "pxl_col_in_fullres",
+        "x", "y", "imagecol", "imagerow"
+    ]:
+        if col in adata.obs.columns:
+            vals = pd.to_numeric(adata.obs[col], errors="coerce")
+            logger.info(f"obs[{col}] range: {vals.min()} - {vals.max()}")
+
+    if "pxl_col_in_fullres" in adata.obs.columns and "pxl_row_in_fullres" in adata.obs.columns:
+        x = pd.to_numeric(adata.obs["pxl_col_in_fullres"], errors="coerce")
+        y = pd.to_numeric(adata.obs["pxl_row_in_fullres"], errors="coerce")
+        if wsi_width is not None and wsi_height is not None:
+            bad = (x < 0) | (y < 0) | (x >= wsi_width) | (y >= wsi_height)
+            logger.info(f"spots outside inferred WSI bounds using obs pxl_* columns: {int(bad.sum())} / {adata.n_obs}")
+
+    logger.info(f"uns keys: {list(adata.uns.keys())}")
+
 
 def save_spatial_plot(adata: sc.AnnData, save_path: str, name: str='', key='total_counts', pl_kwargs={}):
     """Save the spatial plot from that sc.AnnData
@@ -41,6 +152,9 @@ def add_image(adata_path: str, wsi_path: str, pixel_size: float = 0.221):
     """
     wsi, _ = load_wsi(wsi_path)
     adata = sc.read_h5ad(adata_path)
+
+    debug_spatial_alignment(adata, wsi)
+
     # register_downscale_img should handle reading coordinates from adata.obs etc.
     downscaled_fullres, downscale_factor = register_downscale_img(adata, wsi, pixel_size)
 
