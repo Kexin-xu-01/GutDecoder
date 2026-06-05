@@ -20,6 +20,7 @@ from gutdecoder.config import RESULTS_ROOT as _DEFAULT_RESULTS_ROOT
 from loguru import logger
 
 
+
 def load_models_from_directories(base_path):
     """
     Load all trained regression models (one model for each cross-validation split)
