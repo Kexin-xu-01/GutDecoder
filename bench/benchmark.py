@@ -205,7 +205,13 @@ def embed_tiles(
         else:
             mode = 'a'
         asset_dict = {'embeddings': embeddings.cpu().numpy()}
-        asset_dict.update({key: np.array(val) for key, val in batch.items() if key != 'imgs'})
+        for key, val in batch.items():
+            if key == 'imgs':
+                continue
+            arr = np.array(val)
+            if arr.dtype.kind == 'U':  # unicode strings — h5py can't save these; encode to bytes
+                arr = np.array([v.encode() for v in val])
+            asset_dict[key] = arr
         save_hdf5(embedding_save_path,
                   asset_dict=asset_dict,
                   mode=mode)
