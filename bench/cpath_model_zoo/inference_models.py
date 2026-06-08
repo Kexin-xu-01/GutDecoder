@@ -595,14 +595,32 @@ class GpfmInferenceEncoder(InferenceEncoder):
 
     def _build(self, weights_path=None):
         import timm
-        from timm.data import resolve_data_config
-        from timm.data.transforms_factory import create_transform
+        import traceback as _tb
+        from huggingface_hub import hf_hub_download
+        from torchvision import transforms
+        from torchvision.transforms import InterpolationMode
 
-        model = timm.create_model("hf_hub:majiabo/GPFM", pretrained=True)
-        model.eval()
-        config = resolve_data_config(model.pretrained_cfg)
-        eval_transform = create_transform(**config)
-        precision = torch.float32
+        if not weights_path:
+            weights_path = hf_hub_download(repo_id="majiabo/GPFM", filename="GPFM.pth")
+
+        model = timm.create_model(
+            "vit_large_patch14_dinov2.lvd142m",
+            pretrained=False,
+            img_size=224,
+            init_values=1e-5,
+        )
+        state_dict = torch.load(weights_path, map_location="cpu", weights_only=False)
+        if isinstance(state_dict, dict) and "state_dict" in state_dict:
+            state_dict = state_dict["state_dict"]
+        model.load_state_dict(state_dict, strict=True)
+
+        eval_transform = transforms.Compose([
+            transforms.Resize(224, interpolation=InterpolationMode.BICUBIC, antialias=True),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=_IMAGENET_MEAN, std=_IMAGENET_STD),
+        ])
+        precision = torch.float16
         return model, eval_transform, precision
 
 
