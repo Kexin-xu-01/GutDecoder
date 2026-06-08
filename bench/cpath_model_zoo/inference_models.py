@@ -608,6 +608,7 @@ class GpfmInferenceEncoder(InferenceEncoder):
             pretrained=False,
             img_size=224,
             init_values=1e-5,
+            num_classes=0,
         )
         state_dict = torch.load(weights_path, map_location="cpu", weights_only=False)
         if isinstance(state_dict, dict) and "state_dict" in state_dict:
