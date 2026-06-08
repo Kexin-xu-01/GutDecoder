@@ -261,9 +261,9 @@ def predict_single_split(train_split, test_split, args, save_dir, dataset_name, 
                     _ = encoder.eval()
                     encoder.to(device)
 
-                    tile_dataset = H5PatchDataset(tile_h5_path, chunk_size=args.batch_size, img_transform=encoder.eval_transforms)
-                    tile_dataloader = torch.utils.data.DataLoader(tile_dataset, 
-                                                            batch_size=1, 
+                    tile_dataset = H5PatchDataset(tile_h5_path, img_transform=encoder.eval_transforms)
+                    tile_dataloader = torch.utils.data.DataLoader(tile_dataset,
+                                                            batch_size=args.batch_size,
                                                             shuffle=False,
                                                             num_workers=args.num_workers)
                     
@@ -540,13 +540,12 @@ def predict_single_split_tile_slide_fusion(
 
                     tile_dataset = H5PatchDataset(
                         tile_h5_path,
-                        chunk_size=args.batch_size,
                         img_transform=encoder.eval_transforms,
                     )
 
                     tile_dataloader = torch.utils.data.DataLoader(
                         tile_dataset,
-                        batch_size=1,
+                        batch_size=args.batch_size,
                         shuffle=False,
                         num_workers=args.num_workers,
                     )
@@ -857,13 +856,12 @@ def predict_single_split(
 
                     tile_dataset = H5PatchDataset(
                         tile_h5_path,
-                        chunk_size=args.batch_size,
                         img_transform=encoder.eval_transforms,
                     )
 
                     tile_dataloader = torch.utils.data.DataLoader(
                         tile_dataset,
-                        batch_size=1,
+                        batch_size=args.batch_size,
                         shuffle=False,
                         num_workers=args.num_workers,
                     )
