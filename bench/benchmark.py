@@ -14,7 +14,6 @@ import pandas as pd
 import torch
 import torch.multiprocessing
 import yaml
-from hestcore.segmentation import get_path_relative
 from loguru import logger
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
@@ -26,7 +25,7 @@ from gutdecoder.bench.cpath_model_zoo.inference_models import (
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 
-from hestcore.datasets import H5HESTDataset
+from hest.bench.st_dataset import H5PatchDataset
 from torch.utils.data import DataLoader
 from huggingface_hub import snapshot_download
 
@@ -111,12 +110,10 @@ class BenchmarkConfig:
     fusion: Optional[str] = "concat"
 
 def get_path(path):
-    src = get_path_relative(__file__, '../../../../')
+    src = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../../../'))
     if path.startswith('./'):
-        new_path = os.path.join(src, path)
-    else:
-        new_path = path
-    return new_path
+        return os.path.join(src, path)
+    return path
 
 
 def benchmark_grid(args, device, model_names, datasets: List[str], save_dir, slide_emb_root, fusion, custom_encoder=None) -> Tuple[list, dict]:
@@ -216,7 +213,7 @@ def embed_tiles(
 
 
 def get_bench_weights(weights_root, name):
-    local_ckpt_registry = get_path_relative(__file__, 'local_ckpts.json')
+    local_ckpt_registry = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'local_ckpts.json')
     with open(local_ckpt_registry, 'r') as f:
         ckpt_registry = json.load(f)
     if name in ckpt_registry:
@@ -264,7 +261,7 @@ def predict_single_split(train_split, test_split, args, save_dir, dataset_name, 
                     _ = encoder.eval()
                     encoder.to(device)
 
-                    tile_dataset = H5HESTDataset(tile_h5_path, chunk_size=args.batch_size, img_transform=encoder.eval_transforms)
+                    tile_dataset = H5PatchDataset(tile_h5_path, chunk_size=args.batch_size, img_transform=encoder.eval_transforms)
                     tile_dataloader = torch.utils.data.DataLoader(tile_dataset, 
                                                             batch_size=1, 
                                                             shuffle=False,
@@ -541,7 +538,7 @@ def predict_single_split_tile_slide_fusion(
                     _ = encoder.eval()
                     encoder.to(device)
 
-                    tile_dataset = H5HESTDataset(
+                    tile_dataset = H5PatchDataset(
                         tile_h5_path,
                         chunk_size=args.batch_size,
                         img_transform=encoder.eval_transforms,
@@ -858,7 +855,7 @@ def predict_single_split(
                     _ = encoder.eval()
                     encoder.to(device)
 
-                    tile_dataset = H5HESTDataset(
+                    tile_dataset = H5PatchDataset(
                         tile_h5_path,
                         chunk_size=args.batch_size,
                         img_transform=encoder.eval_transforms,
