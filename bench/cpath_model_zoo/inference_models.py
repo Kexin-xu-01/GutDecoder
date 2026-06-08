@@ -1,3 +1,4 @@
+import os
 import traceback
 from abc import abstractmethod
 from typing import Optional, Tuple
@@ -600,7 +601,7 @@ class GpfmInferenceEncoder(InferenceEncoder):
         from torchvision import transforms
         from torchvision.transforms import InterpolationMode
 
-        if not weights_path:
+        if not weights_path or not os.path.isfile(weights_path):
             weights_path = hf_hub_download(repo_id="majiabo/GPFM", filename="GPFM.pth")
 
         model = timm.create_model(
