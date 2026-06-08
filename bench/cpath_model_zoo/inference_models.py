@@ -8,7 +8,6 @@ import torch
 from loguru import logger
 
 import timm
-import trident
 
 _IMAGENET_MEAN = (0.485, 0.456, 0.406)
 _IMAGENET_STD = (0.229, 0.224, 0.225)
@@ -64,9 +63,10 @@ class ConchInferenceEncoder(InferenceEncoder):
     def forward(self, x):
         return self.model.encode_image(x, proj_contrast=False, normalize=False)
 
-import trident
-# from trident.patch_encoder_models.load import Conchv15InferenceEncoder # this takes only one argument, but hest gives model name and weights
-from trident.patch_encoder_models.load import BasePatchEncoder
+try:
+    from trident.patch_encoder_models.load import BasePatchEncoder
+except Exception:
+    BasePatchEncoder = InferenceEncoder  # fallback so class definition doesn't crash
 
 # redefine. the conchv15 to take weights_path as a second argument
 class Conchv15InferenceEncoder(BasePatchEncoder):
