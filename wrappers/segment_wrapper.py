@@ -57,8 +57,6 @@ sc.pp.calculate_qc_metrics = _patched_calculate_qc_metrics
 import hest
 from hest import HESTData
 from hest.HESTData import read_HESTData
-from hestcore.wsi import NumpyWSI
-
 def load_hest_sample(sample_dir: Path):
     """
     Load a HEST sample from a Xenium sample folder.

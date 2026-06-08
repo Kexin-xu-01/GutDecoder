@@ -10,9 +10,17 @@ from loguru import logger
 import timm
 import trident
 
-from hest.bench.cpath_model_zoo.utils.constants import get_constants
-from hest.bench.cpath_model_zoo.utils.transform_utils import \
-    get_eval_transforms
+_IMAGENET_MEAN = (0.485, 0.456, 0.406)
+_IMAGENET_STD = (0.229, 0.224, 0.225)
+
+def _get_eval_transforms(mean, std, target_img_size=224):
+    from torchvision import transforms
+    return transforms.Compose([
+        transforms.Resize(target_img_size),
+        transforms.CenterCrop(target_img_size),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=mean, std=std),
+    ])
         
         
 class InferenceEncoder(torch.nn.Module):
@@ -104,24 +112,16 @@ class Conchv15InferenceEncoder(BasePatchEncoder):
 
     
 class CTransPathInferenceEncoder(InferenceEncoder):
-    def _build(self, weights_path):
-        from torch import nn
-
-        from hest.bench.cpath_model_zoo.ctranspath.ctran import ctranspath
-        
-        model = ctranspath(img_size=224)
-        model.head = nn.Identity()
-        state_dict = torch.load(weights_path)['model']
-        state_dict = {key: val for key, val in state_dict.items() if 'attn_mask' not in key}
-        missing, unexpected = model.load_state_dict(state_dict, strict=False)
-        logger.info(f"Missing keys: {missing}")
-        logger.info(f"Unexpected keys: {unexpected}")
-
-        mean, std = get_constants('imagenet')
-        eval_transform = get_eval_transforms(mean, std)
+    def _build(self, weights_path=None):
+        from trident.patch_encoder_models import encoder_factory
+        enc = encoder_factory('ctranspath')
+        eval_transform = (
+            getattr(enc, 'eval_transform', None) or
+            getattr(enc, 'eval_transforms', None) or
+            _get_eval_transforms(_IMAGENET_MEAN, _IMAGENET_STD)
+        )
         precision = torch.float32
-        
-        return model, eval_transform, precision
+        return enc, eval_transform, precision
 
     
 class CustomInferenceEncoder(InferenceEncoder):
@@ -145,8 +145,7 @@ class PhikonInferenceEncoder(InferenceEncoder):
     def _build(self, _, return_cls=True):
         self.return_cls = return_cls
         model = self._load()
-        mean, std = get_constants('imagenet')
-        eval_transform = get_eval_transforms(mean, std,target_img_size=224)
+        eval_transform = _get_eval_transforms(_IMAGENET_MEAN, _IMAGENET_STD, target_img_size=224)
         precision = torch.float32
         return model, eval_transform, precision
     
@@ -206,17 +205,15 @@ class H0MiniInferenceEncoder(InferenceEncoder):
 
 
 class RemedisInferenceEncoder(InferenceEncoder):
-    def _build(self, weights_path):
-        from hest.bench.cpath_model_zoo.ctranspath.remedis.remedis_models import resnet152_remedis
-        ckpt_path = weights_path
-        model = resnet152_remedis(ckpt_path=ckpt_path, pretrained=True)
+    def _build(self, weights_path=None):
+        from trident.patch_encoder_models import encoder_factory
+        enc = encoder_factory('remedis')
+        eval_transform = getattr(enc, 'eval_transform', None) or getattr(enc, 'eval_transforms', None)
         precision = torch.float32
-        eval_transform = None
-        return model, eval_transform, precision
+        return enc, eval_transform, precision
 
     def forward(self, x):
-        x = x.permute((0, 3, 1, 2))
-        return self.model.forward(x)
+        return self.model(x)
     
     
 class ResNet50InferenceEncoder(InferenceEncoder):
@@ -230,8 +227,7 @@ class ResNet50InferenceEncoder(InferenceEncoder):
         import timm
 
         model = timm.create_model("resnet50.tv_in1k", pretrained=pretrained, **timm_kwargs)
-        mean, std = get_constants('imagenet')
-        eval_transform = get_eval_transforms(mean, std)
+        eval_transform = _get_eval_transforms(_IMAGENET_MEAN, _IMAGENET_STD)
         precision = torch.float32
         if pool:
             self.pool = torch.nn.AdaptiveAvgPool2d(1)
@@ -595,6 +591,29 @@ class KaikoBase8InferenceEncoder(InferenceEncoder):
 
 
 
+_TRIDENT_NEW_MODELS = {
+    'kaiko-vitb16', 'kaiko-vits8', 'kaiko-vits16', 'kaiko-vitl14',
+    'lunit-vits8', 'gpfm', 'musk', 'midnight12k', 'openmidnight', 'genbio-pathfm',
+}
+
+def _make_trident_encoder_class(trident_name: str):
+    """Return an InferenceEncoder subclass that delegates to TRIDENT's encoder_factory."""
+    class _Adapter(InferenceEncoder):
+        def _build(self, weights_path=None):
+            from trident.patch_encoder_models import encoder_factory
+            enc = encoder_factory(trident_name)
+            eval_transform = (
+                getattr(enc, 'eval_transform', None) or
+                getattr(enc, 'eval_transforms', None) or
+                _get_eval_transforms(_IMAGENET_MEAN, _IMAGENET_STD)
+            )
+            precision = getattr(enc, 'precision', torch.float32)
+            return enc, eval_transform, precision
+    _Adapter.__name__ = f'TridentEncoder_{trident_name.replace("-", "_")}'
+    _Adapter.__qualname__ = _Adapter.__name__
+    return _Adapter
+
+
 def inf_encoder_factory(enc_name):
     if enc_name == 'conch_v1':
         return ConchInferenceEncoder
@@ -630,5 +649,11 @@ def inf_encoder_factory(enc_name):
         return HOptimus0InferenceEncoder
     elif enc_name == 'hoptimus1':
         return HOptimus1InferenceEncoder
+    elif enc_name in ('hibou_l', 'hibou-l'):
+        return HibouLargeInferenceEncoder
+    elif enc_name == 'kaiko-vitb8':
+        return KaikoBase8InferenceEncoder
+    elif enc_name in _TRIDENT_NEW_MODELS:
+        return _make_trident_encoder_class(enc_name)
     else:
         raise ValueError(f"Unknown encoder name {enc_name}")
