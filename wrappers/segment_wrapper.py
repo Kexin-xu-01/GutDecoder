@@ -15,7 +15,7 @@ import scanpy as sc
 
 
 from gutdecoder.utils.patch.qc_patch import apply_qc_patch
-apply_qc_patch(fallback=10)
+apply_qc_patch(fallback=None)
 
 import hest
 from hest import HESTData

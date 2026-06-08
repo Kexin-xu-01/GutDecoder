@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 def apply_qc_patch(
     default_percent_top=(10, 50, 100, 200, 500),
-    fallback=10,
+    fallback=None,
 ):
     """
     Apply a monkey patch to scanpy.pp.calculate_qc_metrics.
