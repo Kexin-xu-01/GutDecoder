@@ -14,45 +14,8 @@ import tifffile as tiff
 import scanpy as sc
 
 
-# Monkey patch calculate_qc_metrics so that it won't fail even if very few features
-_original_calculate_qc_metrics = sc.pp.calculate_qc_metrics
-
-
-def _patched_calculate_qc_metrics(
-    adata,
-    *args,
-    percent_top=(10),
-    **kwargs,
-):
-    """
-    Patch scanpy.pp.calculate_qc_metrics so it works with small n_vars.
-    """
-
-    # Number of features (genes)
-    n_vars = adata.n_vars if hasattr(adata, "n_vars") else adata.shape[1]
-
-    if percent_top is not None:
-        # Filter percent_top to valid values
-        percent_top = [p for p in percent_top if p <= n_vars]
-
-        # If nothing valid remains, choose a safe fallback
-        if not percent_top:
-            # Option 1: disable percent_top entirely
-            percent_top = None
-
-            # Option 2 (alternative): force a small value
-            # percent_top = [min(5, n_vars)]
-
-    return _original_calculate_qc_metrics(
-        adata,
-        *args,
-        percent_top=percent_top,
-        **kwargs,
-    )
-
-
-# Monkey-patch Scanpy
-sc.pp.calculate_qc_metrics = _patched_calculate_qc_metrics
+from gutdecoder.utils.patch.qc_patch import apply_qc_patch
+apply_qc_patch(fallback=10)
 
 import hest
 from hest import HESTData
