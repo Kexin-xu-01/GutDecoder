@@ -620,7 +620,7 @@ def predict_single_split_tile_slide_fusion(
                 fusion=fusion,
             )
 
-            barcodes = assets["barcodes"].flatten().astype(str).tolist()
+            barcodes = (assets.get("barcodes") or assets.get("barcode")).flatten().astype(str).tolist()
 
             adata = load_adata(
                 expr_path,
@@ -944,7 +944,7 @@ def predict_single_split(
                 # The actual model still uses assets["embeddings"] only.
                 assets["tile_embeddings"] = assets["embeddings"]
 
-            barcodes = assets["barcodes"].flatten().astype(str).tolist()
+            barcodes = (assets.get("barcodes") or assets.get("barcode")).flatten().astype(str).tolist()
 
             adata = load_adata(
                 expr_path,
