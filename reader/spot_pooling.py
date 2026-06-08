@@ -54,10 +54,9 @@ import dask.dataframe as dd
 
 # HEST / Gutdecoder imports
 import hest
-from hest.HESTData import *  # noqa: F401,F403
+from hest import HESTData, XeniumReader
+from hest.HESTData import XeniumHESTData
 from hest.readers import pool_transcripts_xenium
-from hest.utils import *  # noqa: F401,F403
-from hest import XeniumReader
 from gutdecoder.reader.h5ad_reader import *  # noqa: F401,F403
 
 # Optional dependencies
@@ -548,10 +547,10 @@ def main() -> None:
 
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        st = read_HESTData(
-            str(hest_dir / "aligned_adata.h5ad"),
-            str(hest_dir / "aligned_fullres_HE.tif"),
-            str(hest_dir / "metrics.json"),
+        st = HESTData.from_paths(
+            adata_path=str(hest_dir / "aligned_adata.h5ad"),
+            img=str(hest_dir / "aligned_fullres_HE.tif"),
+            metrics_path=str(hest_dir / "metrics.json"),
         )
 
         adata_labelled = sc.read_h5ad(h5ad_path)
