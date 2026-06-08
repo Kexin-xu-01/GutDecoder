@@ -591,9 +591,24 @@ class KaikoBase8InferenceEncoder(InferenceEncoder):
 
 
 
+class GpfmInferenceEncoder(InferenceEncoder):
+
+    def _build(self, weights_path=None):
+        import timm
+        from timm.data import resolve_data_config
+        from timm.data.transforms_factory import create_transform
+
+        model = timm.create_model("hf_hub:majiabo/GPFM", pretrained=True)
+        model.eval()
+        config = resolve_data_config(model.pretrained_cfg)
+        eval_transform = create_transform(**config)
+        precision = torch.float32
+        return model, eval_transform, precision
+
+
 _TRIDENT_NEW_MODELS = {
     'kaiko-vitb16', 'kaiko-vits8', 'kaiko-vits16', 'kaiko-vitl14',
-    'lunit-vits8', 'gpfm', 'musk', 'midnight12k', 'openmidnight', 'genbio-pathfm',
+    'lunit-vits8', 'musk', 'midnight12k', 'openmidnight', 'genbio-pathfm',
     'keep',
 }
 
@@ -654,6 +669,8 @@ def inf_encoder_factory(enc_name):
         return HibouLargeInferenceEncoder
     elif enc_name == 'kaiko-vitb8':
         return KaikoBase8InferenceEncoder
+    elif enc_name == 'gpfm':
+        return GpfmInferenceEncoder
     elif enc_name in _TRIDENT_NEW_MODELS:
         return _make_trident_encoder_class(enc_name)
     else:
