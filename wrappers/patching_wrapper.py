@@ -16,8 +16,7 @@ from gutdecoder.utils.patch.qc_patch import apply_qc_patch
 apply_qc_patch(fallback=None)
 
 import hest
-from hest.HESTData import read_HESTData
-from hest import iter_hest
+from hest import HESTData, iter_hest
 
 
 def load_hest_sample(sample_dir: Path):
@@ -25,7 +24,7 @@ def load_hest_sample(sample_dir: Path):
     Load a HEST sample from a Xenium sample folder.
 
     Args:
-        sample_dir (Path): Path to sample folder containing aligned_adata.h5ad, 
+        sample_dir (Path): Path to sample folder containing aligned_adata.h5ad,
                            aligned_fullres_HE.tif, and aligned_cells.
 
     Returns:
@@ -37,29 +36,24 @@ def load_hest_sample(sample_dir: Path):
     adata_path = sample_dir / "aligned_adata.h5ad"
     image_path = sample_dir / "aligned_fullres_HE.tif"
     metrics_path = sample_dir / "metrics.json"
-    
+
     # Look for any .geojson under tissue_seg
     tissue_seg_dir = sample_dir / "tissue_seg"
     geojson_files = list(tissue_seg_dir.glob("*.geojson")) if tissue_seg_dir.exists() else []
     tissue_contours_path = geojson_files[0] if geojson_files else None
-    
 
     if not adata_path.exists():
         raise FileNotFoundError(f"Missing {adata_path}")
     if not image_path.exists():
         raise FileNotFoundError(f"Missing {image_path}")
 
-    # load AnnData
-    adata = sc.read_h5ad(adata_path)
-
-    # construct HEST object (assuming HESTSample or similar API exists)
-    st = read_HESTData(
+    st = HESTData.from_paths(
         adata_path=str(adata_path),
         img=str(image_path),
         metrics_path=str(metrics_path),
-        tissue_contours_path=str(tissue_contours_path)
+        tissue_contours_path=str(tissue_contours_path) if tissue_contours_path else None,
     )
-    
+
     print(st)
 
     return st
