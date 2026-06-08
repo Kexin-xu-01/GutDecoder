@@ -14,9 +14,7 @@ import re
 # Optional: Dask for parallel processing
 import dask
 
-from hest.HESTData import *
-from hest import h5ad_reader
-from hest.h5ad_reader import *
+from gutdecoder.reader.h5ad_reader import update_st_with_filtered_and_labelled
 
 
 # Path to metadata Excel file

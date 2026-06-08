@@ -8,7 +8,7 @@ from pathlib import Path
 from hest.readers import pool_transcripts_xenium
 from hest.HESTData import XeniumHESTData
 from hest.utils import register_downscale_img
-from hestcore.wsi import wsi_factory
+from hest.utils import wsi_factory
 
 from spatialdata.transformations import get_transformation
 
@@ -46,7 +46,7 @@ def read_xenium_zarr(zarr_path: str, spot_size_um: float = 100.0) -> XeniumHESTD
 
     # --- Load HE_registered image and downscale ---
     img = np.array(sdata.images["HE_registered"]).transpose(1, 2, 0)  # (H, W, C)
-    img, pixel_size_embedded = wsi_factory(img), None
+    img, pixel_size_embedded = wsi_factory(img, mpp=pixel_size), None
     register_downscale_img(adata, img, pixel_size)
 
     # metadata
