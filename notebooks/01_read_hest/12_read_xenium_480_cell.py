@@ -22,9 +22,9 @@ from loguru import logger
 # HEST / Gutdecoder imports 
 import hest
 from hest import XeniumReader
-from hest.HESTData import *
+from hest import HESTData
 from hest.readers import pool_transcripts_xenium
-from hest.utils import *
+from hest.utils import read_xenium_alignment, align_xenium_df, register_downscale_img
 from gutdecoder.reader.h5ad_reader import *
 
 # Optional: Dask for parallel/large-data workflows (not required)
@@ -117,10 +117,10 @@ def main():
         #   - .meta (dict with pixel size, spot diameter, etc.)
         #   - .wsi (whole-slide image abstraction with .width/.height)
         #   - .adata (AnnData-like structure, overwritten later)
-        st = read_HESTData(
-            str(hest_dir / 'aligned_adata.h5ad'), 
-            str(hest_dir / 'aligned_fullres_HE.tif'), 
-            str(hest_dir / 'metrics.json')
+        st = HESTData.from_paths(
+            adata_path=str(hest_dir / 'aligned_adata.h5ad'),
+            img=str(hest_dir / 'aligned_fullres_HE.tif'),
+            metrics_path=str(hest_dir / 'metrics.json'),
         )
 
         # --- Load labelled single-cell data ---

@@ -594,6 +594,7 @@ class KaikoBase8InferenceEncoder(InferenceEncoder):
 _TRIDENT_NEW_MODELS = {
     'kaiko-vitb16', 'kaiko-vits8', 'kaiko-vits16', 'kaiko-vitl14',
     'lunit-vits8', 'gpfm', 'musk', 'midnight12k', 'openmidnight', 'genbio-pathfm',
+    'keep',
 }
 
 def _make_trident_encoder_class(trident_name: str):
