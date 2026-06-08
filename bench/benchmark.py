@@ -301,7 +301,7 @@ def predict_single_split(train_split, test_split, args, save_dir, dataset_name, 
             embed_path = os.path.join(embedding_dir, f'{sample_id}.h5')
             expr_path = os.path.join(bench_data_root, split.iloc[i]['expr_path'])
             assets, _ = read_assets_from_h5(embed_path)
-            _raw_bc = assets.get("barcodes") or assets.get("barcode")
+            _raw_bc = assets.get("barcodes")
             barcodes = _raw_bc.flatten().astype(str).tolist() if _raw_bc is not None else None
             adata = load_adata(expr_path, genes=genes, barcodes=barcodes, normalize=args.normalize, library_size_normalize=args.library_size_normalize)
             assets['adata'] = adata.values
@@ -627,7 +627,7 @@ def predict_single_split_tile_slide_fusion(
                 fusion=fusion,
             )
 
-            _raw_bc = assets.get("barcodes") or assets.get("barcode")
+            _raw_bc = assets.get("barcodes")
             barcodes = _raw_bc.flatten().astype(str).tolist() if _raw_bc is not None else None
 
             adata = load_adata(
@@ -952,7 +952,7 @@ def predict_single_split(
                 # The actual model still uses assets["embeddings"] only.
                 assets["tile_embeddings"] = assets["embeddings"]
 
-            _raw_bc = assets.get("barcodes") or assets.get("barcode")
+            _raw_bc = assets.get("barcodes")
             barcodes = _raw_bc.flatten().astype(str).tolist() if _raw_bc is not None else None
 
             adata = load_adata(
