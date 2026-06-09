@@ -614,8 +614,15 @@ class GpfmInferenceEncoder(InferenceEncoder):
         state_dict = torch.load(weights_path, map_location="cpu", weights_only=False)
         if isinstance(state_dict, dict) and "state_dict" in state_dict:
             state_dict = state_dict["state_dict"]
-        # older timm saved LayerScale as 'gamma'; newer timm renamed it to 'weight'
-        state_dict = {k.replace(".gamma", ".weight"): v for k, v in state_dict.items()}
+        # timm <1.0 names LayerScale params 'gamma'; timm >=1.0 renamed to 'weight'.
+        # Remap whichever direction is needed so checkpoint matches the loaded model.
+        ckpt_has_gamma = any("ls1.gamma" in k for k in state_dict)
+        model_has_weight = any("ls1.weight" in k for k in model.state_dict())
+        if ckpt_has_gamma and model_has_weight:
+            state_dict = {k.replace(".gamma", ".weight"): v for k, v in state_dict.items()}
+        elif not ckpt_has_gamma and not model_has_weight:
+            state_dict = {k.replace("ls1.weight", "ls1.gamma").replace("ls2.weight", "ls2.gamma"): v
+                          for k, v in state_dict.items()}
         model.load_state_dict(state_dict, strict=True)
 
         eval_transform = transforms.Compose([
