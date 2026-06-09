@@ -644,18 +644,109 @@ class _GemmaImageTransform:
         return self.processor(images=img, return_tensors="pt")["pixel_values"].squeeze(0)
 
 
+def _load_gemma4_vision_weights(src, prefix="model.vision_tower."):
+    """Parse safetensors shards and return only vision-tower weights.
+
+    Never materialises the full 4-26B LLM in memory — reads byte ranges directly.
+    Accepts either a local directory (already downloaded) or an HF repo id.
+    """
+    import struct
+    import json as _json
+    from pathlib import Path
+    import numpy as np
+
+    local_dir = Path(src) if Path(src).is_dir() else None
+    if local_dir is None:
+        from huggingface_hub import snapshot_download
+        local_dir = Path(snapshot_download(
+            src,
+            ignore_patterns=["*.msgpack", "*.bin", "*.pt", "flax_*", "tf_*"],
+        ))
+
+    shards = sorted(local_dir.glob("*.safetensors"))
+    if not shards:
+        raise FileNotFoundError(f"No .safetensors files in {local_dir}")
+
+    _NP_DTYPE = {
+        "F32": np.float32, "F16": np.float16, "I32": np.int32,
+        "I64": np.int64, "I8": np.int8, "UI8": np.uint8,
+    }
+    _TORCH_DTYPE = {
+        "F32": torch.float32, "F16": torch.float16, "BF16": torch.bfloat16,
+        "I32": torch.int32, "I64": torch.int64, "I8": torch.int8, "UI8": torch.uint8,
+    }
+
+    state_dict = {}
+    for shard in shards:
+        with open(shard, "rb") as f:
+            header_len = struct.unpack("<Q", f.read(8))[0]
+            header = _json.loads(f.read(header_len))
+            data_start = 8 + header_len
+            for key, meta in header.items():
+                if key == "__metadata__" or not key.startswith(prefix):
+                    continue
+                dtype_str = meta["dtype"]
+                start, end = meta["data_offsets"]
+                f.seek(data_start + start)
+                raw = f.read(end - start)
+                if dtype_str == "BF16":
+                    tensor = torch.from_numpy(
+                        np.frombuffer(raw, dtype=np.int16).copy()
+                    ).view(torch.bfloat16).reshape(meta["shape"])
+                else:
+                    tensor = torch.from_numpy(
+                        np.frombuffer(raw, dtype=_NP_DTYPE[dtype_str]).copy()
+                    ).to(_TORCH_DTYPE[dtype_str]).reshape(meta["shape"])
+                state_dict[key[len(prefix):]] = tensor
+    if not state_dict:
+        raise RuntimeError(
+            f"No keys with prefix '{prefix}' found in {shards}. "
+            "Check that the repo contains Gemma4ForConditionalGeneration weights."
+        )
+    return state_dict
+
+
 class _Gemma4InferenceEncoder(InferenceEncoder):
     HF_REPO: str = ""
 
     def _build(self, weights_path=None):
-        from transformers import Gemma4VisionModel, Gemma4ImageProcessor
+        try:
+            from transformers import Gemma4VisionModel, Gemma4ImageProcessor
+        except (ImportError, AttributeError) as e:
+            raise ImportError(
+                "Gemma4 encoders require transformers>=5.0 and PyTorch>=2.4.\n"
+                "Install: pip install --user 'transformers>=5.0'\n"
+                "Set PYTHONPATH so your user install takes priority:\n"
+                "  export PYTHONPATH=~/.local/lib/python3.11/site-packages${PYTHONPATH:+:$PYTHONPATH}\n"
+                "Other encoders (UNI, CONCH, GPFM, …) are NOT affected by this requirement.\n"
+                f"Original error: {e}"
+            ) from e
 
-        src = (weights_path if (weights_path and os.path.isdir(weights_path))
-               else self.HF_REPO)
-        model = Gemma4VisionModel.from_pretrained(src, torch_dtype=torch.bfloat16)
+        # Use local dir only if it looks like a real HF checkpoint, not the
+        # default weights_root directory returned when local_ckpts.json value is "".
+        from pathlib import Path as _Path
+        src = self.HF_REPO
+        if weights_path:
+            p = _Path(weights_path)
+            if p.is_dir() and (p / "config.json").exists():
+                src = weights_path
+
+        # Memory-efficient: parse safetensors headers and load only vision tower.
+        vision_state = _load_gemma4_vision_weights(src)
+
+        # Instantiate the vision model from config (no weights), then load.
+        from transformers import AutoConfig
+        full_cfg = AutoConfig.from_pretrained(src)
+        vision_cfg = full_cfg.vision_config
+        model = Gemma4VisionModel(vision_cfg)
+        missing, unexpected = model.load_state_dict(vision_state, strict=False)
+        if missing:
+            raise RuntimeError(
+                f"Gemma4 vision state dict missing {len(missing)} key(s): {missing[:3]} …"
+            )
+
         processor = Gemma4ImageProcessor.from_pretrained(src)
-        eval_transform = _GemmaImageTransform(processor)
-        return model, eval_transform, torch.bfloat16
+        return model, _GemmaImageTransform(processor), torch.bfloat16
 
     def forward(self, x):
         out = self.model(pixel_values=x.to(torch.bfloat16))
