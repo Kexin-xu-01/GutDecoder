@@ -614,6 +614,8 @@ class GpfmInferenceEncoder(InferenceEncoder):
         state_dict = torch.load(weights_path, map_location="cpu", weights_only=False)
         if isinstance(state_dict, dict) and "state_dict" in state_dict:
             state_dict = state_dict["state_dict"]
+        # older timm saved LayerScale as 'gamma'; newer timm renamed it to 'weight'
+        state_dict = {k.replace(".gamma", ".weight"): v for k, v in state_dict.items()}
         model.load_state_dict(state_dict, strict=True)
 
         eval_transform = transforms.Compose([
