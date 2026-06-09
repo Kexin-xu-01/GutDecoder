@@ -628,10 +628,45 @@ class GpfmInferenceEncoder(InferenceEncoder):
         return model, eval_transform, precision
 
 
+class _GemmaImageTransform:
+    """Wraps Gemma4ImageProcessor as a torchvision-compatible callable."""
+    def __init__(self, processor):
+        self.processor = processor
+
+    def __call__(self, img):
+        return self.processor(images=img, return_tensors="pt")["pixel_values"].squeeze(0)
+
+
+class _Gemma4InferenceEncoder(InferenceEncoder):
+    HF_REPO: str = ""
+
+    def _build(self, weights_path=None):
+        from transformers import Gemma4VisionModel, Gemma4ImageProcessor
+
+        src = (weights_path if (weights_path and os.path.isdir(weights_path))
+               else self.HF_REPO)
+        model = Gemma4VisionModel.from_pretrained(src, torch_dtype=torch.bfloat16)
+        processor = Gemma4ImageProcessor.from_pretrained(src)
+        eval_transform = _GemmaImageTransform(processor)
+        return model, eval_transform, torch.bfloat16
+
+    def forward(self, x):
+        out = self.model(pixel_values=x.to(torch.bfloat16))
+        return out.last_hidden_state.mean(dim=1)
+
+
+class Gemma4E4BInferenceEncoder(_Gemma4InferenceEncoder):
+    HF_REPO = "google/gemma-4-E4B"
+
+
+class Gemma426BInferenceEncoder(_Gemma4InferenceEncoder):
+    HF_REPO = "google/gemma-4-26B-A4B"
+
+
 _TRIDENT_NEW_MODELS = {
     'kaiko-vitb16', 'kaiko-vits8', 'kaiko-vits16', 'kaiko-vitl14',
     'lunit-vits8', 'musk', 'midnight12k', 'openmidnight', 'genbio-pathfm',
-    'keep', 'gemma4-e4b', 'gemma4-26b',
+    'keep',
 }
 
 def _make_trident_encoder_class(trident_name: str):
@@ -693,6 +728,10 @@ def inf_encoder_factory(enc_name):
         return KaikoBase8InferenceEncoder
     elif enc_name == 'gpfm':
         return GpfmInferenceEncoder
+    elif enc_name == 'gemma4-e4b':
+        return Gemma4E4BInferenceEncoder
+    elif enc_name == 'gemma4-26b':
+        return Gemma426BInferenceEncoder
     elif enc_name in _TRIDENT_NEW_MODELS:
         return _make_trident_encoder_class(enc_name)
     else:
