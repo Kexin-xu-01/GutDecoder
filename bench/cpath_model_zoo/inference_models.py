@@ -21,6 +21,38 @@ def _get_eval_transforms(mean, std, target_img_size=224):
         transforms.ToTensor(),
         transforms.Normalize(mean=mean, std=std),
     ])
+
+
+def _remap_layerscale(state_dict, model):
+    """Bidirectionally fix LayerScale key names between old timm (<1.0, .gamma)
+    and new timm (>=1.0, .weight) so checkpoints load regardless of timm version."""
+    ckpt_has_gamma = any("ls1.gamma" in k for k in state_dict)
+    model_has_weight = any("ls1.weight" in k for k in model.state_dict())
+    if ckpt_has_gamma and model_has_weight:
+        return {k.replace(".gamma", ".weight"): v for k, v in state_dict.items()}
+    if not ckpt_has_gamma and not model_has_weight:
+        return {
+            k.replace("ls1.weight", "ls1.gamma").replace("ls2.weight", "ls2.gamma"): v
+            for k, v in state_dict.items()
+        }
+    return state_dict
+
+
+def _download_hf_timm_weights(repo_id: str) -> str:
+    """Download a timm-style HF hub checkpoint and return the local path.
+
+    Tries safetensors first, then falls back to pytorch_model.bin.
+    """
+    from huggingface_hub import hf_hub_download
+    for fname in ("model.safetensors", "pytorch_model.bin"):
+        try:
+            return hf_hub_download(repo_id=repo_id, filename=fname)
+        except Exception:
+            continue
+    raise RuntimeError(
+        f"Could not download weights from {repo_id}. "
+        "Tried model.safetensors and pytorch_model.bin."
+    )
         
         
 class InferenceEncoder(torch.nn.Module):
@@ -472,52 +504,46 @@ class Virchow2InferenceEncoder(InferenceEncoder):
         embedding = torch.cat([class_token, patch_tokens.mean(1)], dim=-1)
         return embedding
 
-class HOptimus0InferenceEncoder(InferenceEncoder):
-    
-    def _build(
-        self,
-        _,
-        timm_kwargs={'init_values': 1e-5, 'dynamic_img_size': False}
-    ):
+_HOPTIMUS_MEAN = (0.707223, 0.578729, 0.703617)
+_HOPTIMUS_STD  = (0.211883, 0.230117, 0.177517)
+
+
+class _HOptimusInferenceEncoder(InferenceEncoder):
+    HF_REPO: str = ""
+
+    def _build(self, weights_path=None):
         import timm
         from torchvision import transforms
 
-        model = timm.create_model("hf-hub:bioptimus/H-optimus-0", pretrained=True, **timm_kwargs)
+        model = timm.create_model(
+            f"hf-hub:{self.HF_REPO}",
+            pretrained=False,
+            init_values=1e-5,
+            dynamic_img_size=False,
+        )
+
+        ckpt = weights_path if (weights_path and os.path.isfile(weights_path)) \
+               else _download_hf_timm_weights(self.HF_REPO)
+        state_dict = torch.load(ckpt, map_location="cpu", weights_only=False)
+        if isinstance(state_dict, dict) and "state_dict" in state_dict:
+            state_dict = state_dict["state_dict"]
+        state_dict = _remap_layerscale(state_dict, model)
+        model.load_state_dict(state_dict, strict=True)
 
         eval_transform = transforms.Compose([
-            transforms.Resize(224), 
+            transforms.Resize(224),
             transforms.ToTensor(),
-            transforms.Normalize(
-                mean=(0.707223, 0.578729, 0.703617), 
-                std=(0.211883, 0.230117, 0.177517)
-            ),
+            transforms.Normalize(mean=_HOPTIMUS_MEAN, std=_HOPTIMUS_STD),
         ])
-        
-        precision = torch.float16
-        return model, eval_transform, precision
+        return model, eval_transform, torch.float16
 
-class HOptimus1InferenceEncoder(InferenceEncoder):
-    def _build(
-        self,
-        _,
-        timm_kwargs={'init_values': 1e-5, 'dynamic_img_size': False}
-    ):
-        import timm
-        from torchvision import transforms
 
-        model = timm.create_model("hf-hub:bioptimus/H-optimus-1", pretrained=True, **timm_kwargs)
+class HOptimus0InferenceEncoder(_HOptimusInferenceEncoder):
+    HF_REPO = "bioptimus/H-optimus-0"
 
-        eval_transform = transforms.Compose([
-            transforms.Resize(224), 
-            transforms.ToTensor(),
-            transforms.Normalize(
-                mean=(0.707223, 0.578729, 0.703617), 
-                std=(0.211883, 0.230117, 0.177517)
-            ),
-        ])
 
-        precision = torch.float16
-        return model, eval_transform, precision
+class HOptimus1InferenceEncoder(_HOptimusInferenceEncoder):
+    HF_REPO = "bioptimus/H-optimus-1"
          
 class HibouLargeInferenceEncoder(InferenceEncoder):
     
@@ -596,12 +622,11 @@ class GpfmInferenceEncoder(InferenceEncoder):
 
     def _build(self, weights_path=None):
         import timm
-        import traceback as _tb
-        from huggingface_hub import hf_hub_download
         from torchvision import transforms
         from torchvision.transforms import InterpolationMode
 
         if not weights_path or not os.path.isfile(weights_path):
+            from huggingface_hub import hf_hub_download
             weights_path = hf_hub_download(repo_id="majiabo/GPFM", filename="GPFM.pth")
 
         model = timm.create_model(
@@ -614,15 +639,7 @@ class GpfmInferenceEncoder(InferenceEncoder):
         state_dict = torch.load(weights_path, map_location="cpu", weights_only=False)
         if isinstance(state_dict, dict) and "state_dict" in state_dict:
             state_dict = state_dict["state_dict"]
-        # timm <1.0 names LayerScale params 'gamma'; timm >=1.0 renamed to 'weight'.
-        # Remap whichever direction is needed so checkpoint matches the loaded model.
-        ckpt_has_gamma = any("ls1.gamma" in k for k in state_dict)
-        model_has_weight = any("ls1.weight" in k for k in model.state_dict())
-        if ckpt_has_gamma and model_has_weight:
-            state_dict = {k.replace(".gamma", ".weight"): v for k, v in state_dict.items()}
-        elif not ckpt_has_gamma and not model_has_weight:
-            state_dict = {k.replace("ls1.weight", "ls1.gamma").replace("ls2.weight", "ls2.gamma"): v
-                          for k, v in state_dict.items()}
+        state_dict = _remap_layerscale(state_dict, model)
         model.load_state_dict(state_dict, strict=True)
 
         eval_transform = transforms.Compose([
