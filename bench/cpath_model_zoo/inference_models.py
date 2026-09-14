@@ -512,7 +512,9 @@ class _HOptimusInferenceEncoder(InferenceEncoder):
     HF_REPO: str = ""
 
     def _build(self, weights_path=None):
+        import os
         import timm
+        import torch
         from torchvision import transforms
 
         model = timm.create_model(
@@ -522,19 +524,39 @@ class _HOptimusInferenceEncoder(InferenceEncoder):
             dynamic_img_size=False,
         )
 
-        ckpt = weights_path if (weights_path and os.path.isfile(weights_path)) \
-               else _download_hf_timm_weights(self.HF_REPO)
-        state_dict = torch.load(ckpt, map_location="cpu", weights_only=False)
+        ckpt = (
+            weights_path
+            if (weights_path and os.path.isfile(weights_path))
+            else _download_hf_timm_weights(self.HF_REPO)
+        )
+
+        print(f"Loading H-optimus checkpoint: {ckpt}")
+
+        if str(ckpt).endswith(".safetensors"):
+            from safetensors.torch import load_file
+            state_dict = load_file(ckpt, device="cpu")
+        else:
+            state_dict = torch.load(
+                ckpt,
+                map_location="cpu",
+                weights_only=False
+            )
+
         if isinstance(state_dict, dict) and "state_dict" in state_dict:
             state_dict = state_dict["state_dict"]
+
         state_dict = _remap_layerscale(state_dict, model)
         model.load_state_dict(state_dict, strict=True)
 
         eval_transform = transforms.Compose([
             transforms.Resize(224),
             transforms.ToTensor(),
-            transforms.Normalize(mean=_HOPTIMUS_MEAN, std=_HOPTIMUS_STD),
+            transforms.Normalize(
+                mean=_HOPTIMUS_MEAN,
+                std=_HOPTIMUS_STD,
+            ),
         ])
+
         return model, eval_transform, torch.float16
 
 
