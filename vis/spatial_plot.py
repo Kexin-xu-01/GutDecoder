@@ -336,27 +336,42 @@ def generate_plot_per_run(
                     rel = path.relative_to(ds_dir)
                     subtitle_parts = [f"Sample: {sample_id}", f"Path: {rel}"]
                 else:
-                    pid = meta_row.get("Patient ID", meta_row.get("PatientID", meta_row.get("Patient_Id", meta_row.get("Patient_id", ""))))
-                    slide_col = meta_row.get("Slide_ID", meta_row.get("Slide ID", ""))
-                    sample_type = meta_row.get("Sample_type", meta_row.get("Sample Type", meta_row.get("Sample_type", "")))
-                    location = meta_row.get("Location", meta_row.get("LOCATION", ""))
-                    pid = str(pid) if pd.notna(pid) else ""
-                    # Slide ID: int if numeric, else keep string
-                    if pd.notna(slide_col) and str(slide_col).strip() != "":
+                    patient_id = meta_row.get("patient_id", meta_row.get("Patient_ID", meta_row.get("Patient ID", "")))
+                    slide_id = meta_row.get("slide_id", meta_row.get("Slide_ID", meta_row.get("Slide ID", "")))
+
+                    disease_l0 = meta_row.get("disease_l0", "")
+                    disease_l1 = meta_row.get("disease_l1", "")
+
+                    location_l0 = meta_row.get("location_l0", meta_row.get("Location", meta_row.get("LOCATION", "")))
+                    location_l1 = meta_row.get("location_l1", meta_row.get("location_01", ""))
+                    location_l2 = meta_row.get("location_l2", "")
+
+                    patient_id = str(patient_id) if pd.notna(patient_id) else ""
+
+                    # slide_id: int if numeric, else keep string
+                    if pd.notna(slide_id) and str(slide_id).strip() != "":
                         try:
-                            slide_col = str(int(slide_col))
+                            slide_id = str(int(float(slide_id)))
                         except (ValueError, TypeError):
-                            slide_col = str(slide_col)
+                            slide_id = str(slide_id)
                     else:
-                        slide_col = ""
-                    #slide_col = str(int(slide_col)) if pd.notna(slide_col) and str(slide_col).strip() != "" else ""
-                    sample_type = str(sample_type) if pd.notna(sample_type) else ""
-                    location = str(location) if pd.notna(location) else ""
+                        slide_id = ""
+
+                    disease_l0 = str(disease_l0) if pd.notna(disease_l0) else ""
+                    disease_l1 = str(disease_l1) if pd.notna(disease_l1) else ""
+
+                    location_l0 = str(location_l0) if pd.notna(location_l0) else ""
+                    location_l1 = str(location_l1) if pd.notna(location_l1) else ""
+                    location_l2 = str(location_l2) if pd.notna(location_l2) else ""
+
                     subtitle_parts = [
-                        f"Patient: {pid or 'NA'}",
-                        f"Slide: {slide_col or 'NA'}",
-                        f"Sample_type: {sample_type or 'NA'}",
-                        f"Location: {location or 'NA'}",
+                        f"patient_id: {patient_id or 'NA'}",
+                        f"slide_id: {slide_id or 'NA'}",
+                        f"disease_l0: {disease_l0 or 'NA'}",
+                        f"disease_l1: {disease_l1 or 'NA'}",
+                        f"location_l0: {location_l0 or 'NA'}",
+                        f"location_l1: {location_l1 or 'NA'}",
+                        f"location_l2: {location_l2 or 'NA'}",
                     ]
 
                 wrapped = textwrap.fill(", ".join([p for p in subtitle_parts if p]), width=45)
