@@ -156,7 +156,6 @@ def combine_folder_pdf(folder: Path, out_writer: PdfWriter, pdf_name = "spatial_
     return True
 
 
-
 def generate_plot_per_run(
     base_root: Path,
     datasets: list,
@@ -201,7 +200,7 @@ def generate_plot_per_run(
     # load metadata if available
     if metadata_path is None or not Path(metadata_path).exists():
         if verbose:
-            print("⚠️ xenium_directory.xlsx not found. Metadata columns will be empty.")
+            print("xenium_directory.xlsx not found. Metadata columns will be empty.")
         meta_df = pd.DataFrame()
     else:
         meta_df = pd.read_excel(metadata_path)
@@ -270,28 +269,28 @@ def generate_plot_per_run(
         ds_dir = base_root / ds
         if not ds_dir.exists():
             if verbose:
-                print(f"⚠️ {ds_dir} not found, skipping.")
+                print(f"{ds_dir} not found, skipping.")
             continue
 
         out_pdf = ds_dir / out_filename
         if out_pdf.exists() and not overwrite:
             if verbose:
-                print(f"⏭️  {out_pdf} already exists (overwrite=False), skipping {ds}.")
+                print(f"⏭{out_pdf} already exists (overwrite=False), skipping {ds}.")
             continue
         if out_pdf.exists() and overwrite and verbose:
-            print(f"♻️  Overwriting existing {out_pdf}")
+            print(f"Overwriting existing {out_pdf}")
 
         found = _find_files(ds_dir)
         if not found:
             if verbose:
-                print(f"⚠️ No matching images found in {ds_dir} for match='{match}'")
+                print(f"No matching images found in {ds_dir} for match='{match}'")
             continue
 
         if max_show:
             found = found[:max_show]
 
         if verbose:
-            print(f"🧩 {ds}: visualising {len(found)} plots")
+            print(f"{ds}: visualising {len(found)} plots")
 
         rows = math.ceil(len(found) / cols)
         if rows == 0:
@@ -402,7 +401,7 @@ def generate_plot_per_run(
             print(f"✔ Saved grid to {out_pdf}\n")
 
     if verbose:
-        print("✅ Done generating all image grids.")
+        print("Done generating all image grids.")
 
 
 
