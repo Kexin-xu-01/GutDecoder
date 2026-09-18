@@ -4,6 +4,10 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import matplotlib.pyplot as plt
+import glob
+from matplotlib.backends.backend_pdf import PdfPages
+
+
 
 
 # ============================================================
@@ -995,16 +999,6 @@ def plot_embedding(
     }
 
 
-import os
-import glob
-import h5py
-import numpy as np
-import pandas as pd
-import scanpy as sc
-import matplotlib.pyplot as plt
-
-from matplotlib.backends.backend_pdf import PdfPages
-
 
 # ============================================================
 # 1. GET ALL SAMPLES
@@ -1043,28 +1037,67 @@ def plot_sample_four_panel(
     point_size=12,
 ):
     """
-    Create the four-panel figure for one sample.
+    Create four-panel figure:
 
-    Panels
-    ------
     1. Image clusters on H&E
-    2. Mapped gene clusters on H&E
-    3. Image embedding UMAP
-    4. Gene expression UMAP
+    2. Gene clusters mapped to image cluster labels on H&E
+    3. Image UMAP
+    4. Gene UMAP
 
-    Returns
-    -------
-    fig
+    The same palette is used across all four panels.
     """
 
     img = result["img"]
     gene_subset = result["gene_subset"]
     gene_clust = result["gene_clust"]
+    cluster_mapping = result["cluster_mapping"]
     palette = result["palette"]
 
     # --------------------------------------------------------
-    # Ensure spatial categories use the shared palette
+    # Make sure image cluster labels are present
     # --------------------------------------------------------
+    image_labels = (
+        img.obs["image_cluster"]
+        .astype(str)
+        .values
+    )
+
+    gene_original_labels = (
+        gene_clust.obs["gene_cluster"]
+        .astype(str)
+        .values
+    )
+
+    # --------------------------------------------------------
+    # Create mapped gene labels HERE
+    # --------------------------------------------------------
+    gene_mapped_labels = np.array([
+        str(cluster_mapping[x])
+        for x in gene_original_labels
+    ])
+
+    # Put labels onto spatial object
+    gene_subset.obs["image_cluster"] = (
+        image_labels
+    )
+
+    gene_subset.obs["gene_cluster_mapped"] = (
+        gene_mapped_labels
+    )
+
+    # --------------------------------------------------------
+    # Explicitly set Scanpy categories + colours
+    # --------------------------------------------------------
+    gene_subset.obs["image_cluster"] = (
+        gene_subset.obs["image_cluster"]
+        .astype("category")
+    )
+
+    gene_subset.obs["gene_cluster_mapped"] = (
+        gene_subset.obs["gene_cluster_mapped"]
+        .astype("category")
+    )
+
     set_scanpy_palette(
         gene_subset,
         "image_cluster",
@@ -1105,7 +1138,7 @@ def plot_sample_four_panel(
     )
 
     # ========================================================
-    # 2. GENE CLUSTERS ON H&E
+    # 2. GENE CLUSTERS MAPPED ON H&E
     # ========================================================
     sc.pl.spatial(
         gene_subset,
@@ -1125,12 +1158,6 @@ def plot_sample_four_panel(
     # ========================================================
     # 3. IMAGE UMAP
     # ========================================================
-    image_labels = (
-        img.obs["image_cluster"]
-        .astype(str)
-        .values
-    )
-
     image_colors = [
         palette[str(x)]
         for x in image_labels
@@ -1148,21 +1175,16 @@ def plot_sample_four_panel(
     ax[1, 0].set_title(
         f"{sample} - Image embedding UMAP"
     )
+
     ax[1, 0].set_xlabel("UMAP1")
     ax[1, 0].set_ylabel("UMAP2")
 
     # ========================================================
     # 4. GENE UMAP
     # ========================================================
-    gene_labels = (
-        gene_subset["gene_cluster_mapped"]
-        .astype(str)
-        .values
-    )
-
     gene_colors = [
         palette[str(x)]
-        for x in gene_labels
+        for x in gene_mapped_labels
     ]
 
     ax[1, 1].scatter(
@@ -1177,6 +1199,7 @@ def plot_sample_four_panel(
     ax[1, 1].set_title(
         f"{sample} - Gene expression UMAP"
     )
+
     ax[1, 1].set_xlabel("UMAP1")
     ax[1, 1].set_ylabel("UMAP2")
 
@@ -1203,61 +1226,99 @@ def plot_sample_four_panel(
 def plot_embedding_all_samples(
     image_root,
     gene_root,
-    output_pdf,
+    output_dir,
+    combined_pdf,
     threshold=0.30,
     n_neighbors=15,
     n_pcs=30,
     image_resolution=0.5,
     gene_resolution=0.5,
     n_hvg=2000,
-    spot_size=100,
+    spot_size=250,
 ):
     """
-    Run the complete pipeline for every sample and save
-    four plots per sample on one PDF page.
+    Run all samples, saving:
 
-    Also saves a CSV with cluster mappings for every sample.
+        1. One PDF per sample
+        2. One combined PDF containing all newly processed samples
+        3. One CSV containing cluster mappings
+
+    Existing samples are skipped if their per-sample PDF already exists.
 
     Returns
     -------
-    all_results : dict
-        sample -> result dictionary
+    result_dict : dict
+        Results for samples processed during this run.
     """
 
-    os.makedirs(
-        os.path.dirname(output_pdf)
-        if os.path.dirname(output_pdf)
-        else ".",
-        exist_ok=True,
-    )
+    os.makedirs(output_dir, exist_ok=True)
 
-    samples = get_samples(
-        image_root
-    )
+    # --------------------------------------------------------
+    # Find samples
+    # --------------------------------------------------------
+    samples = get_samples(image_root)
 
-    print(
-        f"Found {len(samples)} samples."
+    print(f"Found {len(samples)} samples.")
+
+    # --------------------------------------------------------
+    # Combined PDF
+    # --------------------------------------------------------
+    combined_pdf_path = os.path.join(
+        output_dir,
+        combined_pdf,
     )
 
     all_results = []
     result_dict = {}
 
-    with PdfPages(output_pdf) as pdf:
+    # --------------------------------------------------------
+    # Only process samples without an existing PDF
+    # --------------------------------------------------------
+    samples_to_run = []
 
-        for i, sample in enumerate(samples, start=1):
+    for sample in samples:
+
+        sample_pdf = os.path.join(
+            output_dir,
+            f"{sample}_clusters.pdf",
+        )
+
+        if os.path.exists(sample_pdf):
+            print(
+                f"Skipping {sample} "
+                f"(already exists)"
+            )
+        else:
+            samples_to_run.append(sample)
+
+    print(
+        f"\nProcessing {len(samples_to_run)} "
+        f"new samples."
+    )
+
+    # --------------------------------------------------------
+    # Open combined PDF
+    # --------------------------------------------------------
+    with PdfPages(combined_pdf_path) as combined_pdf:
+
+        for i, sample in enumerate(
+            samples_to_run,
+            start=1,
+        ):
 
             print(
-                f"\n[{i}/{len(samples)}] {sample}"
+                f"\n[{i}/{len(samples_to_run)}] "
+                f"{sample}"
             )
 
             try:
 
-                # ------------------------------------------------
-                # Run pipeline
-                # ------------------------------------------------
+                # =================================================
+                # Run complete sample pipeline
+                # =================================================
                 result = plot_embedding(
                     sample=sample,
-                    output_dir="plot",
+                    output_dir=output_dir,
                     image_root=image_root,
                     gene_root=gene_root,
                     threshold=threshold,
@@ -1269,31 +1330,49 @@ def plot_embedding_all_samples(
                     spot_size=spot_size,
                 )
 
-                # ------------------------------------------------
-                # Four-panel figure
-                # ------------------------------------------------
+                # =================================================
+                # Create four-panel figure
+                # =================================================
                 fig = plot_sample_four_panel(
                     sample=sample,
                     result=result,
                     spot_size=spot_size,
                 )
 
-                # ------------------------------------------------
-                # Add page to PDF
-                # ------------------------------------------------
-                pdf.savefig(
+                # =================================================
+                # Save individual sample PDF
+                # =================================================
+                sample_pdf = os.path.join(
+                    output_dir,
+                    f"{sample}_clusters.pdf",
+                )
+
+                with PdfPages(sample_pdf) as pdf:
+                    pdf.savefig(
+                        fig,
+                        bbox_inches="tight",
+                    )
+
+                print(
+                    f"Saved sample PDF:\n"
+                    f"  {sample_pdf}"
+                )
+
+                # =================================================
+                # Also add to combined PDF
+                # =================================================
+                combined_pdf.savefig(
                     fig,
                     bbox_inches="tight",
                 )
 
                 plt.close(fig)
 
-                # ------------------------------------------------
-                # Store results
-                # ------------------------------------------------
+                # =================================================
+                # Store result
+                # =================================================
                 result_dict[sample] = result
 
-                # Add sample identifier to mapping table
                 mapping = result[
                     "mapping_df"
                 ].copy()
@@ -1318,13 +1397,15 @@ def plot_embedding_all_samples(
                     f"ERROR in {sample}: {e}"
                 )
 
-                # Continue to next sample
+                # Make sure matplotlib doesn't retain
+                # partially generated figures
+                plt.close("all")
+
                 continue
 
-    # ========================================================
-    # Save all cluster mappings
-    # ========================================================
-
+    # --------------------------------------------------------
+    # Save mappings for newly processed samples
+    # --------------------------------------------------------
     if all_results:
 
         mapping_all = pd.concat(
@@ -1332,9 +1413,9 @@ def plot_embedding_all_samples(
             ignore_index=True,
         )
 
-        mapping_csv = output_pdf.replace(
-            ".pdf",
-            "_cluster_mapping.csv",
+        mapping_csv = os.path.join(
+            output_dir,
+            "XeniumPR1_all_samples_cluster_mapping.csv",
         )
 
         mapping_all.to_csv(
@@ -1344,11 +1425,12 @@ def plot_embedding_all_samples(
 
         print(
             f"\nCluster mappings saved to:\n"
-            f"{mapping_csv}"
+            f"  {mapping_csv}"
         )
 
     print(
-        f"\nPDF saved to:\n{output_pdf}"
+        f"\nCombined PDF saved to:\n"
+        f"  {combined_pdf_path}"
     )
 
     return result_dict
