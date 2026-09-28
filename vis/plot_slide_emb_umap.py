@@ -294,7 +294,7 @@ def make_umap_pdf(
             )
             fig.suptitle(f"UMAP colored by {col}", fontsize=15, y=1.02)
             fig.tight_layout()
-            pdf.savefig(fig, bbox_inches="tight")
+            pdf.savefig(fig)
             plt.close(fig)
 
         for col in num_cols:
@@ -308,7 +308,7 @@ def make_umap_pdf(
             )
             fig.suptitle(f"UMAP colored by {col}", fontsize=15, y=1.02)
             fig.tight_layout()
-            pdf.savefig(fig, bbox_inches="tight")
+            pdf.savefig(fig)
             plt.close(fig)
 
         # -----------------------
@@ -340,7 +340,7 @@ def make_umap_pdf(
                     )
                     fig.suptitle(f"{group_col} = {g} | colored by {col}", fontsize=15, y=1.02)
                     fig.tight_layout()
-                    pdf.savefig(fig, bbox_inches="tight")
+                    pdf.savefig(fig)
                     plt.close(fig)
 
                 for col in num_cols:
@@ -354,7 +354,7 @@ def make_umap_pdf(
                     )
                     fig.suptitle(f"{group_col} = {g} | colored by {col}", fontsize=15, y=1.02)
                     fig.tight_layout()
-                    pdf.savefig(fig, bbox_inches="tight")
+                    pdf.savefig(fig)
                     plt.close(fig)
 
     print(f"Saved PDF to: {out_pdf}")
@@ -1087,10 +1087,21 @@ def make_joint_group_umap_pdf(
 
         for col in cat_cols:
 
-            fig, ax = plt.subplots(figsize=(10, 7))
+            fig = plt.figure(figsize=(12, 6))
+
+            gs = fig.add_gridspec(
+                1,
+                2,
+                width_ratios=[2.2, 1.8],
+                wspace=0.05,
+            )
+
+            ax = fig.add_subplot(gs[0])
+            legend_ax = fig.add_subplot(gs[1])
 
             plot_categorical_by_group(
                 ax=ax,
+                legend_ax=legend_ax,
                 embedding=embedding,
                 values=joint[col],
                 groups=joint["source"],
@@ -1099,13 +1110,11 @@ def make_joint_group_umap_pdf(
                 title=f"UMAP colored by {col}",
             )
 
-            fig.subplots_adjust(
-                left=0.10,
-                right=0.62,
-                bottom=0.12,
-                top=0.90,
+            pdf.savefig(
+                fig,
+                bbox_inches="tight",
             )
-            pdf.savefig(fig, bbox_inches="tight")
+
             plt.close(fig)
 
         # ====================================================
@@ -1180,6 +1189,7 @@ def make_joint_group_umap_pdf(
 
 def plot_categorical_by_group(
     ax,
+    legend_ax,
     embedding,
     values,
     groups,
@@ -1190,8 +1200,9 @@ def plot_categorical_by_group(
     """
     Color = metadata category
     Shape = group
-        group1 = circle
-        group2 = cross
+
+    ax        = UMAP axes
+    legend_ax = dedicated axes for legends
     """
 
     vals = (
@@ -1225,7 +1236,7 @@ def plot_categorical_by_group(
     color_map = dict(zip(cats, colors))
 
     # -----------------------
-    # Shapes
+    # Group markers
     # -----------------------
     markers = {
         group1_label: "o",
@@ -1233,7 +1244,7 @@ def plot_categorical_by_group(
     }
 
     # -----------------------
-    # Plot points
+    # Plot UMAP
     # -----------------------
     for cat in cats:
 
@@ -1256,7 +1267,6 @@ def plot_categorical_by_group(
                     color=color_map[cat],
                     marker="o",
                     edgecolors="none",
-                    zorder=2,
                 )
 
             else:
@@ -1268,7 +1278,6 @@ def plot_categorical_by_group(
                     color=color_map[cat],
                     marker="x",
                     linewidths=1.5,
-                    zorder=3,
                 )
 
     ax.set_title(title)
@@ -1276,9 +1285,13 @@ def plot_categorical_by_group(
     ax.set_ylabel("UMAP2")
 
     # ========================================================
-    # Color legend
+    # Legend panel
     # ========================================================
+    legend_ax.axis("off")
 
+    # -----------------------
+    # Color legend
+    # -----------------------
     color_handles = [
         plt.Line2D(
             [0], [0],
@@ -1286,43 +1299,41 @@ def plot_categorical_by_group(
             linestyle="None",
             markerfacecolor=color_map[cat],
             markeredgecolor="none",
-            markersize=7,
+            markersize=6,
             label=str(cat),
         )
         for cat in cats
     ]
-
-    # Keep legend reasonably narrow
-    if n <= 25:
-        ncol = 1
-    elif n <= 60:
-        ncol = 2
-    else:
-        ncol = 3
 
     legend_title = title.replace(
         "UMAP colored by ",
         ""
     )
 
-    color_legend = ax.legend(
+    color_legend = legend_ax.legend(
         handles=color_handles,
         title=legend_title,
         fontsize=7,
-        title_fontsize=8,
+        title_fontsize=9,
         frameon=False,
-        ncol=ncol,
-        bbox_to_anchor=(1.02, 1),
+
+        # IMPORTANT:
+        # keep legend vertical so it cannot run off right side
+        ncol=1,
+
         loc="upper left",
+        bbox_to_anchor=(0, 1),
         borderaxespad=0,
+
+        handletextpad=0.5,
+        labelspacing=0.5,
     )
 
-    ax.add_artist(color_legend)
+    legend_ax.add_artist(color_legend)
 
-    # ========================================================
-    # Shape legend
-    # ========================================================
-
+    # -----------------------
+    # Group legend
+    # -----------------------
     shape_handles = [
         plt.Line2D(
             [0], [0],
@@ -1344,14 +1355,14 @@ def plot_categorical_by_group(
         ),
     ]
 
-    ax.legend(
+    legend_ax.legend(
         handles=shape_handles,
         title="Group",
         fontsize=7,
-        title_fontsize=8,
+        title_fontsize=9,
         frameon=False,
-        bbox_to_anchor=(1.02, 0),
         loc="lower left",
+        bbox_to_anchor=(0, 0),
         borderaxespad=0,
     )
 
