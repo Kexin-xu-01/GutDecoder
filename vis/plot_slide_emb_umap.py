@@ -18,6 +18,31 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
+def load_feature_vector(
+    h5_path: Path,
+    key: str = "features",
+) -> np.ndarray:
+    with h5py.File(h5_path, "r") as f:
+        if key not in f:
+            raise KeyError(
+                f"{key!r} not found in {h5_path.name}. "
+                f"Keys: {list(f.keys())}"
+            )
+
+        x = f[key][:]
+
+    if x.ndim == 1:
+        x = x.reshape(1, -1)
+    elif x.ndim > 2:
+        x = x.reshape(x.shape[0], -1)
+
+    if x.ndim != 2:
+        raise ValueError(
+            f"Unexpected feature shape {x.shape} in {h5_path.name}"
+        )
+
+    return x
+
 
 def load_features(
     h5_root: Path,
@@ -36,6 +61,35 @@ def load_features(
         ]
 
     print(f"Found/requested {len(h5_files)} H5 files")
+
+    records = []
+
+    for p in h5_files:
+        try:
+            x = load_feature_vector(
+                p,
+                key=feature_key,
+            )
+
+            records.append({
+                "sample_id": p.stem,
+                "features": x.squeeze(),
+            })
+
+        except Exception as e:
+            print(f"Skipping {p.name}: {e}")
+
+    if not records:
+        raise ValueError(
+            f"No H5 features successfully loaded from {h5_root}"
+        )
+
+    feat_df = pd.DataFrame(records)
+    feat_df["sample_id"] = feat_df["sample_id"].astype("string")
+
+    print(f"Loaded features for {len(feat_df)} samples")
+
+    return feat_df
 
 
 def coalesce_series(df: pd.DataFrame, cols: list[str]) -> pd.Series:
@@ -93,6 +147,7 @@ def merge_metadata(
         left_on=feature_id_col,
         right_on=metadata_id_col,
         how="left",
+        validate="many_to_one",
     )
 
     return merged
@@ -120,7 +175,22 @@ def compute_umap(X: np.ndarray, random_state: int = 0) -> np.ndarray:
 
     return embedding
 
+def get_encoder_paths(base_path):
+    base_path = Path(base_path)
 
+    encoder_configs = {
+        "prism": "20x_224px_0px_overlap",
+        "chief": "10x_256px_0px_overlap",
+        "madeleine": "10x_256px_0px_overlap",
+        "gigapath": "20x_256px_0px_overlap",
+        "titan": "20x_512px_0px_overlap",
+        "feather": "20x_512px_0px_overlap",
+    }
+
+    return {
+        encoder: base_path / config / f"slide_features_{encoder}"
+        for encoder, config in encoder_configs.items()
+    }
 
 def plot_categorical(ax, emb, values, title):
     vals = pd.Series(values).astype("string").fillna("NA")
@@ -289,3 +359,524 @@ def make_umap_pdf(
 
 def make_default_pdf_name(dataset_name: str, out_dir: Path) -> Path:
     return out_dir / f"umap_{dataset_name}.pdf"
+
+
+def run_slide_encoder_umap(
+    slide_encoder,
+    h5_root,
+    metadata_path,
+    metadata_id_col,
+    categorical_cols,
+    plot_folder,
+    sample_ids=None,
+    numeric_cols=None,
+    group_by_cols=None,
+    feature_key="features",
+):
+    numeric_cols = numeric_cols or []
+    group_by_cols = group_by_cols or []
+
+    h5_root = Path(h5_root)
+    metadata_path = Path(metadata_path)
+    plot_folder = Path(plot_folder)
+
+    out_pdf = plot_folder / f"umap_{slide_encoder}.pdf"
+
+    print(f"\n{'=' * 60}")
+    print(f"Slide encoder: {slide_encoder}")
+    print(f"Features:      {h5_root}")
+    print(f"Output:        {out_pdf}")
+
+    if sample_ids is not None:
+        print(f"Selected samples: {len(sample_ids)}")
+
+    print(f"{'=' * 60}")
+
+    # Load all embeddings or only selected samples
+    features = load_features(
+        h5_root=h5_root,
+        feature_key=feature_key,
+        sample_ids=sample_ids,
+    )
+
+    # Load metadata
+    metadata = load_metadata(
+        metadata_path=metadata_path,
+        sample_id_col=metadata_id_col,
+    )
+
+    # Merge metadata
+    meta = merge_metadata(
+        features=features,
+        metadata=metadata,
+        metadata_id_col=metadata_id_col,
+    )
+
+    # UMAP + PDF
+    make_umap_pdf(
+        meta=meta,
+        out_pdf=out_pdf,
+        categorical_cols=categorical_cols,
+        numeric_cols=numeric_cols,
+        group_by_cols=group_by_cols,
+        feature_col="features",
+        recompute_group_umap=True,
+    )
+
+    return meta
+
+def plot_matched_samples(
+    ax,
+    embedding,
+    joint,
+    matched_col="matched_xenium",
+    source_col="source",
+):
+    # IDs that genuinely have an adjacent + Xenium pair
+    matched_ids = joint.loc[
+        (joint[source_col] == "Adjacent")
+        & (joint["pair_status"] == "Paired"),
+        matched_col,
+    ].dropna().astype("string").unique()
+
+    n = len(matched_ids)
+
+    cmap_name = "tab20" if n <= 20 else "hsv"
+    cmap = mpl.colormaps.get_cmap(cmap_name)
+
+    colors = [
+        cmap(i / max(1, n - 1))
+        for i in range(n)
+    ]
+
+    color_map = dict(zip(matched_ids, colors))
+
+    # ---------------------------------
+    # Everything grey first
+    # ---------------------------------
+    ax.scatter(
+        embedding[:, 0],
+        embedding[:, 1],
+        s=18,
+        alpha=0.25,
+        color="lightgrey",
+        edgecolors="none",
+        zorder=1,
+    )
+
+    # ---------------------------------
+    # Matched pairs
+    # ---------------------------------
+    for sample_id in matched_ids:
+
+        # Xenium = circle
+        xenium_mask = (
+            joint[matched_col].astype("string").eq(sample_id)
+            & joint[source_col].eq("Xenium")
+        ).fillna(False).to_numpy(dtype=bool)
+
+        ax.scatter(
+            embedding[xenium_mask, 0],
+            embedding[xenium_mask, 1],
+            s=45,
+            marker="o",
+            color=color_map[sample_id],
+            label=str(sample_id),
+            edgecolors="none",
+            zorder=3,
+        )
+
+        # Adjacent = cross
+        adjacent_mask = (
+            joint[matched_col].astype("string").eq(sample_id)
+            & joint[source_col].eq("Adjacent")
+        ).fillna(False).to_numpy(dtype=bool)
+
+        ax.scatter(
+            embedding[adjacent_mask, 0],
+            embedding[adjacent_mask, 1],
+            s=55,
+            marker="x",
+            color=color_map[sample_id],
+            linewidths=1.5,
+            zorder=4,
+        )
+
+    ax.set_title("Matched Xenium–Adjacent samples")
+    ax.set_xlabel("UMAP1")
+    ax.set_ylabel("UMAP2")
+
+    # ---------------------------------
+    # Sample ID legend
+    # ---------------------------------
+    if n > 0:
+        ncol = (
+            1 if n <= 20
+            else 2 if n <= 50
+            else 3
+        )
+
+        sample_legend = ax.legend(
+            fontsize=7,
+            markerscale=1.2,
+            frameon=False,
+            ncol=ncol,
+            bbox_to_anchor=(1.02, 1),
+            loc="upper left",
+            title="Matched Xenium Sample",
+        )
+
+        ax.add_artist(sample_legend)
+
+    # ---------------------------------
+    # Shape legend
+    # ---------------------------------
+    shape_handles = [
+        plt.Line2D(
+            [0], [0],
+            marker="o",
+            linestyle="None",
+            color="black",
+            markersize=6,
+            label="Xenium",
+        ),
+        plt.Line2D(
+            [0], [0],
+            marker="x",
+            linestyle="None",
+            color="black",
+            markersize=7,
+            label="Adjacent",
+        ),
+    ]
+
+    ax.legend(
+        handles=shape_handles,
+        title="Source",
+        frameon=False,
+        loc="lower right",
+    )
+
+def make_joint_umap_pdf(
+    xenium_h5_root: Path,
+    adjacent_h5_root: Path,
+    xenium_metadata_path: Path,
+    adjacent_metadata_path: Path,
+    out_pdf: Path,
+    xenium_sample_ids=None,
+    categorical_cols=None,
+    numeric_cols=None,
+    feature_key: str = "features",
+    xenium_id_col: str = "Sample_ID",
+    adjacent_id_col: str = "adjacent_nec",
+    adjacent_xenium_col: str = "xenium_sample",
+):
+    """
+    Joint UMAP of Xenium and matched adjacent NEC slide embeddings.
+
+    The resulting PDF contains:
+      1. Source: Xenium vs Adjacent
+      2. Metadata-colored UMAPs
+      3. Matched Xenium sample ID
+
+    For the matched-sample plot, an adjacent sample is assigned the
+    Sample_ID of the Xenium sample to which it is matched.
+    """
+
+    categorical_cols = categorical_cols or []
+    numeric_cols = numeric_cols or []
+
+    # ========================================================
+    # Load features
+    # ========================================================
+
+    print("\nLoading Xenium embeddings...")
+
+    xenium_features = load_features(
+        h5_root=Path(xenium_h5_root),
+        feature_key=feature_key,
+        sample_ids=xenium_sample_ids,
+    )
+
+    print("\nLoading adjacent NEC embeddings...")
+
+    adjacent_features = load_features(
+        h5_root=Path(adjacent_h5_root),
+        feature_key=feature_key,
+    )
+
+    # ========================================================
+    # Load metadata
+    # ========================================================
+
+    xenium_metadata = load_metadata(
+        metadata_path=Path(xenium_metadata_path),
+        sample_id_col=xenium_id_col,
+    )
+
+    adjacent_metadata = load_metadata(
+        metadata_path=Path(adjacent_metadata_path),
+        sample_id_col=adjacent_id_col,
+    )
+
+    # ========================================================
+    # Merge metadata
+    # ========================================================
+
+    xenium = merge_metadata(
+        features=xenium_features,
+        metadata=xenium_metadata,
+        metadata_id_col=xenium_id_col,
+    )
+
+    adjacent = merge_metadata(
+        features=adjacent_features,
+        metadata=adjacent_metadata,
+        metadata_id_col=adjacent_id_col,
+    )
+
+    # ========================================================
+    # Add source
+    # ========================================================
+
+    xenium["source"] = "Xenium"
+    adjacent["source"] = "Adjacent"
+
+
+    # ========================================================
+    # Create common matched Xenium ID
+    # ========================================================
+
+    # Xenium samples identify themselves
+    xenium["matched_xenium"] = xenium[xenium_id_col].astype("string")
+
+    # Adjacent samples contain the ID of their matched Xenium sample
+    adjacent["matched_xenium"] = adjacent[adjacent_xenium_col].astype("string")
+
+
+    # ========================================================
+    # Identify paired / unpaired samples
+    # ========================================================
+
+    # Xenium samples actually present in this joint analysis
+    available_xenium = set(
+        xenium["matched_xenium"]
+        .dropna()
+        .astype("string")
+    )
+
+    # Does each adjacent sample have a Xenium sample present?
+    adjacent["pair_status"] = np.where(
+        adjacent["matched_xenium"].isin(available_xenium),
+        "Paired",
+        "Unpaired",
+    )
+
+    # For Xenium, determine whether an adjacent counterpart exists
+    paired_xenium = set(
+        adjacent.loc[
+            adjacent["pair_status"] == "Paired",
+            "matched_xenium",
+        ]
+        .dropna()
+        .astype("string")
+    )
+
+    xenium["pair_status"] = np.where(
+        xenium["matched_xenium"].isin(paired_xenium),
+        "Paired",
+        "Unpaired",
+    )
+
+
+    # ========================================================
+    # Combine
+    # ========================================================
+
+    joint = pd.concat(
+        [
+            xenium,
+            adjacent,
+        ],
+        ignore_index=True,
+        sort=False,
+    )
+
+    print(f"Xenium samples:   {len(xenium)}")
+    print(f"Adjacent samples: {len(adjacent)}")
+    print(f"Joint samples:    {len(joint)}")
+
+    print("\nPair status:")
+    print(
+        joint.groupby(["source", "pair_status"])
+        .size()
+    )
+
+    # ========================================================
+    # Make common metadata columns
+    # ========================================================
+
+    # If adjacent metadata already contains disease/location
+    # inherited from the matched Xenium sample, these columns
+    # will line up automatically when concatenated.
+
+    joint = pd.concat(
+        [
+            xenium,
+            adjacent,
+        ],
+        ignore_index=True,
+        sort=False,
+    )
+
+    print(f"Joint samples: {len(joint)}")
+
+    # ========================================================
+    # Joint UMAP
+    # ========================================================
+
+    X = np.stack(
+        joint["features"].to_numpy()
+    )
+
+    embedding = compute_umap(X)
+
+    # ========================================================
+    # Save coordinates in dataframe
+    # ========================================================
+
+    joint["UMAP1"] = embedding[:, 0]
+    joint["UMAP2"] = embedding[:, 1]
+
+    # ========================================================
+    # Columns
+    # ========================================================
+
+    cat_cols = [
+        c
+        for c in categorical_cols
+        if c in joint.columns
+    ]
+
+    num_cols = [
+        c
+        for c in numeric_cols
+        if c in joint.columns
+    ]
+
+    missing = (
+        set(categorical_cols)
+        | set(numeric_cols)
+    ) - set(joint.columns)
+
+    if missing:
+        print(
+            "Warning: columns not found:",
+            sorted(missing),
+        )
+
+    # ========================================================
+    # PDF
+    # ========================================================
+
+    out_pdf = Path(out_pdf)
+
+    out_pdf.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    with PdfPages(out_pdf) as pdf:
+
+        # ----------------------------------------------------
+        # 1. Xenium vs Adjacent
+        # ----------------------------------------------------
+
+        fig, ax = plt.subplots(
+            figsize=(7, 5)
+        )
+
+        plot_categorical(
+            ax,
+            embedding,
+            joint["source"],
+            "Xenium vs Adjacent NEC",
+        )
+
+        fig.tight_layout()
+
+        pdf.savefig(
+            fig,
+            bbox_inches="tight",
+        )
+
+        plt.close(fig)
+
+        # ----------------------------------------------------
+        # 2. Metadata
+        # ----------------------------------------------------
+
+        for col in cat_cols:
+
+            fig, ax = plt.subplots(
+                figsize=(7, 5)
+            )
+
+            plot_categorical(
+                ax,
+                embedding,
+                joint[col],
+                f"UMAP colored by {col}",
+            )
+
+            fig.tight_layout()
+
+            pdf.savefig(
+                fig,
+                bbox_inches="tight",
+            )
+
+            plt.close(fig)
+
+        for col in num_cols:
+
+            fig, ax = plt.subplots(
+                figsize=(7, 5)
+            )
+
+            plot_numeric(
+                ax,
+                embedding,
+                joint[col],
+                f"UMAP colored by {col}",
+            )
+
+            fig.tight_layout()
+
+            pdf.savefig(
+                fig,
+                bbox_inches="tight",
+            )
+
+            plt.close(fig)
+
+        # ----------------------------------------------------
+        # 3. Matched Xenium sample
+        # ----------------------------------------------------
+
+        fig, ax = plt.subplots(figsize=(10, 7))
+
+        plot_matched_samples(
+            ax,
+            embedding,
+            joint,
+            matched_col="matched_xenium",
+        )
+
+        fig.tight_layout()
+        pdf.savefig(fig, bbox_inches="tight")
+        plt.close(fig)
+
+    print(f"Saved joint UMAP to: {out_pdf}")
+
+    return joint
