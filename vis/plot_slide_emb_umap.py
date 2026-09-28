@@ -1035,7 +1035,7 @@ def make_joint_group_umap_pdf(
         # Page 1: group membership
         # ====================================================
 
-        fig, ax = plt.subplots(figsize=(7, 5))
+        fig, ax = plt.subplots(figsize=(10, 7))
 
         group_styles = {
             group1_label: "o",
@@ -1069,7 +1069,12 @@ def make_joint_group_umap_pdf(
             frameon=False,
         )
 
-        fig.tight_layout()
+        fig.subplots_adjust(
+            left=0.10,
+            right=0.62,
+            bottom=0.12,
+            top=0.90,
+        )
         pdf.savefig(fig, bbox_inches="tight")
         plt.close(fig)
 
@@ -1082,7 +1087,7 @@ def make_joint_group_umap_pdf(
 
         for col in cat_cols:
 
-            fig, ax = plt.subplots(figsize=(7, 5))
+            fig, ax = plt.subplots(figsize=(10, 7))
 
             plot_categorical_by_group(
                 ax=ax,
@@ -1094,7 +1099,12 @@ def make_joint_group_umap_pdf(
                 title=f"UMAP colored by {col}",
             )
 
-            fig.tight_layout()
+            fig.subplots_adjust(
+                left=0.10,
+                right=0.62,
+                bottom=0.12,
+                top=0.90,
+            )
             pdf.savefig(fig, bbox_inches="tight")
             plt.close(fig)
 
@@ -1104,7 +1114,7 @@ def make_joint_group_umap_pdf(
 
         for col in num_cols:
 
-            fig, ax = plt.subplots(figsize=(7, 5))
+            fig, ax = plt.subplots(figsize=(10, 7))
 
             plot_numeric_by_group(
                 ax=ax,
@@ -1116,7 +1126,12 @@ def make_joint_group_umap_pdf(
                 title=f"UMAP colored by {col}",
             )
 
-            fig.tight_layout()
+            fig.subplots_adjust(
+                left=0.10,
+                right=0.62,
+                bottom=0.12,
+                top=0.90,
+            )
             pdf.savefig(fig, bbox_inches="tight")
             plt.close(fig)
 
@@ -1147,7 +1162,12 @@ def make_joint_group_umap_pdf(
                     group2_label=group2_label,
                 )
 
-                fig.tight_layout()
+                fig.subplots_adjust(
+                    left=0.10,
+                    right=0.62,
+                    bottom=0.12,
+                    top=0.90,
+                )
                 pdf.savefig(
                     fig,
                     bbox_inches="tight",
@@ -1167,20 +1187,33 @@ def plot_categorical_by_group(
     group2_label,
     title,
 ):
+    """
+    Color = metadata category
+    Shape = group
+        group1 = circle
+        group2 = cross
+    """
+
     vals = (
         pd.Series(values)
         .astype("string")
         .fillna("NA")
+        .reset_index(drop=True)
     )
 
     groups = (
         pd.Series(groups)
         .astype("string")
+        .fillna("NA")
+        .reset_index(drop=True)
     )
 
     cats = pd.unique(vals)
     n = len(cats)
 
+    # -----------------------
+    # Colors
+    # -----------------------
     cmap_name = "tab20" if n <= 20 else "hsv"
     cmap = mpl.colormaps.get_cmap(cmap_name)
 
@@ -1191,13 +1224,19 @@ def plot_categorical_by_group(
 
     color_map = dict(zip(cats, colors))
 
+    # -----------------------
+    # Shapes
+    # -----------------------
     markers = {
         group1_label: "o",
         group2_label: "x",
     }
 
-    # Plot categories × groups
+    # -----------------------
+    # Plot points
+    # -----------------------
     for cat in cats:
+
         for group, marker in markers.items():
 
             mask = (
@@ -1208,69 +1247,99 @@ def plot_categorical_by_group(
             if not mask.any():
                 continue
 
-            ax.scatter(
-                embedding[mask, 0],
-                embedding[mask, 1],
-                s=30,
-                alpha=0.85,
-                color=color_map[cat],
-                marker=marker,
-                edgecolors="none"
-                if marker == "o"
-                else None,
-            )
+            if marker == "o":
+                ax.scatter(
+                    embedding[mask, 0],
+                    embedding[mask, 1],
+                    s=35,
+                    alpha=0.85,
+                    color=color_map[cat],
+                    marker="o",
+                    edgecolors="none",
+                    zorder=2,
+                )
+
+            else:
+                ax.scatter(
+                    embedding[mask, 0],
+                    embedding[mask, 1],
+                    s=45,
+                    alpha=0.9,
+                    color=color_map[cat],
+                    marker="x",
+                    linewidths=1.5,
+                    zorder=3,
+                )
 
     ax.set_title(title)
     ax.set_xlabel("UMAP1")
     ax.set_ylabel("UMAP2")
 
-    # -----------------------
+    # ========================================================
     # Color legend
-    # -----------------------
+    # ========================================================
 
     color_handles = [
         plt.Line2D(
-            [0],
-            [0],
+            [0], [0],
             marker="o",
             linestyle="None",
             markerfacecolor=color_map[cat],
             markeredgecolor="none",
+            markersize=7,
             label=str(cat),
         )
         for cat in cats
     ]
 
+    # Keep legend reasonably narrow
+    if n <= 25:
+        ncol = 1
+    elif n <= 60:
+        ncol = 2
+    else:
+        ncol = 3
+
+    legend_title = title.replace(
+        "UMAP colored by ",
+        ""
+    )
+
     color_legend = ax.legend(
         handles=color_handles,
-        title="Metadata",
+        title=legend_title,
         fontsize=7,
+        title_fontsize=8,
         frameon=False,
+        ncol=ncol,
         bbox_to_anchor=(1.02, 1),
         loc="upper left",
+        borderaxespad=0,
     )
 
     ax.add_artist(color_legend)
 
-    # -----------------------
+    # ========================================================
     # Shape legend
-    # -----------------------
+    # ========================================================
 
     shape_handles = [
         plt.Line2D(
-            [0],
-            [0],
+            [0], [0],
             marker="o",
             linestyle="None",
-            color="black",
+            markerfacecolor="black",
+            markeredgecolor="none",
+            markersize=7,
             label=group1_label,
         ),
         plt.Line2D(
-            [0],
-            [0],
+            [0], [0],
             marker="x",
             linestyle="None",
             color="black",
+            markersize=7,
+            markeredgewidth=1.5,
             label=group2_label,
         ),
     ]
@@ -1278,10 +1347,13 @@ def plot_categorical_by_group(
     ax.legend(
         handles=shape_handles,
         title="Group",
+        fontsize=7,
+        title_fontsize=8,
         frameon=False,
-        loc="lower right",
+        bbox_to_anchor=(1.02, 0),
+        loc="lower left",
+        borderaxespad=0,
     )
-
 
 def plot_numeric_by_group(
     ax,
