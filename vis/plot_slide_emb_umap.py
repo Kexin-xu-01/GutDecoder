@@ -19,21 +19,23 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 
-def load_feature_vector(h5_path: Path, key: str = "features") -> np.ndarray:
-    with h5py.File(h5_path, "r") as f:
-        if key not in f:
-            raise KeyError(f"{key!r} not found in {h5_path.name}. Keys: {list(f.keys())}")
-        x = f[key][:]
+def load_features(
+    h5_root: Path,
+    feature_key: str = "features",
+    sample_ids=None,
+) -> pd.DataFrame:
 
-    if x.ndim == 1:
-        x = x.reshape(1, -1)
-    elif x.ndim > 2:
-        x = x.reshape(x.shape[0], -1)
+    h5_root = Path(h5_root)
 
-    if x.ndim != 2:
-        raise ValueError(f"Unexpected feature shape {x.shape} in {h5_path.name}")
+    if sample_ids is None:
+        h5_files = sorted(h5_root.rglob("*.h5"))
+    else:
+        h5_files = [
+            h5_root / f"{sample_id}.h5"
+            for sample_id in sample_ids
+        ]
 
-    return x
+    print(f"Found/requested {len(h5_files)} H5 files")
 
 
 def coalesce_series(df: pd.DataFrame, cols: list[str]) -> pd.Series:
@@ -46,53 +48,75 @@ def coalesce_series(df: pd.DataFrame, cols: list[str]) -> pd.Series:
     return out
 
 
-def load_features(h5_root: Path, feature_key: str = "features") -> pd.DataFrame:
-    h5_files = sorted(h5_root.rglob("*.h5"))
-    print(f"Found {len(h5_files)} H5 files")
-
-    records = []
-    for p in h5_files:
-        try:
-            x = load_feature_vector(p, key=feature_key)
-            records.append({"sample_id": p.stem, "features": x.squeeze()})
-        except Exception as e:
-            print(f"Skipping {p.name}: {e}")
-
-    feat_df = pd.DataFrame(records)
-    feat_df["sample_id"] = feat_df["sample_id"].astype("string")
-    print("Loaded features for:", len(feat_df), "samples")
-    return feat_df
-
-
 def load_metadata(
-    hest_meta_path: Path,
-    hest_id_col: str = "sample_id",
+    metadata_path: Path,
+    sample_id_col: str,
 ) -> pd.DataFrame:
-    hest_meta = pd.read_csv(hest_meta_path)
 
-    if hest_id_col not in hest_meta.columns:
-        raise KeyError(f"{hest_id_col!r} not in hest metadata columns")
+    metadata_path = Path(metadata_path)
 
-    hest_meta[hest_id_col] = hest_meta[hest_id_col].astype("string")
+    if metadata_path.suffix.lower() == ".csv":
+        meta = pd.read_csv(metadata_path)
 
-    return hest_meta
+    elif metadata_path.suffix.lower() in [".xlsx", ".xls"]:
+        meta = pd.read_excel(metadata_path)
+
+    else:
+        raise ValueError(
+            f"Unsupported metadata file: {metadata_path}"
+        )
+
+    if sample_id_col not in meta.columns:
+        raise KeyError(
+            f"{sample_id_col!r} not in metadata columns"
+        )
+
+    meta[sample_id_col] = meta[sample_id_col].astype("string")
+
+    return meta
+
+def merge_metadata(
+    features: pd.DataFrame,
+    metadata: pd.DataFrame,
+    metadata_id_col: str,
+    feature_id_col: str = "sample_id",
+) -> pd.DataFrame:
+
+    features = features.copy()
+    metadata = metadata.copy()
+
+    features[feature_id_col] = features[feature_id_col].astype("string")
+    metadata[metadata_id_col] = metadata[metadata_id_col].astype("string")
+
+    merged = features.merge(
+        metadata,
+        left_on=feature_id_col,
+        right_on=metadata_id_col,
+        how="left",
+    )
+
+    return merged
 
 
 def compute_umap(X: np.ndarray, random_state: int = 0) -> np.ndarray:
     X = StandardScaler().fit_transform(X)
 
     n_pca = min(50, X.shape[1], X.shape[0] - 1)
+
     if n_pca >= 2:
-        Xr = PCA(n_components=n_pca, random_state=0).fit_transform(X)
+        Xr = PCA(
+            n_components=n_pca,
+            random_state=random_state,
+        ).fit_transform(X)
     else:
         Xr = X
 
     embedding = umap.UMAP(
-        n_neighbors=min(15, max(2, X.shape[0] - 1)),
+        n_neighbors=min(15, max(2, Xr.shape[0] - 1)),
         min_dist=0.1,
         metric="euclidean",
         random_state=random_state,
-    ).fit_transform(X)
+    ).fit_transform(Xr)
 
     return embedding
 
