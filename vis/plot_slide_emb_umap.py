@@ -185,6 +185,9 @@ def get_encoder_paths(base_path):
         "gigapath": "20x_256px_0px_overlap",
         "titan": "20x_512px_0px_overlap",
         "feather": "20x_512px_0px_overlap",
+        "prism2": "20x_224px_0px_overlap",
+        "care": "20x_512px_0px_overlap",
+        "feather_uni_v2": "20x_256px_0px_overlap"
     }
 
     return {
@@ -880,3 +883,644 @@ def make_joint_umap_pdf(
     print(f"Saved joint UMAP to: {out_pdf}")
 
     return joint
+
+
+
+def make_joint_group_umap_pdf(
+    group1_h5_root: Path,
+    group2_h5_root: Path,
+    group1_metadata_path: Path,
+    group2_metadata_path: Path,
+    out_pdf: Path,
+    group1_label: str,
+    group2_label: str,
+    group1_id_col: str,
+    group2_id_col: str,
+    categorical_cols: list[str] | None = None,
+    numeric_cols: list[str] | None = None,
+    group1_sample_ids=None,
+    group2_sample_ids=None,
+    feature_key: str = "features",
+    match_col: str | None = None,
+    random_state: int = 0,
+):
+    """
+    Joint UMAP of any two groups of slide embeddings.
+
+    Shape indicates group:
+        group 1 = circle
+        group 2 = cross
+
+    Pages:
+        1. group membership
+        2. categorical metadata
+        3. numeric metadata
+        4. matched-sample plot, if match_col is supplied
+    """
+
+    categorical_cols = categorical_cols or []
+    numeric_cols = numeric_cols or []
+
+    # ========================================================
+    # Load features
+    # ========================================================
+
+    print(f"\nLoading {group1_label} embeddings...")
+
+    group1_features = load_features(
+        h5_root=Path(group1_h5_root),
+        feature_key=feature_key,
+        sample_ids=group1_sample_ids,
+    )
+
+    print(f"\nLoading {group2_label} embeddings...")
+
+    group2_features = load_features(
+        h5_root=Path(group2_h5_root),
+        feature_key=feature_key,
+        sample_ids=group2_sample_ids,
+    )
+
+    # ========================================================
+    # Load metadata
+    # ========================================================
+
+    group1_metadata = load_metadata(
+        metadata_path=Path(group1_metadata_path),
+        sample_id_col=group1_id_col,
+    )
+
+    group2_metadata = load_metadata(
+        metadata_path=Path(group2_metadata_path),
+        sample_id_col=group2_id_col,
+    )
+
+    # ========================================================
+    # Merge metadata
+    # ========================================================
+
+    group1 = merge_metadata(
+        features=group1_features,
+        metadata=group1_metadata,
+        metadata_id_col=group1_id_col,
+    )
+
+    group2 = merge_metadata(
+        features=group2_features,
+        metadata=group2_metadata,
+        metadata_id_col=group2_id_col,
+    )
+
+    group1["source"] = group1_label
+    group2["source"] = group2_label
+
+    print(f"{group1_label}: {len(group1)}")
+    print(f"{group2_label}: {len(group2)}")
+
+    # ========================================================
+    # Combine
+    # ========================================================
+
+    joint = pd.concat(
+        [group1, group2],
+        ignore_index=True,
+        sort=False,
+    )
+
+    print(f"Joint: {len(joint)}")
+
+    # ========================================================
+    # Joint UMAP
+    # ========================================================
+
+    X = np.stack(
+        joint["features"].to_numpy()
+    )
+
+    embedding = compute_umap(
+        X,
+        random_state=random_state,
+    )
+
+    joint["UMAP1"] = embedding[:, 0]
+    joint["UMAP2"] = embedding[:, 1]
+
+    # ========================================================
+    # Validate plotting columns
+    # ========================================================
+
+    cat_cols = [
+        c for c in categorical_cols
+        if c in joint.columns
+    ]
+
+    num_cols = [
+        c for c in numeric_cols
+        if c in joint.columns
+    ]
+
+    # ========================================================
+    # PDF
+    # ========================================================
+
+    out_pdf = Path(out_pdf)
+    out_pdf.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    with PdfPages(out_pdf) as pdf:
+
+        # ====================================================
+        # Page 1: group membership
+        # ====================================================
+
+        fig, ax = plt.subplots(figsize=(7, 5))
+
+        group_styles = {
+            group1_label: "o",
+            group2_label: "x",
+        }
+
+        for group, marker in group_styles.items():
+
+            mask = (
+                joint["source"]
+                .eq(group)
+                .to_numpy(dtype=bool)
+            )
+
+            ax.scatter(
+                embedding[mask, 0],
+                embedding[mask, 1],
+                s=35,
+                alpha=0.8,
+                marker=marker,
+                label=group,
+            )
+
+        ax.set_title(
+            f"{group1_label} vs {group2_label}"
+        )
+        ax.set_xlabel("UMAP1")
+        ax.set_ylabel("UMAP2")
+
+        ax.legend(
+            frameon=False,
+        )
+
+        fig.tight_layout()
+        pdf.savefig(fig, bbox_inches="tight")
+        plt.close(fig)
+
+        # ====================================================
+        # Categorical metadata
+        #
+        # Color = metadata
+        # Shape = group
+        # ====================================================
+
+        for col in cat_cols:
+
+            fig, ax = plt.subplots(figsize=(7, 5))
+
+            plot_categorical_by_group(
+                ax=ax,
+                embedding=embedding,
+                values=joint[col],
+                groups=joint["source"],
+                group1_label=group1_label,
+                group2_label=group2_label,
+                title=f"UMAP colored by {col}",
+            )
+
+            fig.tight_layout()
+            pdf.savefig(fig, bbox_inches="tight")
+            plt.close(fig)
+
+        # ====================================================
+        # Numeric metadata
+        # ====================================================
+
+        for col in num_cols:
+
+            fig, ax = plt.subplots(figsize=(7, 5))
+
+            plot_numeric_by_group(
+                ax=ax,
+                embedding=embedding,
+                values=joint[col],
+                groups=joint["source"],
+                group1_label=group1_label,
+                group2_label=group2_label,
+                title=f"UMAP colored by {col}",
+            )
+
+            fig.tight_layout()
+            pdf.savefig(fig, bbox_inches="tight")
+            plt.close(fig)
+
+        # ====================================================
+        # Matched samples
+        # ====================================================
+
+        if match_col is not None:
+
+            if match_col not in joint.columns:
+                print(
+                    f"Skipping matched plot: "
+                    f"{match_col!r} not found"
+                )
+
+            else:
+                fig, ax = plt.subplots(
+                    figsize=(10, 7)
+                )
+
+                plot_matched_groups(
+                    ax=ax,
+                    embedding=embedding,
+                    joint=joint,
+                    match_col=match_col,
+                    source_col="source",
+                    group1_label=group1_label,
+                    group2_label=group2_label,
+                )
+
+                fig.tight_layout()
+                pdf.savefig(
+                    fig,
+                    bbox_inches="tight",
+                )
+                plt.close(fig)
+
+    print(f"Saved PDF to: {out_pdf}")
+
+    return joint
+
+def plot_categorical_by_group(
+    ax,
+    embedding,
+    values,
+    groups,
+    group1_label,
+    group2_label,
+    title,
+):
+    vals = (
+        pd.Series(values)
+        .astype("string")
+        .fillna("NA")
+    )
+
+    groups = (
+        pd.Series(groups)
+        .astype("string")
+    )
+
+    cats = pd.unique(vals)
+    n = len(cats)
+
+    cmap_name = "tab20" if n <= 20 else "hsv"
+    cmap = mpl.colormaps.get_cmap(cmap_name)
+
+    colors = [
+        cmap(i / max(1, n - 1))
+        for i in range(n)
+    ]
+
+    color_map = dict(zip(cats, colors))
+
+    markers = {
+        group1_label: "o",
+        group2_label: "x",
+    }
+
+    # Plot categories × groups
+    for cat in cats:
+        for group, marker in markers.items():
+
+            mask = (
+                vals.eq(cat)
+                & groups.eq(group)
+            ).fillna(False).to_numpy(dtype=bool)
+
+            if not mask.any():
+                continue
+
+            ax.scatter(
+                embedding[mask, 0],
+                embedding[mask, 1],
+                s=30,
+                alpha=0.85,
+                color=color_map[cat],
+                marker=marker,
+                edgecolors="none"
+                if marker == "o"
+                else None,
+            )
+
+    ax.set_title(title)
+    ax.set_xlabel("UMAP1")
+    ax.set_ylabel("UMAP2")
+
+    # -----------------------
+    # Color legend
+    # -----------------------
+
+    color_handles = [
+        plt.Line2D(
+            [0],
+            [0],
+            marker="o",
+            linestyle="None",
+            markerfacecolor=color_map[cat],
+            markeredgecolor="none",
+            label=str(cat),
+        )
+        for cat in cats
+    ]
+
+    color_legend = ax.legend(
+        handles=color_handles,
+        title="Metadata",
+        fontsize=7,
+        frameon=False,
+        bbox_to_anchor=(1.02, 1),
+        loc="upper left",
+    )
+
+    ax.add_artist(color_legend)
+
+    # -----------------------
+    # Shape legend
+    # -----------------------
+
+    shape_handles = [
+        plt.Line2D(
+            [0],
+            [0],
+            marker="o",
+            linestyle="None",
+            color="black",
+            label=group1_label,
+        ),
+        plt.Line2D(
+            [0],
+            [0],
+            marker="x",
+            linestyle="None",
+            color="black",
+            label=group2_label,
+        ),
+    ]
+
+    ax.legend(
+        handles=shape_handles,
+        title="Group",
+        frameon=False,
+        loc="lower right",
+    )
+
+
+def plot_numeric_by_group(
+    ax,
+    embedding,
+    values,
+    groups,
+    group1_label,
+    group2_label,
+    title,
+):
+    vals = pd.to_numeric(
+        pd.Series(values),
+        errors="coerce",
+    )
+
+    groups = (
+        pd.Series(groups)
+        .astype("string")
+    )
+
+    valid = vals.notna()
+
+    if not valid.any():
+        ax.set_title(title)
+        return
+
+    norm = mpl.colors.Normalize(
+        vmin=vals[valid].min(),
+        vmax=vals[valid].max(),
+    )
+
+    cmap = mpl.colormaps["viridis"]
+
+    markers = {
+        group1_label: "o",
+        group2_label: "x",
+    }
+
+    for group, marker in markers.items():
+
+        mask = (
+            valid
+            & groups.eq(group)
+        ).to_numpy(dtype=bool)
+
+        if not mask.any():
+            continue
+
+        ax.scatter(
+            embedding[mask, 0],
+            embedding[mask, 1],
+            c=vals[mask],
+            cmap=cmap,
+            norm=norm,
+            s=30,
+            alpha=0.9,
+            marker=marker,
+            edgecolors="none"
+            if marker == "o"
+            else None,
+        )
+
+    ax.set_title(title)
+    ax.set_xlabel("UMAP1")
+    ax.set_ylabel("UMAP2")
+
+    sm = mpl.cm.ScalarMappable(
+        norm=norm,
+        cmap=cmap,
+    )
+
+    plt.colorbar(
+        sm,
+        ax=ax,
+        fraction=0.046,
+        pad=0.04,
+    )
+
+    shape_handles = [
+        plt.Line2D(
+            [0], [0],
+            marker="o",
+            linestyle="None",
+            color="black",
+            label=group1_label,
+        ),
+        plt.Line2D(
+            [0], [0],
+            marker="x",
+            linestyle="None",
+            color="black",
+            label=group2_label,
+        ),
+    ]
+
+    ax.legend(
+        handles=shape_handles,
+        title="Group",
+        frameon=False,
+    )
+
+def plot_matched_groups(
+    ax,
+    embedding,
+    joint,
+    match_col,
+    source_col,
+    group1_label,
+    group2_label,
+):
+    group1_ids = set(
+        joint.loc[
+            joint[source_col] == group1_label,
+            match_col,
+        ]
+        .dropna()
+        .astype("string")
+    )
+
+    group2_ids = set(
+        joint.loc[
+            joint[source_col] == group2_label,
+            match_col,
+        ]
+        .dropna()
+        .astype("string")
+    )
+
+    # Only IDs present in BOTH groups
+    matched_ids = sorted(
+        group1_ids & group2_ids
+    )
+
+    n = len(matched_ids)
+
+    cmap_name = "tab20" if n <= 20 else "hsv"
+    cmap = mpl.colormaps.get_cmap(cmap_name)
+
+    colors = [
+        cmap(i / max(1, n - 1))
+        for i in range(n)
+    ]
+
+    color_map = dict(
+        zip(matched_ids, colors)
+    )
+
+    # Everything else grey
+    ax.scatter(
+        embedding[:, 0],
+        embedding[:, 1],
+        s=18,
+        alpha=0.25,
+        color="lightgrey",
+        edgecolors="none",
+        zorder=1,
+    )
+
+    markers = {
+        group1_label: "o",
+        group2_label: "x",
+    }
+
+    for sample_id in matched_ids:
+
+        for group, marker in markers.items():
+
+            mask = (
+                joint[match_col]
+                .astype("string")
+                .eq(sample_id)
+                & joint[source_col].eq(group)
+            ).fillna(False).to_numpy(dtype=bool)
+
+            ax.scatter(
+                embedding[mask, 0],
+                embedding[mask, 1],
+                s=45,
+                marker=marker,
+                color=color_map[sample_id],
+                edgecolors="none"
+                if marker == "o"
+                else None,
+                linewidths=1.5,
+                zorder=3,
+            )
+
+    ax.set_title(
+        f"Matched {group1_label}–{group2_label} samples"
+    )
+    ax.set_xlabel("UMAP1")
+    ax.set_ylabel("UMAP2")
+
+    # Sample ID legend
+    sample_handles = [
+        plt.Line2D(
+            [0], [0],
+            marker="o",
+            linestyle="None",
+            markerfacecolor=color_map[sample_id],
+            markeredgecolor="none",
+            label=str(sample_id),
+        )
+        for sample_id in matched_ids
+    ]
+
+    sample_legend = ax.legend(
+        handles=sample_handles,
+        title="Sample ID",
+        fontsize=7,
+        frameon=False,
+        bbox_to_anchor=(1.02, 1),
+        loc="upper left",
+    )
+
+    ax.add_artist(sample_legend)
+
+    # Group shape legend
+    shape_handles = [
+        plt.Line2D(
+            [0], [0],
+            marker="o",
+            linestyle="None",
+            color="black",
+            label=group1_label,
+        ),
+        plt.Line2D(
+            [0], [0],
+            marker="x",
+            linestyle="None",
+            color="black",
+            label=group2_label,
+        ),
+    ]
+
+    ax.legend(
+        handles=shape_handles,
+        title="Group",
+        frameon=False,
+        loc="lower right",
+    )
+
