@@ -37,7 +37,7 @@ from typing import Union
 import numpy as np
 
 from ._readers import read_whole_slide, write_ome_tiff
-from ._normalizers import get_normalizer
+from ._normalizers import get_normalizer, _GPU_METHODS
 from ._reference import (
     build_reference as _build_reference,
     select_reference,
@@ -61,6 +61,7 @@ def normalize_slide(
     reference: PathLike | np.ndarray | None = None,
     target_mpp: float = 0.5,
     overwrite: bool = False,
+    device: str = "auto",
 ) -> Path:
     """
     Normalise a single whole slide image and write the result as OME-TIFF.
@@ -68,18 +69,23 @@ def normalize_slide(
     Args:
         slide_path:  Source slide (.ome.tiff, .tiff, .czi, .ndpi, …).
         output_path: Destination OME-TIFF path.
-        method:      'macenko' (default), 'reinhard', or 'vahadane'.
+        method:      Normalisation algorithm. CPU: 'macenko' (default),
+                     'reinhard', 'vahadane'. GPU (requires torchstain):
+                     'macenko_gpu', 'vahadane_gpu', 'reinhard_gpu', 'stainnet'.
         reference:   Path to a reference image, or a (H,W,3) uint8 numpy array.
-                     **Required** — no default reference is bundled.
+                     **Required** for all methods except 'stainnet'.
                      Build one with build_reference() from your training slides.
         target_mpp:  Read/normalise resolution in µm/pixel (default 0.5 ≈ 20×).
         overwrite:   Re-normalise even if output already exists (default False).
+        device:      PyTorch device for GPU methods — 'auto' (default, uses CUDA
+                     when available), 'cpu', 'cuda', 'cuda:0', etc.
+                     Ignored for CPU numpy methods.
 
     Returns:
         Path of the written OME-TIFF.
 
     Raises:
-        ValueError:       if reference is None or method is unknown.
+        ValueError:        if reference is None (and method is not stainnet).
         FileNotFoundError: if the slide or reference file is not found.
     """
     output_path = Path(output_path)
@@ -97,10 +103,10 @@ def normalize_slide(
         else np.asarray(reference)
     )
 
-    slide_img, mpp = read_whole_slide(slide_path, target_mpp=target_mpp)
-
-    normaliser = get_normalizer(method)
+    normaliser = get_normalizer(method, device=device)
     normaliser.fit(ref_img)
+
+    slide_img, mpp = read_whole_slide(slide_path, target_mpp=target_mpp)
     normalised = normaliser.transform(slide_img)
 
     write_ome_tiff(normalised, output_path, mpp=mpp)
@@ -116,7 +122,7 @@ def _normalize_one(args: tuple) -> tuple[Path | None, str | None]:
     Worker function for ProcessPoolExecutor.
     Returns (output_path, None) on success, or (None, error_msg) on failure.
     """
-    slide_path, output_path, method, reference_path, target_mpp, overwrite = args
+    slide_path, output_path, method, reference_path, target_mpp, overwrite, device = args
     try:
         out = normalize_slide(
             slide_path=slide_path,
@@ -125,6 +131,7 @@ def _normalize_one(args: tuple) -> tuple[Path | None, str | None]:
             reference=reference_path,
             target_mpp=target_mpp,
             overwrite=overwrite,
+            device=device,
         )
         return out, None
     except Exception as exc:
@@ -144,6 +151,7 @@ def batch_normalize(
     target_mpp: float = 0.5,
     n_workers: int = 4,
     overwrite: bool = False,
+    device: str = "auto",
 ) -> list[Path]:
     """
     Normalise all slides in input_dir and write OME-TIFFs to output_dir.
@@ -151,13 +159,19 @@ def batch_normalize(
     Args:
         input_dir:   Directory containing slides.
         output_dir:  Directory for normalised OME-TIFFs (created if absent).
-        method:      'macenko' (default), 'reinhard', or 'vahadane'.
+        method:      Normalisation algorithm. CPU: 'macenko' (default),
+                     'reinhard', 'vahadane'. GPU (requires torchstain):
+                     'macenko_gpu', 'vahadane_gpu', 'reinhard_gpu'.
         reference:   Path to reference image or (H,W,3) uint8 numpy array.
                      **Required**.
         extensions:  File extensions to include (default: all supported formats).
         target_mpp:  Resolution in µm/pixel (default 0.5).
-        n_workers:   Number of parallel processes (default 4).
+        n_workers:   Number of parallel worker processes (default 4).
+                     Automatically set to 1 when using a GPU method, because
+                     CUDA contexts cannot be forked across processes.
         overwrite:   Re-normalise existing outputs (default False).
+        device:      PyTorch device for GPU methods — 'auto' (default), 'cpu',
+                     'cuda', 'cuda:0', etc. Ignored for CPU numpy methods.
 
     Returns:
         List of Paths for successfully written output files.
@@ -168,6 +182,15 @@ def batch_normalize(
 
     if extensions is None:
         extensions = list(_SUPPORTED_EXTENSIONS)
+
+    # CUDA contexts cannot be forked into subprocesses — run single-threaded
+    effective_workers = n_workers
+    if method.lower() in _GPU_METHODS and n_workers > 1:
+        print(
+            f"[INFO] GPU method '{method}' — setting n_workers=1 "
+            "(CUDA contexts cannot be forked across processes)."
+        )
+        effective_workers = 1
 
     # Collect slides, handling compound extensions (.ome.tiff)
     slides: list[Path] = []
@@ -203,6 +226,7 @@ def batch_normalize(
             reference_path,
             target_mpp,
             overwrite,
+            device,
         )
         for slide in slides
     ]
@@ -211,7 +235,7 @@ def batch_normalize(
     errors: list[str] = []
 
     try:
-        if n_workers <= 1:
+        if effective_workers <= 1:
             for task in tasks:
                 out, err = _normalize_one(task)
                 if out is not None:
@@ -219,7 +243,7 @@ def batch_normalize(
                 else:
                     errors.append(err)
         else:
-            with ProcessPoolExecutor(max_workers=n_workers) as pool:
+            with ProcessPoolExecutor(max_workers=effective_workers) as pool:
                 futures = {pool.submit(_normalize_one, t): t[0] for t in tasks}
                 for fut in as_completed(futures):
                     out, err = fut.result()

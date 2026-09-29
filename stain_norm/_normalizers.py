@@ -236,20 +236,46 @@ _METHODS: dict[str, type] = {
     "vahadane": VahadaneNormalizer,
 }
 
+# GPU methods — loaded lazily from _normalizers_torch to avoid hard torch import
+_GPU_METHODS = {"macenko_gpu", "vahadane_gpu", "reinhard_gpu"}
 
-def get_normalizer(method: str) -> ReinhardNormalizer | MacenkoNormalizer | VahadaneNormalizer:
+#: All supported normalisation methods (CPU + GPU).
+AVAILABLE_METHODS = sorted(_METHODS) + sorted(_GPU_METHODS)
+
+
+def get_normalizer(method: str, device: str = "auto"):
     """
     Instantiate a normaliser by name.
 
     Args:
-        method: One of 'reinhard', 'macenko', 'vahadane'.
+        method: Normalisation algorithm. CPU options: 'reinhard', 'macenko',
+                'vahadane'. GPU options (requires torchstain + PyTorch):
+                'macenko_gpu', 'vahadane_gpu', 'reinhard_gpu', 'stainnet'.
+        device: PyTorch device for GPU methods — 'auto' (default, uses CUDA if
+                available), 'cpu', 'cuda', 'cuda:0', etc.
+                Ignored for CPU numpy methods.
 
     Returns:
-        An unfitted normaliser with fit() / transform() methods.
+        An unfitted normaliser with fit(reference) / transform(image) methods.
     """
     key = method.lower()
+
+    if key in _GPU_METHODS:
+        from gutdecoder.stain_norm._normalizers_torch import (
+            TorchMacenkoNormalizer,
+            TorchVahadaneNormalizer,
+            TorchReinhardNormalizer,
+        )
+        _torch_map = {
+            "macenko_gpu": TorchMacenkoNormalizer,
+            "vahadane_gpu": TorchVahadaneNormalizer,
+            "reinhard_gpu": TorchReinhardNormalizer,
+        }
+        return _torch_map[key](device=device)
+
     if key not in _METHODS:
         raise ValueError(
-            f"Unknown method '{method}'. Choose from: {sorted(_METHODS)}"
+            f"Unknown method '{method}'. "
+            f"Available: {AVAILABLE_METHODS}"
         )
     return _METHODS[key]()
