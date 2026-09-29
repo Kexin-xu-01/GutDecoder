@@ -38,7 +38,11 @@ import numpy as np
 
 from ._readers import read_whole_slide, write_ome_tiff
 from ._normalizers import get_normalizer
-from ._reference import build_reference as _build_reference, load_reference
+from ._reference import (
+    build_reference as _build_reference,
+    select_reference,
+    load_reference,
+)
 
 PathLike = Union[str, Path]
 
@@ -237,25 +241,48 @@ def batch_normalize(
 
 
 def build_reference(
-    slide_paths: list[PathLike],
-    output_path: PathLike,
+    slide_paths=None,
+    output_path: PathLike | None = None,
     target_mpp: float = 0.5,
+    ratio_mpp: float = 4.0,
+    *,
+    slide_path=None,  # alias for slide_paths (single-file convenience)
 ) -> Path:
     """
-    Build a mean reference image from training slides and save as OME-TIFF.
+    Select the best reference slide from training data and save it as OME-TIFF.
 
-    For each slide, reads the full image at target_mpp, then computes the
-    pixel-wise mean across all slides. Call this once for your Xenium training
-    set; reuse the saved file for all future normalisation runs.
+    The reference is chosen by the red-to-blue (R/B) channel mean intensity
+    ratio criterion: the slide whose R/B ratio is closest to 1.0 represents
+    the most balanced H&E staining and is selected as the reference.
 
     Args:
-        slide_paths: List of training slide paths.
+        slide_paths: A directory of slides, a list of slide paths, or a single
+                     slide path. Also accepts the keyword alias ``slide_path``
+                     (singular) for the single-file case.
         output_path: Where to save the reference OME-TIFF.
-        target_mpp:  Resolution for reading slides (µm/pixel, default 0.5).
+        target_mpp:  Resolution at which to save the reference (µm/pixel,
+                     default 0.5 ≈ 20×).
+        ratio_mpp:   Resolution for the R/B screening pass (default 4.0 µm/px).
+                     Ignored when only one slide is supplied.
 
     Returns:
         Path of the saved reference image.
+
+    Examples::
+
+        # Directory — auto-selects best slide by R/B ratio
+        build_reference("/path/to/xenium_slides/", output_path="ref.tiff")
+
+        # Already-selected slide
+        path, ratio = select_reference("/path/to/xenium_slides/")
+        build_reference(slide_path=path, output_path="ref.tiff")
     """
+    src = slide_path if slide_paths is None else slide_paths
+    if src is None:
+        raise ValueError("Provide slide_paths (or slide_path) and output_path.")
+    if output_path is None:
+        raise ValueError("output_path is required.")
+
     output_path = Path(output_path)
-    _build_reference(slide_paths, output_path, target_mpp=target_mpp)
+    _build_reference(src, output_path, target_mpp=target_mpp, ratio_mpp=ratio_mpp)
     return output_path
