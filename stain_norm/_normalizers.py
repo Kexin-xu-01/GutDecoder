@@ -237,7 +237,7 @@ _METHODS: dict[str, type] = {
 }
 
 # GPU methods — loaded lazily from _normalizers_torch to avoid hard torch import
-_GPU_METHODS = {"macenko_gpu", "vahadane_gpu", "reinhard_gpu"}
+_GPU_METHODS = {"macenko_gpu", "reinhard_gpu"}
 
 #: All supported normalisation methods (CPU + GPU).
 AVAILABLE_METHODS = sorted(_METHODS) + sorted(_GPU_METHODS)
@@ -250,7 +250,7 @@ def get_normalizer(method: str, device: str = "auto"):
     Args:
         method: Normalisation algorithm. CPU options: 'reinhard', 'macenko',
                 'vahadane'. GPU options (requires torchstain + PyTorch):
-                'macenko_gpu', 'vahadane_gpu', 'reinhard_gpu', 'stainnet'.
+                'macenko_gpu', 'reinhard_gpu'.
         device: PyTorch device for GPU methods — 'auto' (default, uses CUDA if
                 available), 'cpu', 'cuda', 'cuda:0', etc.
                 Ignored for CPU numpy methods.
@@ -263,12 +263,10 @@ def get_normalizer(method: str, device: str = "auto"):
     if key in _GPU_METHODS:
         from gutdecoder.stain_norm._normalizers_torch import (
             TorchMacenkoNormalizer,
-            TorchVahadaneNormalizer,
             TorchReinhardNormalizer,
         )
         _torch_map = {
             "macenko_gpu": TorchMacenkoNormalizer,
-            "vahadane_gpu": TorchVahadaneNormalizer,
             "reinhard_gpu": TorchReinhardNormalizer,
         }
         return _torch_map[key](device=device)
