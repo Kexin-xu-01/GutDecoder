@@ -87,9 +87,12 @@ class MacenkoNormalizer:
         OD = self._rgb2od(image)
         OD_flat = OD.reshape(-1, 3)
 
-        # Remove background (low OD = bright pixels)
-        mask = np.all(OD_flat > self.beta, axis=1)
+        # Keep tissue pixels: above beta (not bright background) and below 3.0
+        # (not pure-black mask pixels, which have OD ≈ 5.5)
+        mask = np.all(OD_flat > self.beta, axis=1) & np.all(OD_flat < 3.0, axis=1)
         OD_hat = OD_flat[mask]
+        if OD_hat.shape[0] < 10:
+            OD_hat = OD_flat[np.any(OD_flat > 0.05, axis=1) & np.all(OD_flat < 3.0, axis=1)]
         if OD_hat.shape[0] < 10:
             OD_hat = OD_flat[np.any(OD_flat > 0.05, axis=1)]
 
@@ -117,7 +120,7 @@ class MacenkoNormalizer:
         self, image: np.ndarray, stain_matrix: np.ndarray
     ) -> np.ndarray:
         OD = self._rgb2od(image)
-        OD_flat = OD.reshape(-1, 3)
+        OD_flat = np.clip(OD.reshape(-1, 3), 0, 3.0)  # cap masked-black pixels
         # Solve stain_matrix.T @ c = OD for each pixel
         conc, _, _, _ = np.linalg.lstsq(stain_matrix.T, OD_flat.T, rcond=None)
         return conc.T  # (N, 2)
@@ -173,8 +176,10 @@ class VahadaneNormalizer:
         OD = self._rgb2od(image)
         OD_flat = OD.reshape(-1, 3)
 
-        mask = np.all(OD_flat > self.beta, axis=1)
+        mask = np.all(OD_flat > self.beta, axis=1) & np.all(OD_flat < 3.0, axis=1)
         OD_hat = OD_flat[mask]
+        if OD_hat.shape[0] < 10:
+            OD_hat = OD_flat[np.any(OD_flat > 0.05, axis=1) & np.all(OD_flat < 3.0, axis=1)]
         if OD_hat.shape[0] < 10:
             OD_hat = OD_flat[np.any(OD_flat > 0.05, axis=1)]
 
@@ -196,7 +201,7 @@ class VahadaneNormalizer:
         self, image: np.ndarray, stain_matrix: np.ndarray
     ) -> np.ndarray:
         OD = self._rgb2od(image)
-        OD_flat = OD.reshape(-1, 3)
+        OD_flat = np.clip(OD.reshape(-1, 3), 0, 3.0)  # cap masked-black pixels
         conc, _, _, _ = np.linalg.lstsq(stain_matrix.T, OD_flat.T, rcond=None)
         return conc.T  # (N, 2)
 
