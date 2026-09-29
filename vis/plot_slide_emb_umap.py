@@ -13,6 +13,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 import umap
+import harmonypy as hm
 
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -174,6 +175,92 @@ def compute_umap(X: np.ndarray, random_state: int = 0) -> np.ndarray:
     ).fit_transform(Xr)
 
     return embedding
+
+def compute_harmony_umap(
+    X: np.ndarray,
+    batch,
+    n_pca: int = 50,
+    n_neighbors: int = 15,
+    min_dist: float = 0.1,
+    metric: str = "euclidean",
+    random_state: int = 0,
+):
+    """
+    Standardize -> PCA -> Harmony -> UMAP.
+
+    Parameters
+    ----------
+    X
+        Slide embedding matrix, shape (n_samples, n_features).
+
+    batch
+        Batch/group label for each sample, e.g. CZI vs NDPI.
+
+    Returns
+    -------
+    embedding
+        2D UMAP coordinates.
+
+    X_harmony
+        Harmony-corrected PCA representation.
+    """
+
+    # -----------------------
+    # Standardize
+    # -----------------------
+    X_scaled = StandardScaler().fit_transform(X)
+
+    # -----------------------
+    # PCA
+    # -----------------------
+    n_components = min(
+        n_pca,
+        X_scaled.shape[1],
+        X_scaled.shape[0] - 1,
+    )
+
+    X_pca = PCA(
+        n_components=n_components,
+        random_state=random_state,
+    ).fit_transform(X_scaled)
+
+    print("PCA:", X_pca.shape)
+
+    # -----------------------
+    # Harmony
+    # -----------------------
+    harmony_meta = pd.DataFrame({
+        "batch": pd.Series(batch).astype(str).to_numpy()
+    })
+
+    harmony = hm.run_harmony(
+        X_pca,
+        harmony_meta,
+        vars_use=["batch"],
+        random_state=random_state,
+    )
+
+    # harmonypy returns dimensions x samples
+    X_harmony = harmony.Z_corr.T
+
+    print("Harmony:", X_harmony.shape)
+
+    # -----------------------
+    # UMAP
+    # -----------------------
+    actual_neighbors = min(
+        n_neighbors,
+        X_harmony.shape[0] - 1,
+    )
+
+    embedding = umap.UMAP(
+        n_neighbors=actual_neighbors,
+        min_dist=min_dist,
+        metric=metric,
+        random_state=random_state,
+    ).fit_transform(X_harmony)
+
+    return embedding, X_harmony
 
 def get_encoder_paths(base_path):
     base_path = Path(base_path)
@@ -884,8 +971,6 @@ def make_joint_umap_pdf(
 
     return joint
 
-
-
 def make_joint_group_umap_pdf(
     group1_h5_root: Path,
     group2_h5_root: Path,
@@ -903,6 +988,8 @@ def make_joint_group_umap_pdf(
     feature_key: str = "features",
     match_col: str | None = None,
     random_state: int = 0,
+    use_harmony: bool = False,
+    harmony_n_pca: int = 50,
 ):
     """
     Joint UMAP of any two groups of slide embeddings.
@@ -911,11 +998,17 @@ def make_joint_group_umap_pdf(
         group 1 = circle
         group 2 = cross
 
+    If use_harmony=True:
+        StandardScaler -> PCA -> Harmony(source) -> UMAP
+
+    Otherwise:
+        Uses the existing compute_umap() function.
+
     Pages:
-        1. group membership
-        2. categorical metadata
-        3. numeric metadata
-        4. matched-sample plot, if match_col is supplied
+        1. Group membership
+        2. Categorical metadata
+        3. Numeric metadata
+        4. Matched-sample plot, if match_col is supplied
     """
 
     categorical_cols = categorical_cols or []
@@ -971,6 +1064,10 @@ def make_joint_group_umap_pdf(
         metadata_id_col=group2_id_col,
     )
 
+    # ========================================================
+    # Add group/source labels
+    # ========================================================
+
     group1["source"] = group1_label
     group2["source"] = group2_label
 
@@ -990,17 +1087,109 @@ def make_joint_group_umap_pdf(
     print(f"Joint: {len(joint)}")
 
     # ========================================================
-    # Joint UMAP
+    # Feature matrix
     # ========================================================
 
     X = np.stack(
         joint["features"].to_numpy()
     )
 
-    embedding = compute_umap(
-        X,
-        random_state=random_state,
-    )
+    # ========================================================
+    # Dimensionality reduction
+    # ========================================================
+
+    if use_harmony:
+
+        print(
+            f"\nRunning Harmony integration across "
+            f"{group1_label} and {group2_label}"
+        )
+
+        # -----------------------
+        # Standardize
+        # -----------------------
+        X_scaled = StandardScaler().fit_transform(X)
+
+        # -----------------------
+        # PCA
+        # -----------------------
+        n_pca = min(
+            harmony_n_pca,
+            X_scaled.shape[1],
+            X_scaled.shape[0] - 1,
+        )
+
+        if n_pca < 2:
+            raise ValueError(
+                "Not enough samples/components to run PCA + Harmony."
+            )
+
+        X_pca = PCA(
+            n_components=n_pca,
+            random_state=random_state,
+        ).fit_transform(X_scaled)
+
+        print(f"PCA shape: {X_pca.shape}")
+
+        # -----------------------
+        # Harmony
+        # -----------------------
+        harmony_meta = pd.DataFrame({
+            "source": (
+                joint["source"]
+                .astype("string")
+                .astype(str)
+                .to_numpy()
+            )
+        })
+
+        harmony_result = hm.run_harmony(
+            X_pca,
+            harmony_meta,
+            vars_use=["source"],
+            random_state=random_state,
+        )
+
+        # harmonypy output:
+        # dimensions x samples
+        X_harmony = harmony_result.Z_corr.T
+
+        print(
+            f"Harmony corrected shape: "
+            f"{X_harmony.shape}"
+        )
+
+        # Save Harmony dimensions in joint dataframe
+        for i in range(X_harmony.shape[1]):
+            joint[f"Harmony_{i + 1}"] = X_harmony[:, i]
+
+        # -----------------------
+        # UMAP on Harmony output
+        # -----------------------
+        n_neighbors = min(
+            15,
+            max(2, X_harmony.shape[0] - 1),
+        )
+
+        embedding = umap.UMAP(
+            n_neighbors=n_neighbors,
+            min_dist=0.1,
+            metric="euclidean",
+            random_state=random_state,
+        ).fit_transform(X_harmony)
+
+    else:
+
+        print("\nRunning standard PCA + UMAP")
+
+        embedding = compute_umap(
+            X,
+            random_state=random_state,
+        )
+
+    # ========================================================
+    # Save UMAP coordinates
+    # ========================================================
 
     joint["UMAP1"] = embedding[:, 0]
     joint["UMAP2"] = embedding[:, 1]
@@ -1010,20 +1199,34 @@ def make_joint_group_umap_pdf(
     # ========================================================
 
     cat_cols = [
-        c for c in categorical_cols
+        c
+        for c in categorical_cols
         if c in joint.columns
     ]
 
     num_cols = [
-        c for c in numeric_cols
+        c
+        for c in numeric_cols
         if c in joint.columns
     ]
 
+    missing_cols = (
+        set(categorical_cols)
+        | set(numeric_cols)
+    ) - set(joint.columns)
+
+    if missing_cols:
+        print(
+            "Warning: plotting columns not found:",
+            sorted(missing_cols),
+        )
+
     # ========================================================
-    # PDF
+    # Output PDF
     # ========================================================
 
     out_pdf = Path(out_pdf)
+
     out_pdf.parent.mkdir(
         parents=True,
         exist_ok=True,
@@ -1035,7 +1238,9 @@ def make_joint_group_umap_pdf(
         # Page 1: group membership
         # ====================================================
 
-        fig, ax = plt.subplots(figsize=(10, 7))
+        fig, ax = plt.subplots(
+            figsize=(10, 7)
+        )
 
         group_styles = {
             group1_label: "o",
@@ -1050,32 +1255,55 @@ def make_joint_group_umap_pdf(
                 .to_numpy(dtype=bool)
             )
 
-            ax.scatter(
-                embedding[mask, 0],
-                embedding[mask, 1],
-                s=35,
-                alpha=0.8,
-                marker=marker,
-                label=group,
+            if marker == "o":
+
+                ax.scatter(
+                    embedding[mask, 0],
+                    embedding[mask, 1],
+                    s=35,
+                    alpha=0.8,
+                    marker="o",
+                    label=group,
+                    edgecolors="none",
+                )
+
+            else:
+
+                ax.scatter(
+                    embedding[mask, 0],
+                    embedding[mask, 1],
+                    s=45,
+                    alpha=0.9,
+                    marker="x",
+                    label=group,
+                    linewidths=1.5,
+                )
+
+        if use_harmony:
+            ax.set_title(
+                f"Harmony UMAP: "
+                f"{group1_label} vs {group2_label}"
+            )
+        else:
+            ax.set_title(
+                f"{group1_label} vs {group2_label}"
             )
 
-        ax.set_title(
-            f"{group1_label} vs {group2_label}"
-        )
         ax.set_xlabel("UMAP1")
         ax.set_ylabel("UMAP2")
 
         ax.legend(
+            title="Group",
             frameon=False,
         )
 
-        fig.subplots_adjust(
-            left=0.10,
-            right=0.62,
-            bottom=0.12,
-            top=0.90,
+        fig.tight_layout()
+
+        pdf.savefig(
+            fig,
+            bbox_inches="tight",
         )
-        pdf.savefig(fig, bbox_inches="tight")
+
         plt.close(fig)
 
         # ====================================================
@@ -1087,13 +1315,28 @@ def make_joint_group_umap_pdf(
 
         for col in cat_cols:
 
-            fig = plt.figure(figsize=(12, 6))
+            n_categories = (
+                joint[col]
+                .astype("string")
+                .fillna("NA")
+                .nunique()
+            )
+
+            # Increase page height when legend is long
+            fig_height = max(
+                6,
+                1.2 + n_categories * 0.28,
+            )
+
+            fig = plt.figure(
+                figsize=(12, fig_height)
+            )
 
             gs = fig.add_gridspec(
                 1,
                 2,
-                width_ratios=[2.2, 1.8],
-                wspace=0.05,
+                width_ratios=[3, 1.4],
+                wspace=0.08,
             )
 
             ax = fig.add_subplot(gs[0])
@@ -1110,10 +1353,7 @@ def make_joint_group_umap_pdf(
                 title=f"UMAP colored by {col}",
             )
 
-            pdf.savefig(
-                fig,
-                bbox_inches="tight",
-            )
+            pdf.savefig(fig)
 
             plt.close(fig)
 
@@ -1123,7 +1363,9 @@ def make_joint_group_umap_pdf(
 
         for col in num_cols:
 
-            fig, ax = plt.subplots(figsize=(10, 7))
+            fig, ax = plt.subplots(
+                figsize=(10, 7)
+            )
 
             plot_numeric_by_group(
                 ax=ax,
@@ -1135,13 +1377,13 @@ def make_joint_group_umap_pdf(
                 title=f"UMAP colored by {col}",
             )
 
-            fig.subplots_adjust(
-                left=0.10,
-                right=0.62,
-                bottom=0.12,
-                top=0.90,
+            fig.tight_layout()
+
+            pdf.savefig(
+                fig,
+                bbox_inches="tight",
             )
-            pdf.savefig(fig, bbox_inches="tight")
+
             plt.close(fig)
 
         # ====================================================
@@ -1151,14 +1393,16 @@ def make_joint_group_umap_pdf(
         if match_col is not None:
 
             if match_col not in joint.columns:
+
                 print(
                     f"Skipping matched plot: "
                     f"{match_col!r} not found"
                 )
 
             else:
+
                 fig, ax = plt.subplots(
-                    figsize=(10, 7)
+                    figsize=(12, 8)
                 )
 
                 plot_matched_groups(
@@ -1171,21 +1415,22 @@ def make_joint_group_umap_pdf(
                     group2_label=group2_label,
                 )
 
-                fig.subplots_adjust(
-                    left=0.10,
-                    right=0.62,
-                    bottom=0.12,
-                    top=0.90,
-                )
+                fig.tight_layout()
+
                 pdf.savefig(
                     fig,
                     bbox_inches="tight",
                 )
+
                 plt.close(fig)
 
-    print(f"Saved PDF to: {out_pdf}")
+    print(
+        f"Saved PDF to: {out_pdf}"
+    )
 
     return joint
+
+
 
 def plot_categorical_by_group(
     ax,
@@ -1606,4 +1851,693 @@ def plot_matched_groups(
         frameon=False,
         loc="lower right",
     )
+
+
+
+## three groups
+def plot_categorical_by_three_groups(
+    ax,
+    legend_ax,
+    embedding,
+    values,
+    groups,
+    group_labels,
+    title,
+):
+    """
+    Color = metadata category
+    Shape = group
+
+    Expected group_labels:
+        [group1, group2, group3]
+    """
+
+    vals = (
+        pd.Series(values)
+        .astype("string")
+        .fillna("NA")
+        .reset_index(drop=True)
+    )
+
+    groups = (
+        pd.Series(groups)
+        .astype("string")
+        .fillna("NA")
+        .reset_index(drop=True)
+    )
+
+    cats = pd.unique(vals)
+    n = len(cats)
+
+    # -----------------------
+    # Colors
+    # -----------------------
+    cmap_name = "tab20" if n <= 20 else "hsv"
+    cmap = mpl.colormaps.get_cmap(cmap_name)
+
+    colors = [
+        cmap(i / max(1, n - 1))
+        for i in range(n)
+    ]
+
+    color_map = dict(zip(cats, colors))
+
+    # -----------------------
+    # Group markers
+    # -----------------------
+    marker_list = ["o", "x", "^"]
+
+    markers = dict(
+        zip(group_labels, marker_list)
+    )
+
+    # -----------------------
+    # Plot
+    # -----------------------
+    for cat in cats:
+
+        for group, marker in markers.items():
+
+            mask = (
+                vals.eq(cat)
+                & groups.eq(group)
+            ).fillna(False).to_numpy(dtype=bool)
+
+            if not mask.any():
+                continue
+
+            if marker == "x":
+                ax.scatter(
+                    embedding[mask, 0],
+                    embedding[mask, 1],
+                    s=45,
+                    alpha=0.9,
+                    color=color_map[cat],
+                    marker=marker,
+                    linewidths=1.5,
+                )
+
+            else:
+                ax.scatter(
+                    embedding[mask, 0],
+                    embedding[mask, 1],
+                    s=38,
+                    alpha=0.85,
+                    color=color_map[cat],
+                    marker=marker,
+                    edgecolors="none",
+                )
+
+    ax.set_title(title)
+    ax.set_xlabel("UMAP1")
+    ax.set_ylabel("UMAP2")
+
+    # ========================================================
+    # Legend panel
+    # ========================================================
+
+    legend_ax.axis("off")
+
+    # -----------------------
+    # Color legend
+    # -----------------------
+    color_handles = [
+        plt.Line2D(
+            [0], [0],
+            marker="o",
+            linestyle="None",
+            markerfacecolor=color_map[cat],
+            markeredgecolor="none",
+            markersize=6,
+            label=str(cat),
+        )
+        for cat in cats
+    ]
+
+    legend_title = title.replace(
+        "UMAP colored by ",
+        ""
+    )
+
+    color_legend = legend_ax.legend(
+        handles=color_handles,
+        title=legend_title,
+        fontsize=7,
+        title_fontsize=9,
+        frameon=False,
+        ncol=1,
+        loc="upper left",
+        bbox_to_anchor=(0, 1),
+        borderaxespad=0,
+        handletextpad=0.5,
+        labelspacing=0.5,
+    )
+
+    legend_ax.add_artist(color_legend)
+
+    # -----------------------
+    # Group / shape legend
+    # -----------------------
+    shape_handles = []
+
+    for group, marker in markers.items():
+
+        if marker == "x":
+            handle = plt.Line2D(
+                [0], [0],
+                marker=marker,
+                linestyle="None",
+                color="black",
+                markersize=7,
+                markeredgewidth=1.5,
+                label=group,
+            )
+
+        else:
+            handle = plt.Line2D(
+                [0], [0],
+                marker=marker,
+                linestyle="None",
+                markerfacecolor="black",
+                markeredgecolor="none",
+                color="black",
+                markersize=7,
+                label=group,
+            )
+
+        shape_handles.append(handle)
+
+    legend_ax.legend(
+        handles=shape_handles,
+        title="Group",
+        fontsize=7,
+        title_fontsize=9,
+        frameon=False,
+        loc="lower left",
+        bbox_to_anchor=(0, 0),
+        borderaxespad=0,
+    )
+
+def plot_numeric_by_three_groups(
+    ax,
+    embedding,
+    values,
+    groups,
+    group_labels,
+    title,
+):
+    vals = pd.to_numeric(
+        pd.Series(values),
+        errors="coerce",
+    ).reset_index(drop=True)
+
+    groups = (
+        pd.Series(groups)
+        .astype("string")
+        .reset_index(drop=True)
+    )
+
+    valid = vals.notna()
+
+    if not valid.any():
+        ax.set_title(title)
+        return
+
+    norm = mpl.colors.Normalize(
+        vmin=vals[valid].min(),
+        vmax=vals[valid].max(),
+    )
+
+    cmap = mpl.colormaps["viridis"]
+
+    markers = dict(
+        zip(
+            group_labels,
+            ["o", "x", "^"],
+        )
+    )
+
+    for group, marker in markers.items():
+
+        mask = (
+            valid
+            & groups.eq(group)
+        ).to_numpy(dtype=bool)
+
+        if not mask.any():
+            continue
+
+        kwargs = {}
+
+        if marker != "x":
+            kwargs["edgecolors"] = "none"
+
+        ax.scatter(
+            embedding[mask, 0],
+            embedding[mask, 1],
+            c=vals[mask],
+            cmap=cmap,
+            norm=norm,
+            s=38,
+            alpha=0.9,
+            marker=marker,
+            **kwargs,
+        )
+
+    ax.set_title(title)
+    ax.set_xlabel("UMAP1")
+    ax.set_ylabel("UMAP2")
+
+    sm = mpl.cm.ScalarMappable(
+        norm=norm,
+        cmap=cmap,
+    )
+
+    plt.colorbar(
+        sm,
+        ax=ax,
+        fraction=0.046,
+        pad=0.04,
+    )
+
+    shape_handles = [
+        plt.Line2D(
+            [0], [0],
+            marker=marker,
+            linestyle="None",
+            color="black",
+            label=group,
+        )
+        for group, marker in markers.items()
+    ]
+
+    ax.legend(
+        handles=shape_handles,
+        title="Group",
+        frameon=False,
+    )
+
+def make_joint_three_group_umap_pdf(
+    group1_h5_root: Path,
+    group2_h5_root: Path,
+    group3_h5_root: Path,
+
+    group1_metadata_path: Path,
+    group2_metadata_path: Path,
+    group3_metadata_path: Path,
+
+    out_pdf: Path,
+
+    group1_label: str,
+    group2_label: str,
+    group3_label: str,
+
+    group1_id_col: str,
+    group2_id_col: str,
+    group3_id_col: str,
+
+    categorical_cols: list[str] | None = None,
+    numeric_cols: list[str] | None = None,
+
+    group1_sample_ids=None,
+    group2_sample_ids=None,
+    group3_sample_ids=None,
+
+    feature_key: str = "features",
+
+    random_state: int = 0,
+
+    use_harmony: bool = False,
+    harmony_n_pca: int = 50,
+):
+    """
+    Joint UMAP of three groups.
+
+    Shape:
+        group1 = circle
+        group2 = cross
+        group3 = triangle
+
+    If use_harmony=True:
+        StandardScaler -> PCA -> Harmony(source) -> UMAP
+    """
+
+    categorical_cols = categorical_cols or []
+    numeric_cols = numeric_cols or []
+
+    group_labels = [
+        group1_label,
+        group2_label,
+        group3_label,
+    ]
+
+    # ========================================================
+    # Load features
+    # ========================================================
+
+    print(f"\nLoading {group1_label} embeddings...")
+
+    group1_features = load_features(
+        h5_root=Path(group1_h5_root),
+        feature_key=feature_key,
+        sample_ids=group1_sample_ids,
+    )
+
+    print(f"\nLoading {group2_label} embeddings...")
+
+    group2_features = load_features(
+        h5_root=Path(group2_h5_root),
+        feature_key=feature_key,
+        sample_ids=group2_sample_ids,
+    )
+
+    print(f"\nLoading {group3_label} embeddings...")
+
+    group3_features = load_features(
+        h5_root=Path(group3_h5_root),
+        feature_key=feature_key,
+        sample_ids=group3_sample_ids,
+    )
+
+    # ========================================================
+    # Metadata
+    # ========================================================
+
+    group1_metadata = load_metadata(
+        metadata_path=Path(group1_metadata_path),
+        sample_id_col=group1_id_col,
+    )
+
+    group2_metadata = load_metadata(
+        metadata_path=Path(group2_metadata_path),
+        sample_id_col=group2_id_col,
+    )
+
+    group3_metadata = load_metadata(
+        metadata_path=Path(group3_metadata_path),
+        sample_id_col=group3_id_col,
+    )
+
+    # ========================================================
+    # Merge metadata
+    # ========================================================
+
+    group1 = merge_metadata(
+        features=group1_features,
+        metadata=group1_metadata,
+        metadata_id_col=group1_id_col,
+    )
+
+    group2 = merge_metadata(
+        features=group2_features,
+        metadata=group2_metadata,
+        metadata_id_col=group2_id_col,
+    )
+
+    group3 = merge_metadata(
+        features=group3_features,
+        metadata=group3_metadata,
+        metadata_id_col=group3_id_col,
+    )
+
+    # ========================================================
+    # Source
+    # ========================================================
+
+    group1["source"] = group1_label
+    group2["source"] = group2_label
+    group3["source"] = group3_label
+
+    print(f"{group1_label}: {len(group1)}")
+    print(f"{group2_label}: {len(group2)}")
+    print(f"{group3_label}: {len(group3)}")
+
+    # ========================================================
+    # Combine
+    # ========================================================
+
+    joint = pd.concat(
+        [
+            group1,
+            group2,
+            group3,
+        ],
+        ignore_index=True,
+        sort=False,
+    )
+
+    print(f"Joint: {len(joint)}")
+
+    # ========================================================
+    # Feature matrix
+    # ========================================================
+
+    X = np.stack(
+        joint["features"].to_numpy()
+    )
+
+    # ========================================================
+    # UMAP / Harmony UMAP
+    # ========================================================
+
+    if use_harmony:
+
+        print(
+            "\nRunning Harmony integration across: "
+            + ", ".join(group_labels)
+        )
+
+        X_scaled = StandardScaler().fit_transform(X)
+
+        n_pca = min(
+            harmony_n_pca,
+            X_scaled.shape[1],
+            X_scaled.shape[0] - 1,
+        )
+
+        if n_pca < 2:
+            raise ValueError(
+                "Not enough samples/components for PCA + Harmony."
+            )
+
+        X_pca = PCA(
+            n_components=n_pca,
+            random_state=random_state,
+        ).fit_transform(X_scaled)
+
+        print(f"PCA shape: {X_pca.shape}")
+
+        harmony_meta = pd.DataFrame({
+            "source": (
+                joint["source"]
+                .astype("string")
+                .astype(str)
+                .to_numpy()
+            )
+        })
+
+        harmony_result = hm.run_harmony(
+            X_pca,
+            harmony_meta,
+            vars_use=["source"],
+            random_state=random_state,
+        )
+
+        X_harmony = harmony_result.Z_corr.T
+
+        print(
+            f"Harmony corrected shape: "
+            f"{X_harmony.shape}"
+        )
+
+        embedding = umap.UMAP(
+            n_neighbors=min(
+                15,
+                max(2, X_harmony.shape[0] - 1),
+            ),
+            min_dist=0.1,
+            metric="euclidean",
+            random_state=random_state,
+        ).fit_transform(X_harmony)
+
+    else:
+
+        embedding = compute_umap(
+            X,
+            random_state=random_state,
+        )
+
+    joint["UMAP1"] = embedding[:, 0]
+    joint["UMAP2"] = embedding[:, 1]
+
+    # ========================================================
+    # Plot columns
+    # ========================================================
+
+    cat_cols = [
+        c
+        for c in categorical_cols
+        if c in joint.columns
+    ]
+
+    num_cols = [
+        c
+        for c in numeric_cols
+        if c in joint.columns
+    ]
+
+    # ========================================================
+    # PDF
+    # ========================================================
+
+    out_pdf = Path(out_pdf)
+
+    out_pdf.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    markers = {
+        group1_label: "o",
+        group2_label: "x",
+        group3_label: "^",
+    }
+
+    with PdfPages(out_pdf) as pdf:
+
+        # ====================================================
+        # Page 1 — groups
+        # ====================================================
+
+        fig, ax = plt.subplots(
+            figsize=(10, 7)
+        )
+
+        for group, marker in markers.items():
+
+            mask = (
+                joint["source"]
+                .eq(group)
+                .to_numpy(dtype=bool)
+            )
+
+            if marker == "x":
+
+                ax.scatter(
+                    embedding[mask, 0],
+                    embedding[mask, 1],
+                    s=50,
+                    alpha=0.9,
+                    marker=marker,
+                    label=group,
+                    linewidths=1.5,
+                )
+
+            else:
+
+                ax.scatter(
+                    embedding[mask, 0],
+                    embedding[mask, 1],
+                    s=40,
+                    alpha=0.85,
+                    marker=marker,
+                    label=group,
+                    edgecolors="none",
+                )
+
+        if use_harmony:
+            ax.set_title(
+                "Harmony UMAP: "
+                + " vs ".join(group_labels)
+            )
+        else:
+            ax.set_title(
+                " vs ".join(group_labels)
+            )
+
+        ax.set_xlabel("UMAP1")
+        ax.set_ylabel("UMAP2")
+
+        ax.legend(
+            title="Group",
+            frameon=False,
+        )
+
+        fig.tight_layout()
+        pdf.savefig(fig)
+        plt.close(fig)
+
+        # ====================================================
+        # Categorical metadata
+        # ====================================================
+
+        for col in cat_cols:
+
+            n_categories = (
+                joint[col]
+                .astype("string")
+                .fillna("NA")
+                .nunique()
+            )
+
+            fig_height = max(
+                6,
+                1.2 + n_categories * 0.28,
+            )
+
+            fig = plt.figure(
+                figsize=(12, fig_height)
+            )
+
+            gs = fig.add_gridspec(
+                1,
+                2,
+                width_ratios=[3, 1.4],
+                wspace=0.08,
+            )
+
+            ax = fig.add_subplot(gs[0])
+            legend_ax = fig.add_subplot(gs[1])
+
+            plot_categorical_by_three_groups(
+                ax=ax,
+                legend_ax=legend_ax,
+                embedding=embedding,
+                values=joint[col],
+                groups=joint["source"],
+                group_labels=group_labels,
+                title=f"UMAP colored by {col}",
+            )
+
+            pdf.savefig(fig)
+            plt.close(fig)
+
+        # ====================================================
+        # Numeric metadata
+        # ====================================================
+
+        for col in num_cols:
+
+            fig, ax = plt.subplots(
+                figsize=(10, 7)
+            )
+
+            plot_numeric_by_three_groups(
+                ax=ax,
+                embedding=embedding,
+                values=joint[col],
+                groups=joint["source"],
+                group_labels=group_labels,
+                title=f"UMAP colored by {col}",
+            )
+
+            fig.tight_layout()
+            pdf.savefig(fig)
+            plt.close(fig)
+
+    print(
+        f"Saved PDF to: {out_pdf}"
+    )
+
+    return joint
 
