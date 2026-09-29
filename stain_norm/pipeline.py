@@ -1,0 +1,261 @@
+"""
+High-level stain normalisation pipeline.
+
+Typical workflow
+----------------
+1.  Build a reference once from your training slides::
+
+        from gutdecoder.stain_norm import build_reference
+        build_reference(
+            slide_paths=[...],
+            output_path="xenium_reference.tiff",
+        )
+
+2.  Normalise individual slides or whole directories::
+
+        from gutdecoder.stain_norm import normalize_slide, batch_normalize
+        normalize_slide(
+            slide_path="sample.czi",
+            output_path="sample_normalized.ome.tiff",
+            reference="xenium_reference.tiff",
+        )
+        batch_normalize(
+            input_dir="raw_slides/",
+            output_dir="normalized_slides/",
+            reference="xenium_reference.tiff",
+        )
+"""
+
+from __future__ import annotations
+
+import os
+import tempfile
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from pathlib import Path
+from typing import Union
+
+import numpy as np
+
+from ._readers import read_whole_slide, write_ome_tiff
+from ._normalizers import get_normalizer
+from ._reference import build_reference as _build_reference, load_reference
+
+PathLike = Union[str, Path]
+
+_SUPPORTED_EXTENSIONS = (
+    ".ome.tiff", ".ome.tif",
+    ".tiff", ".tif",
+    ".czi",
+    ".ndpi", ".svs", ".mrxs", ".scn",
+)
+
+
+def normalize_slide(
+    slide_path: PathLike,
+    output_path: PathLike,
+    method: str = "macenko",
+    reference: PathLike | np.ndarray | None = None,
+    target_mpp: float = 0.5,
+    overwrite: bool = False,
+) -> Path:
+    """
+    Normalise a single whole slide image and write the result as OME-TIFF.
+
+    Args:
+        slide_path:  Source slide (.ome.tiff, .tiff, .czi, .ndpi, …).
+        output_path: Destination OME-TIFF path.
+        method:      'macenko' (default), 'reinhard', or 'vahadane'.
+        reference:   Path to a reference image, or a (H,W,3) uint8 numpy array.
+                     **Required** — no default reference is bundled.
+                     Build one with build_reference() from your training slides.
+        target_mpp:  Read/normalise resolution in µm/pixel (default 0.5 ≈ 20×).
+        overwrite:   Re-normalise even if output already exists (default False).
+
+    Returns:
+        Path of the written OME-TIFF.
+
+    Raises:
+        ValueError:       if reference is None or method is unknown.
+        FileNotFoundError: if the slide or reference file is not found.
+    """
+    output_path = Path(output_path)
+    if output_path.exists() and not overwrite:
+        return output_path
+
+    if reference is None:
+        raise ValueError(
+            "A reference image is required. Pass a file path or numpy array. "
+            "Build one from your Xenium training slides with build_reference()."
+        )
+
+    ref_img = (
+        load_reference(reference) if isinstance(reference, (str, Path))
+        else np.asarray(reference)
+    )
+
+    slide_img, mpp = read_whole_slide(slide_path, target_mpp=target_mpp)
+
+    normaliser = get_normalizer(method)
+    normaliser.fit(ref_img)
+    normalised = normaliser.transform(slide_img)
+
+    write_ome_tiff(normalised, output_path, mpp=mpp)
+    return output_path
+
+
+# ---------------------------------------------------------------------------
+# Worker for parallel batch processing
+# ---------------------------------------------------------------------------
+
+def _normalize_one(args: tuple) -> tuple[Path | None, str | None]:
+    """
+    Worker function for ProcessPoolExecutor.
+    Returns (output_path, None) on success, or (None, error_msg) on failure.
+    """
+    slide_path, output_path, method, reference_path, target_mpp, overwrite = args
+    try:
+        out = normalize_slide(
+            slide_path=slide_path,
+            output_path=output_path,
+            method=method,
+            reference=reference_path,
+            target_mpp=target_mpp,
+            overwrite=overwrite,
+        )
+        return out, None
+    except Exception as exc:
+        return None, f"{slide_path}: {exc}"
+
+
+# ---------------------------------------------------------------------------
+# Public batch API
+# ---------------------------------------------------------------------------
+
+def batch_normalize(
+    input_dir: PathLike,
+    output_dir: PathLike,
+    method: str = "macenko",
+    reference: PathLike | np.ndarray | None = None,
+    extensions: list[str] | None = None,
+    target_mpp: float = 0.5,
+    n_workers: int = 4,
+    overwrite: bool = False,
+) -> list[Path]:
+    """
+    Normalise all slides in input_dir and write OME-TIFFs to output_dir.
+
+    Args:
+        input_dir:   Directory containing slides.
+        output_dir:  Directory for normalised OME-TIFFs (created if absent).
+        method:      'macenko' (default), 'reinhard', or 'vahadane'.
+        reference:   Path to reference image or (H,W,3) uint8 numpy array.
+                     **Required**.
+        extensions:  File extensions to include (default: all supported formats).
+        target_mpp:  Resolution in µm/pixel (default 0.5).
+        n_workers:   Number of parallel processes (default 4).
+        overwrite:   Re-normalise existing outputs (default False).
+
+    Returns:
+        List of Paths for successfully written output files.
+    """
+    input_dir = Path(input_dir)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if extensions is None:
+        extensions = list(_SUPPORTED_EXTENSIONS)
+
+    # Collect slides, handling compound extensions (.ome.tiff)
+    slides: list[Path] = []
+    for p in sorted(input_dir.iterdir()):
+        if not p.is_file():
+            continue
+        name = p.name.lower()
+        if any(name.endswith(ext.lower()) for ext in extensions):
+            slides.append(p)
+
+    if not slides:
+        print(f"[INFO] No matching slides found in {input_dir}")
+        return []
+
+    print(f"[INFO] Found {len(slides)} slides to normalise.")
+
+    # If reference is a numpy array, write to a temp file so workers can load it
+    _tmp_ref: str | None = None
+    if isinstance(reference, np.ndarray):
+        import tifffile
+        fd, _tmp_ref = tempfile.mkstemp(suffix=".tiff")
+        os.close(fd)
+        tifffile.imwrite(_tmp_ref, reference)
+        reference_path: PathLike = _tmp_ref
+    else:
+        reference_path = reference
+
+    tasks = [
+        (
+            slide,
+            output_dir / (slide.stem + ".ome.tiff"),
+            method,
+            reference_path,
+            target_mpp,
+            overwrite,
+        )
+        for slide in slides
+    ]
+
+    results: list[Path] = []
+    errors: list[str] = []
+
+    try:
+        if n_workers <= 1:
+            for task in tasks:
+                out, err = _normalize_one(task)
+                if out is not None:
+                    results.append(out)
+                else:
+                    errors.append(err)
+        else:
+            with ProcessPoolExecutor(max_workers=n_workers) as pool:
+                futures = {pool.submit(_normalize_one, t): t[0] for t in tasks}
+                for fut in as_completed(futures):
+                    out, err = fut.result()
+                    if out is not None:
+                        results.append(out)
+                    else:
+                        errors.append(err)
+    finally:
+        if _tmp_ref and os.path.exists(_tmp_ref):
+            os.unlink(_tmp_ref)
+
+    print(f"[INFO] Normalised {len(results)}/{len(slides)} slides.")
+    if errors:
+        print(f"[WARN] {len(errors)} slide(s) failed:")
+        for e in errors:
+            print(f"  {e}")
+
+    return results
+
+
+def build_reference(
+    slide_paths: list[PathLike],
+    output_path: PathLike,
+    target_mpp: float = 0.5,
+) -> Path:
+    """
+    Build a mean reference image from training slides and save as OME-TIFF.
+
+    For each slide, reads the full image at target_mpp, then computes the
+    pixel-wise mean across all slides. Call this once for your Xenium training
+    set; reuse the saved file for all future normalisation runs.
+
+    Args:
+        slide_paths: List of training slide paths.
+        output_path: Where to save the reference OME-TIFF.
+        target_mpp:  Resolution for reading slides (µm/pixel, default 0.5).
+
+    Returns:
+        Path of the saved reference image.
+    """
+    output_path = Path(output_path)
+    _build_reference(slide_paths, output_path, target_mpp=target_mpp)
+    return output_path
