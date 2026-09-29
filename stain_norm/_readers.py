@@ -86,8 +86,12 @@ def _read_tiff_fallback(path: Path, target_mpp: float) -> tuple[np.ndarray, floa
         data = np.repeat(data, 3, axis=2)
 
     if data.dtype != np.uint8:
-        if data.max() > 255:
-            data = (data / data.max() * 255).astype(np.uint8)
+        mx = data.max()
+        if mx == 0:
+            data = data.astype(np.uint8)
+        elif mx > 255:
+            # uint16 or higher bit-depth — scale to full 8-bit range
+            data = (data.astype(np.float32) / mx * 255).astype(np.uint8)
         else:
             data = data.astype(np.uint8)
 
@@ -223,11 +227,20 @@ def get_slide_mpp(path: PathLike) -> float:
     fmt = _get_format(path)
 
     if fmt == "tiff":
-        import tiffslide
-        slide = tiffslide.TiffSlide(str(path))
-        mpp = float(slide.properties.get("tiffslide.mpp-x") or
-                    slide.properties.get("openslide.mpp-x") or 0.5)
-        slide.close()
+        try:
+            import tiffslide
+            slide = tiffslide.TiffSlide(str(path))
+            mpp = float(slide.properties.get("tiffslide.mpp-x") or
+                        slide.properties.get("openslide.mpp-x") or 0.0)
+            slide.close()
+            if mpp > 0:
+                return mpp
+        except Exception:
+            pass
+        # Fallback: read MPP from tifffile resolution tags
+        import tifffile
+        with tifffile.TiffFile(str(path)) as tf:
+            mpp = _mpp_from_tifffile(tf.pages[0])
         return mpp if mpp > 0 else 0.5
 
     if fmt == "openslide":
