@@ -286,8 +286,8 @@ def write_ome_tiff(array: np.ndarray, path: PathLike, mpp: float) -> None:
         f'<Image ID="Image:0" Name="{path.stem}">'
         '<Pixels ID="Pixels:0" DimensionOrder="XYZCT" Type="uint8"'
         f' SizeX="{W}" SizeY="{H}" SizeZ="1" SizeC="3" SizeT="1"'
-        f' PhysicalSizeX="{mpp:.6f}" PhysicalSizeXUnit="µm"'
-        f' PhysicalSizeY="{mpp:.6f}" PhysicalSizeYUnit="µm">'
+        f' PhysicalSizeX="{mpp:.6f}" PhysicalSizeXUnit="&#xb5;m"'
+        f' PhysicalSizeY="{mpp:.6f}" PhysicalSizeYUnit="&#xb5;m">'
         '<Channel ID="Channel:0:0" SamplesPerPixel="3"/>'
         '</Pixels></Image></OME>'
     )
