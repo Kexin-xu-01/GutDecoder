@@ -3,7 +3,7 @@ Multi-format whole-slide image reader.
 
 Supported formats
 -----------------
-- ome.tiff / ome.tif / tiff / tif  → tiffslide
+- ome.tiff / ome.tif / tiff / tif  → tiffslide (pyramidal WSI) or tifffile+PIL (flat TIFF)
 - ndpi / svs / mrxs / scn          → openslide
 - czi                               → aicsimageio
 """
@@ -42,14 +42,83 @@ def _get_format(path: Path) -> str:
 # Format-specific readers
 # ---------------------------------------------------------------------------
 
-def _read_tiff(path: Path, target_mpp: float) -> tuple[np.ndarray, float]:
-    import tiffslide
-
-    slide = tiffslide.TiffSlide(str(path))
+def _mpp_from_tifffile(tf_page) -> float:
+    """Extract MPP from a tifffile page's tags (XResolution in cm or inch)."""
     try:
-        mpp_x = (
-            float(slide.properties.get("tiffslide.mpp-x") or
-                  slide.properties.get("openslide.mpp-x") or 0)
+        import tifffile
+        res_unit = tf_page.tags.get("ResolutionUnit")
+        x_res = tf_page.tags.get("XResolution")
+        if res_unit is None or x_res is None:
+            return 0.0
+        unit_val = res_unit.value
+        num, den = x_res.value if isinstance(x_res.value, tuple) else (x_res.value, 1)
+        px_per_unit = num / (den or 1)
+        if hasattr(unit_val, "value"):
+            unit_val = unit_val.value
+        if unit_val == 3:       # centimetre
+            return 1e4 / px_per_unit   # µm/px
+        elif unit_val == 2:     # inch
+            return 25400.0 / px_per_unit
+    except Exception:
+        pass
+    return 0.0
+
+
+def _read_tiff_fallback(path: Path, target_mpp: float) -> tuple[np.ndarray, float]:
+    """Read a flat (non-pyramidal) TIFF with tifffile + PIL, then downsample."""
+    import tifffile
+    from PIL import Image
+
+    with tifffile.TiffFile(str(path)) as tf:
+        mpp_x = _mpp_from_tifffile(tf.pages[0])
+        if mpp_x <= 0:
+            mpp_x = 0.5
+        data = tf.asarray()
+
+    # Normalise to (H, W, 3) uint8 RGB
+    if data.ndim == 2:
+        data = np.stack([data, data, data], axis=-1)
+    elif data.ndim == 3 and data.shape[0] in {1, 3, 4}:
+        data = np.moveaxis(data, 0, -1)
+    if data.shape[2] == 4:
+        data = data[:, :, :3]
+    elif data.shape[2] == 1:
+        data = np.repeat(data, 3, axis=2)
+
+    if data.dtype != np.uint8:
+        if data.max() > 255:
+            data = (data / data.max() * 255).astype(np.uint8)
+        else:
+            data = data.astype(np.uint8)
+
+    # Downsample to target_mpp if needed
+    actual_mpp = mpp_x
+    if target_mpp > mpp_x + 1e-3:
+        scale = mpp_x / target_mpp
+        new_w = max(1, int(data.shape[1] * scale))
+        new_h = max(1, int(data.shape[0] * scale))
+        data = np.array(Image.fromarray(data).resize((new_w, new_h), Image.LANCZOS))
+        actual_mpp = target_mpp
+
+    return data, actual_mpp
+
+
+def _read_tiff(path: Path, target_mpp: float) -> tuple[np.ndarray, float]:
+    try:
+        import tiffslide
+    except (ImportError, ModuleNotFoundError):
+        return _read_tiff_fallback(path, target_mpp)
+
+    try:
+        slide = tiffslide.TiffSlide(str(path))
+    except Exception:
+        # tiffslide imported but failed to open (e.g. flat TIFF) — use fallback
+        return _read_tiff_fallback(path, target_mpp)
+
+    try:
+        mpp_x = float(
+            slide.properties.get("tiffslide.mpp-x") or
+            slide.properties.get("openslide.mpp-x") or 0
         )
         if mpp_x <= 0:
             mpp_x = 0.5
@@ -61,6 +130,9 @@ def _read_tiff(path: Path, target_mpp: float) -> tuple[np.ndarray, float]:
         region = slide.read_region((0, 0), level, level_dims)
         img = np.array(region.convert("RGB"))
         actual_mpp = mpp_x * slide.level_downsamples[level]
+    except Exception:
+        slide.close()
+        return _read_tiff_fallback(path, target_mpp)
     finally:
         slide.close()
     return img, actual_mpp
