@@ -271,18 +271,14 @@ def write_ome_tiff(array: np.ndarray, path: PathLike, mpp: float) -> None:
         path:  Output file path (created with parent dirs as needed).
         mpp:   Microns per pixel to embed in the file.
     """
-    import os
-    import tempfile
-    import shutil
     import tifffile
 
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
     H, W = array.shape[:2]
-    px_per_cm = 1e4 / mpp
+    px_per_cm = 1e4 / mpp  # 10,000 µm/cm ÷ mpp µm/px = px/cm
 
-    # &#xb5; is the ASCII-safe XML entity for µ (required by tifffile's 7-bit check)
     ome_xml = (
         '<?xml version="1.0" encoding="utf-8"?>'
         '<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06"'
@@ -296,25 +292,13 @@ def write_ome_tiff(array: np.ndarray, path: PathLike, mpp: float) -> None:
         '</Pixels></Image></OME>'
     )
 
-    # Write to a temp file in the same directory, then rename atomically.
-    # This ensures a failed write never leaves a corrupted output file at path.
-    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp.tiff")
-    os.close(fd)
-    try:
-        tifffile.imwrite(
-            tmp,
-            array,
-            photometric="rgb",
-            description=ome_xml,
-            resolution=(px_per_cm, px_per_cm),
-            resolutionunit=3,   # TIFF RESUNIT_CENTIMETER = 3
-            compression="lzw",
-            tile=(256, 256),
-        )
-        shutil.move(tmp, str(path))
-    except Exception:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+    tifffile.imwrite(
+        str(path),
+        array,
+        photometric="rgb",
+        description=ome_xml,
+        resolution=(px_per_cm, px_per_cm),
+        resolutionunit=tifffile.RESUNIT.CENTIMETER,
+        compression="lzw",
+        tile=(256, 256),
+    )
