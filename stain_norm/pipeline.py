@@ -71,9 +71,8 @@ def normalize_slide(
         output_path: Destination OME-TIFF path.
         method:      Normalisation algorithm. CPU: 'macenko' (default),
                      'reinhard', 'vahadane'. GPU (requires torchstain):
-                     'macenko_gpu', 'vahadane_gpu', 'reinhard_gpu', 'stainnet'.
+                     'macenko_gpu', 'vahadane_gpu', 'reinhard_gpu'.
         reference:   Path to a reference image, or a (H,W,3) uint8 numpy array.
-                     **Required** for all methods except 'stainnet'.
                      Build one with build_reference() from your training slides.
         target_mpp:  Read/normalise resolution in µm/pixel (default 0.5 ≈ 20×).
         overwrite:   Re-normalise even if output already exists (default False).
@@ -85,7 +84,7 @@ def normalize_slide(
         Path of the written OME-TIFF.
 
     Raises:
-        ValueError:        if reference is None (and method is not stainnet).
+        ValueError:        if reference is None 
         FileNotFoundError: if the slide or reference file is not found.
     """
     output_path = Path(output_path)
