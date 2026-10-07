@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Optional
 
 import h5py
 import numpy as np
@@ -105,7 +105,7 @@ def coalesce_series(df: pd.DataFrame, cols: list[str]) -> pd.Series:
 
 def load_metadata(
     metadata_path: Path,
-    sample_id_col: str,
+    sample_id_col: Optional[str] = None,
 ) -> pd.DataFrame:
 
     metadata_path = Path(metadata_path)
@@ -121,12 +121,13 @@ def load_metadata(
             f"Unsupported metadata file: {metadata_path}"
         )
 
-    if sample_id_col not in meta.columns:
-        raise KeyError(
-            f"{sample_id_col!r} not in metadata columns"
-        )
+    if sample_id_col is not None:
+        if sample_id_col not in meta.columns:
+            raise KeyError(
+                f"{sample_id_col!r} not in metadata columns"
+            )
 
-    meta[sample_id_col] = meta[sample_id_col].astype("string")
+        meta[sample_id_col] = meta[sample_id_col].astype("string")
 
     return meta
 
