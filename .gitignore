@@ -210,3 +210,5 @@ __marimo__/
 *.pt
 *.csv
 
+.codex-storage/
+stain_norm/.codex-storage/
