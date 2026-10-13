@@ -651,86 +651,216 @@ def plot_matched_samples(
 from scipy.spatial.distance import cosine
 
 
-def calculate_matched_embedding_distances(
+import numpy as np
+import pandas as pd
+from scipy.spatial.distance import cdist
+
+
+def calculate_matched_unmatched_distances(
     X,
     joint,
     match_col="Sample_ID",
     source_col="source",
     group1_label="CZI",
     group2_label="NDPI",
+    embedding_space="original",
 ):
     """
-    Calculate distances between matched samples in embedding space.
+    Compare matched and unmatched cross-group embedding distances.
 
-    X: embedding matrix (n_samples, n_dimensions)
-    joint: metadata DataFrame aligned row-wise with X
+    Matched:
+        CZI sample i vs NDPI sample i
+
+    Unmatched:
+        CZI sample i vs NDPI sample j, where i != j
+
+    Only IDs present in both groups are included.
+
+    Returns
+    -------
+    per_sample : pd.DataFrame
+        Matched distances, average unmatched distances,
+        and matched/unmatched ratios for each sample.
+
+    summary : pd.DataFrame
+        Overall matched/unmatched statistics.
+
+    Duplicate sample IDs within a group are represented
+    by their mean embedding.
     """
 
     X = np.asarray(X, dtype=float)
 
     if X.ndim != 2 or len(X) != len(joint):
-        raise ValueError("X must be 2D and aligned with joint.")
+        raise ValueError(
+            "X must be 2D and have the same number of rows as joint."
+        )
 
-    metadata = joint[[match_col, source_col]].copy()
-    metadata[match_col] = metadata[match_col].astype("string")
+    if not np.isfinite(X).all():
+        raise ValueError("Embedding matrix contains NaN or Inf.")
 
-    # Determine matched sample IDs
+    ids = joint[match_col].astype("string").reset_index(drop=True)
+    sources = joint[source_col].astype("string").reset_index(drop=True)
+
     group1_ids = set(
-        metadata.loc[
-            metadata[source_col] == group1_label,
-            match_col
-        ].dropna()
+        ids[sources == group1_label].dropna()
     )
 
     group2_ids = set(
-        metadata.loc[
-            metadata[source_col] == group2_label,
-            match_col
-        ].dropna()
+        ids[sources == group2_label].dropna()
     )
 
     matched_ids = sorted(group1_ids & group2_ids)
 
-    results = []
+    n = len(matched_ids)
+
+    if n == 0:
+        raise ValueError(
+            f"No matched IDs found between "
+            f"{group1_label} and {group2_label}."
+        )
+
+    # ----------------------------------------
+    # Get one vector per ID per group
+    # ----------------------------------------
+
+    X1 = []
+    X2 = []
 
     for sample_id in matched_ids:
 
         mask1 = (
-            metadata[match_col].eq(sample_id)
-            & metadata[source_col].eq(group1_label)
+            ids.eq(sample_id) &
+            sources.eq(group1_label)
         ).fillna(False).to_numpy(dtype=bool)
 
         mask2 = (
-            metadata[match_col].eq(sample_id)
-            & metadata[source_col].eq(group2_label)
+            ids.eq(sample_id) &
+            sources.eq(group2_label)
         ).fillna(False).to_numpy(dtype=bool)
 
-        emb1 = X[mask1].mean(axis=0)
-        emb2 = X[mask2].mean(axis=0)
+        X1.append(X[mask1].mean(axis=0))
+        X2.append(X[mask2].mean(axis=0))
 
-        euclidean = np.linalg.norm(emb1 - emb2)
+    X1 = np.stack(X1)
+    X2 = np.stack(X2)
 
-        if np.linalg.norm(emb1) > 0 and np.linalg.norm(emb2) > 0:
-            cosine_dist = cosine(emb1, emb2)
-        else:
-            cosine_dist = np.nan
+    # ----------------------------------------
+    # Pairwise distance matrices
+    # ----------------------------------------
 
-        results.append({
-            match_col: sample_id,
-            "euclidean_distance": euclidean,
-            "cosine_distance": cosine_dist,
-            "cosine_similarity": 1 - cosine_dist,
-        })
-
-    return pd.DataFrame(
-        results,
-        columns=[
-            match_col,
-            "euclidean_distance",
-            "cosine_distance",
-            "cosine_similarity",
-        ],
+    euclidean = cdist(
+        X1, X2, metric="euclidean"
     )
+
+    cosine = cdist(
+        X1, X2, metric="cosine"
+    )
+
+    # Zero vectors have undefined cosine distance
+    cosine = np.where(np.isfinite(cosine), cosine, np.nan)
+
+    # Diagonal = same Sample_ID
+    matched_mask = np.eye(n, dtype=bool)
+
+    # Off-diagonal = different Sample_ID
+    unmatched_mask = ~matched_mask
+
+    results = []
+
+    for i, sample_id in enumerate(matched_ids):
+
+        row = {
+            match_col: sample_id,
+            "embedding_space": embedding_space,
+            "n_matched_samples": n,
+        }
+
+        for metric_name, D in [
+            ("euclidean", euclidean),
+            ("cosine", cosine),
+        ]:
+
+            matched_distance = D[i, i]
+
+            # All unmatched comparisons involving this ID
+            # in either scanner direction
+            unmatched = np.concatenate([
+                D[i, unmatched_mask[i, :]],
+                D[unmatched_mask[:, i], i],
+            ])
+
+            unmatched = unmatched[np.isfinite(unmatched)]
+
+            unmatched_mean = (
+                unmatched.mean()
+                if len(unmatched) else np.nan
+            )
+
+            ratio = (
+                matched_distance / unmatched_mean
+                if (
+                    np.isfinite(matched_distance)
+                    and np.isfinite(unmatched_mean)
+                    and unmatched_mean > 0
+                )
+                else np.nan
+            )
+
+            row[f"matched_{metric_name}"] = matched_distance
+            row[f"unmatched_{metric_name}_mean"] = unmatched_mean
+            row[f"ratio_{metric_name}"] = ratio
+
+        results.append(row)
+
+    per_sample = pd.DataFrame(results)
+
+    # ----------------------------------------
+    # Global summary
+    # ----------------------------------------
+
+    summary = {
+        "embedding_space": embedding_space,
+        "n_matched_samples": n,
+        "n_unmatched_pairs": n * (n - 1),
+    }
+
+    for metric_name, D in [
+        ("euclidean", euclidean),
+        ("cosine", cosine),
+    ]:
+
+        matched_values = D[matched_mask]
+        unmatched_values = D[unmatched_mask]
+
+        matched_values = matched_values[
+            np.isfinite(matched_values)
+        ]
+
+        unmatched_values = unmatched_values[
+            np.isfinite(unmatched_values)
+        ]
+
+        matched_mean = (
+            matched_values.mean()
+            if len(matched_values) else np.nan
+        )
+
+        unmatched_mean = (
+            unmatched_values.mean()
+            if len(unmatched_values) else np.nan
+        )
+
+        summary[f"matched_{metric_name}_mean"] = matched_mean
+        summary[f"unmatched_{metric_name}_mean"] = unmatched_mean
+
+        summary[f"ratio_{metric_name}"] = (
+            matched_mean / unmatched_mean
+            if np.isfinite(unmatched_mean) and unmatched_mean > 0
+            else np.nan
+        )
+
+    return per_sample, pd.DataFrame([summary])
 
 
 def make_joint_umap_pdf(
@@ -1078,27 +1208,48 @@ def make_joint_group_umap_pdf(
     harmony_n_pca: int = 50,
 ):
     """
-    Joint UMAP of any two groups of slide embeddings.
+    Joint UMAP of two groups of slide embeddings.
 
-    Shape indicates group:
-        group 1 = circle
-        group 2 = cross
+    Shape:
+        group1 = circle
+        group2 = cross
 
     If use_harmony=True:
         StandardScaler -> PCA -> Harmony(source) -> UMAP
 
-    Otherwise:
-        Uses the existing compute_umap() function.
+    Distance analysis:
+        1. Original embedding space
+        2. Pre-Harmony PCA space
+        3. Post-Harmony PCA space
 
-    Pages:
-        1. Group membership
-        2. Categorical metadata
-        3. Numeric metadata
-        4. Matched-sample plot, if match_col is supplied
+    For each space:
+        - Matched Euclidean distance
+        - Matched cosine distance
+        - Unmatched Euclidean distance
+        - Unmatched cosine distance
+        - Matched/unmatched distance ratios
+
+    Outputs:
+        - UMAP PDF
+        - Per-sample distance CSV
+        - Distance summary CSV
+
+    Returns:
+        joint : pd.DataFrame
+
+    Distance results are also available in:
+        joint.attrs["distances"]
+        joint.attrs["distance_summary"]
     """
 
     categorical_cols = categorical_cols or []
     numeric_cols = numeric_cols or []
+
+    out_pdf = Path(out_pdf)
+    out_pdf.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
     # ========================================================
     # Load features
@@ -1151,7 +1302,7 @@ def make_joint_group_umap_pdf(
     )
 
     # ========================================================
-    # Add group/source labels
+    # Add group labels
     # ========================================================
 
     group1["source"] = group1_label
@@ -1180,8 +1331,49 @@ def make_joint_group_umap_pdf(
         joint["features"].to_numpy()
     )
 
+    print(f"Original embedding shape: {X.shape}")
+
     # ========================================================
-    # Dimensionality reduction
+    # Distance analysis helper
+    # ========================================================
+
+    distance_results = []
+    distance_summaries = []
+
+    def add_distance_analysis(matrix, space_name):
+
+        if match_col is None:
+            return
+
+        per_sample, summary = calculate_matched_unmatched_distances(
+            X=matrix,
+            joint=joint,
+            match_col=match_col,
+            source_col="source",
+            group1_label=group1_label,
+            group2_label=group2_label,
+            embedding_space=space_name,
+        )
+
+        distance_results.append(per_sample)
+        distance_summaries.append(summary)
+
+        print(f"\n{space_name} distance summary:")
+        print(summary.to_string(index=False))
+
+    # ========================================================
+    # 1. ORIGINAL EMBEDDING SPACE
+    # ========================================================
+
+    print("\nCalculating original embedding distances...")
+
+    add_distance_analysis(
+        X,
+        "original",
+    )
+
+    # ========================================================
+    # 2. PCA / HARMONY
     # ========================================================
 
     if use_harmony:
@@ -1191,14 +1383,16 @@ def make_joint_group_umap_pdf(
             f"{group1_label} and {group2_label}"
         )
 
-        # -----------------------
+        # ----------------------------------------------------
         # Standardize
-        # -----------------------
+        # ----------------------------------------------------
+
         X_scaled = StandardScaler().fit_transform(X)
 
-        # -----------------------
+        # ----------------------------------------------------
         # PCA
-        # -----------------------
+        # ----------------------------------------------------
+
         n_pca = min(
             harmony_n_pca,
             X_scaled.shape[1],
@@ -1207,7 +1401,8 @@ def make_joint_group_umap_pdf(
 
         if n_pca < 2:
             raise ValueError(
-                "Not enough samples/components to run PCA + Harmony."
+                "Not enough samples/components "
+                "to run PCA + Harmony."
             )
 
         X_pca = PCA(
@@ -1217,27 +1412,21 @@ def make_joint_group_umap_pdf(
 
         print(f"PCA shape: {X_pca.shape}")
 
-        # ========================================================
-        # Matched distances BEFORE Harmony
-        # ========================================================
+        # ====================================================
+        # 3. PRE-HARMONY DISTANCES
+        # ====================================================
 
-        if match_col is not None:
+        print("\nCalculating pre-Harmony distances...")
 
-            distances_pre = calculate_matched_embedding_distances(
-                X=X_pca,
-                joint=joint,
-                match_col=match_col,
-                source_col="source",
-                group1_label=group1_label,
-                group2_label=group2_label,
-            )
+        add_distance_analysis(
+            X_pca,
+            "pre_harmony",
+        )
 
-            print("\nPre-Harmony matched distances:")
-            print(distances_pre)
-
-        # -----------------------
+        # ----------------------------------------------------
         # Harmony
-        # -----------------------
+        # ----------------------------------------------------
+
         harmony_meta = pd.DataFrame({
             "source": (
                 joint["source"]
@@ -1254,8 +1443,7 @@ def make_joint_group_umap_pdf(
             random_state=random_state,
         )
 
-        # harmonypy output:
-        # dimensions x samples
+        # harmonypy output: dimensions x samples
         X_harmony = harmony_result.Z_corr.T
 
         print(
@@ -1263,71 +1451,39 @@ def make_joint_group_umap_pdf(
             f"{X_harmony.shape}"
         )
 
-        # ========================================================
-        # Matched distances AFTER Harmony
-        # ========================================================
+        # ====================================================
+        # 4. POST-HARMONY DISTANCES
+        # ====================================================
 
-        if match_col is not None:
+        print("\nCalculating post-Harmony distances...")
 
-            distances_post = calculate_matched_embedding_distances(
-                X=X_harmony,
-                joint=joint,
-                match_col=match_col,
-                source_col="source",
-                group1_label=group1_label,
-                group2_label=group2_label,
-            )
+        add_distance_analysis(
+            X_harmony,
+            "post_harmony",
+        )
 
-            # Combine pre/post distances
-            distances = distances_pre.merge(
-                distances_post,
-                on=match_col,
-                suffixes=("_pre", "_post"),
-                validate="one_to_one",
-            )
+        # ----------------------------------------------------
+        # Save Harmony dimensions
+        # ----------------------------------------------------
 
-            # Calculate changes after Harmony
-            distances["euclidean_reduction_pct"] = (
-                100
-                * (
-                    distances["euclidean_distance_pre"]
-                    - distances["euclidean_distance_post"]
-                )
-                / distances["euclidean_distance_pre"].replace(0, np.nan)
-            )
+        harmony_df = pd.DataFrame(
+            X_harmony,
+            columns=[
+                f"Harmony_{i + 1}"
+                for i in range(X_harmony.shape[1])
+            ],
+            index=joint.index,
+        )
 
-            distances["cosine_reduction_pct"] = (
-                100
-                * (
-                    distances["cosine_distance_pre"]
-                    - distances["cosine_distance_post"]
-                )
-                / distances["cosine_distance_pre"].replace(0, np.nan)
-            )
+        joint = pd.concat(
+            [joint, harmony_df],
+            axis=1,
+        )
 
-            print("\nMatched distances before vs after Harmony:")
-            print(distances)
-
-            # Save CSV alongside UMAP PDF
-            distance_csv = Path(out_pdf).with_name(
-                Path(out_pdf).stem + "_matched_distances.csv"
-            )
-
-            distance_csv.parent.mkdir(parents=True, exist_ok=True)
-            distances.to_csv(distance_csv, index=False)
-
-            print(f"Saved distances: {distance_csv}")
-
-            # Make distances available to the calling loop
-            joint.attrs["matched_distances"] = distances
-
-        # Save Harmony dimensions in joint dataframe
-        for i in range(X_harmony.shape[1]):
-            joint[f"Harmony_{i + 1}"] = X_harmony[:, i]
-
-        # -----------------------
+        # ----------------------------------------------------
         # UMAP on Harmony output
-        # -----------------------
+        # ----------------------------------------------------
+
         n_neighbors = min(
             15,
             max(2, X_harmony.shape[0] - 1),
@@ -1348,6 +1504,56 @@ def make_joint_group_umap_pdf(
             X,
             random_state=random_state,
         )
+
+    # ========================================================
+    # Combine and save distance results
+    # ========================================================
+
+    if distance_results:
+
+        distances_all = pd.concat(
+            distance_results,
+            ignore_index=True,
+        )
+
+        summary_all = pd.concat(
+            distance_summaries,
+            ignore_index=True,
+        )
+
+        # ----------------------------------------------------
+        # Save individual sample distances
+        # ----------------------------------------------------
+
+        distance_csv = out_pdf.with_name(
+            out_pdf.stem + "_distances.csv"
+        )
+
+        distances_all.to_csv(
+            distance_csv,
+            index=False,
+        )
+
+        # ----------------------------------------------------
+        # Save summary distances
+        # ----------------------------------------------------
+
+        summary_csv = out_pdf.with_name(
+            out_pdf.stem + "_distance_summary.csv"
+        )
+
+        summary_all.to_csv(
+            summary_csv,
+            index=False,
+        )
+
+        print(f"\nSaved distances: {distance_csv}")
+        print(f"Saved summary: {summary_csv}")
+
+    else:
+
+        distances_all = pd.DataFrame()
+        summary_all = pd.DataFrame()
 
     # ========================================================
     # Save UMAP coordinates
@@ -1384,20 +1590,13 @@ def make_joint_group_umap_pdf(
         )
 
     # ========================================================
-    # Output PDF
+    # PDF
     # ========================================================
-
-    out_pdf = Path(out_pdf)
-
-    out_pdf.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
 
     with PdfPages(out_pdf) as pdf:
 
         # ====================================================
-        # Page 1: group membership
+        # Page 1: Group membership
         # ====================================================
 
         fig, ax = plt.subplots(
@@ -1484,7 +1683,7 @@ def make_joint_group_umap_pdf(
                 .nunique()
             )
 
-            # Increase page height when legend is long
+            # Increase page height for long legends
             fig_height = max(
                 6,
                 1.2 + n_categories * 0.28,
@@ -1586,12 +1785,43 @@ def make_joint_group_umap_pdf(
 
                 plt.close(fig)
 
-    print(
-        f"Saved PDF to: {out_pdf}"
-    )
+        # ====================================================
+        # Matched samples CONNECTED by lines
+        # ====================================================
+
+        if match_col is not None and match_col in joint.columns:
+
+            fig, ax = plt.subplots(figsize=(12, 8))
+
+            plot_matched_groups_connected(
+                ax=ax,
+                embedding=embedding,
+                joint=joint,
+                match_col=match_col,
+                source_col="source",
+                group1_label=group1_label,
+                group2_label=group2_label,
+            )
+
+            fig.tight_layout()
+
+            pdf.savefig(
+                fig,
+                bbox_inches="tight",
+            )
+
+            plt.close(fig)
+
+    print(f"Saved PDF to: {out_pdf}")
+
+    # ========================================================
+    # Attach results to returned dataframe
+    # ========================================================
+
+    joint.attrs["distances"] = distances_all
+    joint.attrs["distance_summary"] = summary_all
 
     return joint
-
 
 
 def plot_categorical_by_group(
@@ -2014,7 +2244,170 @@ def plot_matched_groups(
         loc="lower right",
     )
 
+def plot_matched_groups_connected(
+    ax,
+    embedding,
+    joint,
+    match_col="Sample_ID",
+    source_col="source",
+    group1_label="CZI",
+    group2_label="NDPI",
+):
+    """
+    Plot matched samples on UMAP, connecting the same
+    Sample_ID across two groups with a line.
 
+    Group 1: circle
+    Group 2: cross
+    Colour: Sample_ID
+    Line: matched pair
+    """
+
+    ids = joint[match_col].astype("string")
+    sources = joint[source_col].astype("string")
+
+    group1_ids = set(
+        ids[sources == group1_label].dropna()
+    )
+
+    group2_ids = set(
+        ids[sources == group2_label].dropna()
+    )
+
+    matched_ids = sorted(group1_ids & group2_ids)
+
+    n = len(matched_ids)
+
+    cmap_name = "tab20" if n <= 20 else "hsv"
+    cmap = mpl.colormaps.get_cmap(cmap_name)
+
+    colors = [
+        cmap(i / max(1, n - 1))
+        for i in range(n)
+    ]
+
+    color_map = dict(zip(matched_ids, colors))
+
+    # All samples in grey background
+    ax.scatter(
+        embedding[:, 0],
+        embedding[:, 1],
+        s=18,
+        alpha=0.15,
+        color="lightgrey",
+        edgecolors="none",
+        zorder=1,
+    )
+
+    for sample_id in matched_ids:
+
+        mask1 = (
+            ids.eq(sample_id)
+            & sources.eq(group1_label)
+        ).fillna(False).to_numpy(dtype=bool)
+
+        mask2 = (
+            ids.eq(sample_id)
+            & sources.eq(group2_label)
+        ).fillna(False).to_numpy(dtype=bool)
+
+        coords1 = embedding[mask1]
+        coords2 = embedding[mask2]
+
+        # Centroids if multiple rows per sample/group
+        p1 = coords1.mean(axis=0)
+        p2 = coords2.mean(axis=0)
+
+        color = color_map[sample_id]
+
+        # Connecting line
+        ax.plot(
+            [p1[0], p2[0]],
+            [p1[1], p2[1]],
+            color=color,
+            linewidth=1.3,
+            alpha=0.65,
+            zorder=2,
+        )
+
+        # CZI circle
+        ax.scatter(
+            coords1[:, 0],
+            coords1[:, 1],
+            s=55,
+            marker="o",
+            color=color,
+            edgecolors="none",
+            zorder=3,
+        )
+
+        # NDPI cross
+        ax.scatter(
+            coords2[:, 0],
+            coords2[:, 1],
+            s=65,
+            marker="x",
+            color=color,
+            linewidths=1.7,
+            zorder=4,
+        )
+
+    ax.set_title(
+        f"Matched {group1_label}–{group2_label} samples\n"
+        f"Connected by Sample_ID (n={n})"
+    )
+
+    ax.set_xlabel("UMAP1")
+    ax.set_ylabel("UMAP2")
+
+    # Sample ID legend
+    sample_handles = [
+        plt.Line2D(
+            [0], [0],
+            marker="o",
+            linestyle="None",
+            markerfacecolor=color_map[sample_id],
+            markeredgecolor="none",
+            markersize=6,
+            label=str(sample_id),
+        )
+        for sample_id in matched_ids
+    ]
+
+    sample_legend = ax.legend(
+        handles=sample_handles,
+        title="Sample ID",
+        fontsize=7,
+        frameon=False,
+        bbox_to_anchor=(1.02, 1),
+        loc="upper left",
+    )
+
+    ax.add_artist(sample_legend)
+
+    shape_handles = [
+        plt.Line2D(
+            [0], [0],
+            marker="o",
+            linestyle="None",
+            color="black",
+            label=group1_label,
+        ),
+        plt.Line2D(
+            [0], [0],
+            marker="x",
+            linestyle="None",
+            color="black",
+            label=group2_label,
+        ),
+    ]
+
+    ax.legend(
+        handles=shape_handles,
+        title="Scanner",
+        frameon=False,
+        loc="lower right",
+    )
 
 ## three groups
 def plot_categorical_by_three_groups(
