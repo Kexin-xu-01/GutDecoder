@@ -648,6 +648,91 @@ def plot_matched_samples(
         loc="lower right",
     )
 
+from scipy.spatial.distance import cosine
+
+
+def calculate_matched_embedding_distances(
+    X,
+    joint,
+    match_col="Sample_ID",
+    source_col="source",
+    group1_label="CZI",
+    group2_label="NDPI",
+):
+    """
+    Calculate distances between matched samples in embedding space.
+
+    X: embedding matrix (n_samples, n_dimensions)
+    joint: metadata DataFrame aligned row-wise with X
+    """
+
+    X = np.asarray(X, dtype=float)
+
+    if X.ndim != 2 or len(X) != len(joint):
+        raise ValueError("X must be 2D and aligned with joint.")
+
+    metadata = joint[[match_col, source_col]].copy()
+    metadata[match_col] = metadata[match_col].astype("string")
+
+    # Determine matched sample IDs
+    group1_ids = set(
+        metadata.loc[
+            metadata[source_col] == group1_label,
+            match_col
+        ].dropna()
+    )
+
+    group2_ids = set(
+        metadata.loc[
+            metadata[source_col] == group2_label,
+            match_col
+        ].dropna()
+    )
+
+    matched_ids = sorted(group1_ids & group2_ids)
+
+    results = []
+
+    for sample_id in matched_ids:
+
+        mask1 = (
+            metadata[match_col].eq(sample_id)
+            & metadata[source_col].eq(group1_label)
+        ).fillna(False).to_numpy(dtype=bool)
+
+        mask2 = (
+            metadata[match_col].eq(sample_id)
+            & metadata[source_col].eq(group2_label)
+        ).fillna(False).to_numpy(dtype=bool)
+
+        emb1 = X[mask1].mean(axis=0)
+        emb2 = X[mask2].mean(axis=0)
+
+        euclidean = np.linalg.norm(emb1 - emb2)
+
+        if np.linalg.norm(emb1) > 0 and np.linalg.norm(emb2) > 0:
+            cosine_dist = cosine(emb1, emb2)
+        else:
+            cosine_dist = np.nan
+
+        results.append({
+            match_col: sample_id,
+            "euclidean_distance": euclidean,
+            "cosine_distance": cosine_dist,
+            "cosine_similarity": 1 - cosine_dist,
+        })
+
+    return pd.DataFrame(
+        results,
+        columns=[
+            match_col,
+            "euclidean_distance",
+            "cosine_distance",
+            "cosine_similarity",
+        ],
+    )
+
+
 def make_joint_umap_pdf(
     xenium_h5_root: Path,
     adjacent_h5_root: Path,
@@ -1132,6 +1217,24 @@ def make_joint_group_umap_pdf(
 
         print(f"PCA shape: {X_pca.shape}")
 
+        # ========================================================
+        # Matched distances BEFORE Harmony
+        # ========================================================
+
+        if match_col is not None:
+
+            distances_pre = calculate_matched_embedding_distances(
+                X=X_pca,
+                joint=joint,
+                match_col=match_col,
+                source_col="source",
+                group1_label=group1_label,
+                group2_label=group2_label,
+            )
+
+            print("\nPre-Harmony matched distances:")
+            print(distances_pre)
+
         # -----------------------
         # Harmony
         # -----------------------
@@ -1159,6 +1262,64 @@ def make_joint_group_umap_pdf(
             f"Harmony corrected shape: "
             f"{X_harmony.shape}"
         )
+
+        # ========================================================
+        # Matched distances AFTER Harmony
+        # ========================================================
+
+        if match_col is not None:
+
+            distances_post = calculate_matched_embedding_distances(
+                X=X_harmony,
+                joint=joint,
+                match_col=match_col,
+                source_col="source",
+                group1_label=group1_label,
+                group2_label=group2_label,
+            )
+
+            # Combine pre/post distances
+            distances = distances_pre.merge(
+                distances_post,
+                on=match_col,
+                suffixes=("_pre", "_post"),
+                validate="one_to_one",
+            )
+
+            # Calculate changes after Harmony
+            distances["euclidean_reduction_pct"] = (
+                100
+                * (
+                    distances["euclidean_distance_pre"]
+                    - distances["euclidean_distance_post"]
+                )
+                / distances["euclidean_distance_pre"].replace(0, np.nan)
+            )
+
+            distances["cosine_reduction_pct"] = (
+                100
+                * (
+                    distances["cosine_distance_pre"]
+                    - distances["cosine_distance_post"]
+                )
+                / distances["cosine_distance_pre"].replace(0, np.nan)
+            )
+
+            print("\nMatched distances before vs after Harmony:")
+            print(distances)
+
+            # Save CSV alongside UMAP PDF
+            distance_csv = Path(out_pdf).with_name(
+                Path(out_pdf).stem + "_matched_distances.csv"
+            )
+
+            distance_csv.parent.mkdir(parents=True, exist_ok=True)
+            distances.to_csv(distance_csv, index=False)
+
+            print(f"Saved distances: {distance_csv}")
+
+            # Make distances available to the calling loop
+            joint.attrs["matched_distances"] = distances
 
         # Save Harmony dimensions in joint dataframe
         for i in range(X_harmony.shape[1]):
