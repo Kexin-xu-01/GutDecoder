@@ -4,6 +4,7 @@ Dependencies: numpy, tifffile, zarr, scikit-image, pillow, and either
 openslide-python or tiffslide for WSI files. Flat TIFF uses tifffile memmap
 when possible. CZI uses aicsimageio lazy dask slicing.
 """
+from importlib.resources import path
 from pathlib import Path
 import math
 import numpy as np
@@ -29,60 +30,341 @@ def _rgb(a):
 
 class SlideSource:
     def __init__(self, path, target_mpp=0.5):
+        import math
+        import tempfile
+        from pathlib import Path
+
+        import numpy as np
+
         self.path = Path(path)
         self.kind = None
         self.obj = None
+        self.arr = None
+        self._temp_dir = None
+
+        if not self.path.is_file():
+            raise FileNotFoundError(self.path)
+
+        if target_mpp <= 0 or not math.isfinite(float(target_mpp)):
+            raise ValueError("target_mpp must be a positive finite number")
+
         ext = self.path.suffix.lower()
-        if ext in ('.svs', '.ndpi', '.mrxs', '.scn', '.bif', '.vms', '.vmu'):
+
+        # ============================================================
+        # Helper: validate MPP from image metadata
+        # ============================================================
+        def validate_mpp(value, source):
+            if value is None:
+                raise ValueError(
+                    f"MPP metadata missing in {self.path}\n"
+                    f"Expected metadata: {source}"
+                )
+
+            try:
+                mpp = float(value)
+            except (TypeError, ValueError) as e:
+                raise ValueError(
+                    f"Invalid MPP metadata ({source}): {value!r}"
+                ) from e
+
+            if not math.isfinite(mpp) or mpp <= 0:
+                raise ValueError(
+                    f"Invalid MPP metadata ({source}): {mpp}"
+                )
+
+            return mpp
+
+        # ============================================================
+        # 1. OpenSlide formats
+        # ============================================================
+        if ext in (
+            '.svs', '.ndpi', '.mrxs', '.scn',
+            '.bif', '.vms', '.vmu'
+        ):
             import openslide
-            self.obj = openslide.OpenSlide(str(path))
+
+            self.obj = openslide.OpenSlide(str(self.path))
             self.kind = 'wsi'
-            native = float(self.obj.properties.get(openslide.PROPERTY_NAME_MPP_X) or 0.5)
+
+            native = validate_mpp(
+                self.obj.properties.get(
+                    openslide.PROPERTY_NAME_MPP_X
+                ),
+                "openslide.mpp-x"
+            )
+
+        # ============================================================
+        # 2. TIFF / OME-TIFF
+        # ============================================================
         elif ext in ('.tif', '.tiff'):
+            import tifffile
+
+            # Read authoritative MPP from TIFF metadata first.
+            # Prefer OME PhysicalSizeX over TIFF resolution tags.
+            with tifffile.TiffFile(str(self.path)) as tf:
+                import xml.etree.ElementTree as ET
+
+                native = None
+
+                if tf.ome_metadata:
+                    root = ET.fromstring(tf.ome_metadata)
+                    pixels = root.find(".//{*}Pixels")
+
+                    if pixels is not None:
+                        physical_x = pixels.get("PhysicalSizeX")
+                        unit_x = pixels.get(
+                            "PhysicalSizeXUnit", "µm"
+                        )
+
+                        if physical_x is not None:
+                            units_to_um = {
+                                "µm": 1.0,
+                                "um": 1.0,
+                                "nm": 0.001,
+                                "mm": 1000.0,
+                                "cm": 10000.0,
+                                "m": 1000000.0,
+                            }
+
+                            if unit_x not in units_to_um:
+                                raise ValueError(
+                                    f"Unsupported OME MPP unit: {unit_x}"
+                                )
+
+                            native = validate_mpp(
+                                float(physical_x)
+                                * units_to_um[unit_x],
+                                "OME PhysicalSizeX"
+                            )
+
+                if native is None:
+                    page = tf.series[0].pages[0]
+
+                    unit = page.tags.get("ResolutionUnit")
+                    res = page.tags.get("XResolution")
+
+                    if unit is None or res is None:
+                        raise ValueError(
+                            f"MPP metadata missing in {self.path}. "
+                            "Neither OME PhysicalSizeX nor TIFF "
+                            "XResolution/ResolutionUnit is available."
+                        )
+
+                    x = res.value
+                    x = (
+                        x[0] / x[1]
+                        if isinstance(x, tuple) and x[1]
+                        else float(x)
+                        if not isinstance(x, tuple)
+                        else 0.0
+                    )
+
+                    u = int(unit.value)
+
+                    if u == 2:
+                        native = validate_mpp(
+                            25400.0 / x if x > 0 else None,
+                            "TIFF XResolution (inch)"
+                        )
+                    elif u == 3:
+                        native = validate_mpp(
+                            10000.0 / x if x > 0 else None,
+                            "TIFF XResolution (centimetre)"
+                        )
+                    else:
+                        raise ValueError(
+                            f"Cannot calculate MPP for {self.path}: "
+                            f"unsupported ResolutionUnit={u}"
+                        )
+
+            # Try tiffslide for efficient regional reading.
             try:
                 import tiffslide
-                self.obj = tiffslide.TiffSlide(str(path))
+
+                self.obj = tiffslide.TiffSlide(
+                    str(self.path)
+                )
+
                 self.kind = 'wsi'
-                native = float(self.obj.properties.get('tiffslide.mpp-x') or self.obj.properties.get('openslide.mpp-x') or 0.5)
-            except Exception:
-                import tifffile
-                self.obj = tifffile.TiffFile(str(path))
-                self.kind = 'flat'
-                page = self.obj.pages[0]
-                unit = page.tags.get('ResolutionUnit')
-                res = page.tags.get('XResolution')
-                native = 0.5
-                if unit and res:
-                    x = res.value
-                    x = x[0] / x[1] if isinstance(x, tuple) else float(x)
-                    u = int(unit.value)
-                    if x > 0 and u in (2, 3):
-                        native = (25400 if u == 2 else 10000) / x
-                try:
-                    self.arr = tifffile.memmap(str(path), series=0)
-                except Exception as e:
+
+                print(
+                    f"[INFO] TIFF opened using tiffslide: "
+                    f"{self.path.name}"
+                )
+
+            except Exception as e:
+                print(
+                    f"[INFO] tiffslide unavailable for "
+                    f"{self.path.name}: {e}"
+                )
+
+                if self.obj is not None:
                     self.obj.close()
-                    raise RuntimeError('Flat TIFF is not memory-mappable. Convert it to tiled TIFF/OME-TIFF first to enable bounded-memory reading.') from e
+
+                self.obj = tifffile.TiffFile(
+                    str(self.path)
+                )
+
+                self.kind = 'flat'
+
+                # First try direct memory mapping.
+                try:
+                    self.arr = tifffile.memmap(
+                        str(self.path),
+                        series=0,
+                    )
+
+                    print(
+                        "[INFO] Direct TIFF memory mapping successful."
+                    )
+
+                except (ValueError, TypeError, RuntimeError):
+                    print(
+                        "[INFO] TIFF not directly memory-mappable."
+                    )
+                    print(
+                        "[INFO] Decoding into temporary "
+                        "disk-backed array..."
+                    )
+
+                    self._temp_dir = (
+                        tempfile.TemporaryDirectory(
+                            prefix="stain_norm_"
+                        )
+                    )
+
+                    temp_path = (
+                        Path(self._temp_dir.name)
+                        / "decoded.dat"
+                    )
+
+                    try:
+                        self.arr = tifffile.imread(
+                            str(self.path),
+                            series=0,
+                            out=str(temp_path),
+                        )
+
+                    except Exception:
+                        self._temp_dir.cleanup()
+                        self._temp_dir = None
+                        self.obj.close()
+                        self.obj = None
+                        raise
+
+        # ============================================================
+        # 3. CZI
+        # ============================================================
         elif ext == '.czi':
             from aicsimageio import AICSImage
-            self.obj = AICSImage(str(path))
+
+            self.obj = AICSImage(str(self.path))
             self.kind = 'czi'
-            native = float(self.obj.physical_pixel_sizes.X or 0.5)
-            self.arr = self.obj.get_image_dask_data('YXC', S=0, T=0, Z=0)
+
+            native = validate_mpp(
+                self.obj.physical_pixel_sizes.X,
+                "CZI physical_pixel_sizes.X"
+            )
+
+            self.arr = self.obj.get_image_dask_data(
+                'YXC',
+                S=0,
+                T=0,
+                Z=0,
+            )
+
         else:
-            raise ValueError(f'Unsupported slide: {path}')
-        self.native_mpp = native if native > 0 else 0.5
-        self.scale = max(1.0, float(target_mpp) / self.native_mpp)
+            raise ValueError(
+                f"Unsupported slide format: {self.path}"
+            )
+
+        # ============================================================
+        # 4. Normalize flat TIFF dimensions
+        # ============================================================
+        if self.kind == 'flat':
+
+            if self.arr.ndim == 2:
+                pass
+
+            elif self.arr.ndim == 3:
+                if (
+                    self.arr.shape[0] in (1, 3, 4)
+                    and self.arr.shape[-1] not in (1, 3, 4)
+                ):
+                    self.arr = np.moveaxis(
+                        self.arr, 0, -1
+                    )
+
+            else:
+                raise ValueError(
+                    f"Unsupported TIFF shape: "
+                    f"{self.arr.shape}"
+                )
+
+        # ============================================================
+        # 5. Resolution and output dimensions
+        # ============================================================
+        self.native_mpp = validate_mpp(
+            native,
+            "native image metadata"
+        )
+
+        self.scale = max(
+            1.0,
+            float(target_mpp) / self.native_mpp
+        )
+
         if self.kind == 'wsi':
-            self.level = self.obj.get_best_level_for_downsample(self.scale)
-            self.downsample = float(self.obj.level_downsamples[self.level])
-            self.width, self.height = map(int, self.obj.level_dimensions[self.level])
-            self.mpp = self.native_mpp * self.downsample
+
+            self.level = (
+                self.obj.get_best_level_for_downsample(
+                    self.scale
+                )
+            )
+
+            self.downsample = float(
+                self.obj.level_downsamples[self.level]
+            )
+
+            self.width, self.height = map(
+                int,
+                self.obj.level_dimensions[self.level]
+            )
+
+            self.mpp = (
+                self.native_mpp * self.downsample
+            )
+
         else:
             self.downsample = self.scale
-            self.height = max(1, math.ceil(self.arr.shape[0] / self.scale))
-            self.width = max(1, math.ceil(self.arr.shape[1] / self.scale))
-            self.mpp = self.native_mpp * self.scale
+
+            self.height = max(
+                1,
+                math.ceil(
+                    self.arr.shape[0] / self.scale
+                )
+            )
+
+            self.width = max(
+                1,
+                math.ceil(
+                    self.arr.shape[1] / self.scale
+                )
+            )
+
+            self.mpp = (
+                self.native_mpp * self.scale
+            )
+
+        print(
+            f"[INFO] Slide: {self.path.name}\n"
+            f"       Reader: {self.kind}\n"
+            f"       Native MPP: {self.native_mpp:.6f}\n"
+            f"       Target MPP: {target_mpp:.6f}\n"
+            f"       Actual MPP: {self.mpp:.6f}\n"
+            f"       Dimensions: "
+            f"{self.width} x {self.height}"
+        )
 
     def read(self, x, y, w, h):
         if self.kind == 'wsi':
@@ -99,8 +381,22 @@ class SlideSource:
         return a
 
     def close(self):
-        if hasattr(self.obj, 'close'):
-            self.obj.close()
+        import gc
+
+        if self.arr is not None:
+            del self.arr
+            self.arr = None
+
+        if self.obj is not None:
+            if hasattr(self.obj, "close"):
+                self.obj.close()
+            self.obj = None
+
+        gc.collect()
+
+        if self._temp_dir is not None:
+            self._temp_dir.cleanup()
+            self._temp_dir = None
 
     def __enter__(self):
         return self
