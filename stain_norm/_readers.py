@@ -178,8 +178,12 @@ def _read_czi(path: Path, target_mpp: float) -> tuple[np.ndarray, float]:
     if mpp_x <= 0:
         mpp_x = 0.5
 
-    # aicsimageio uses STCZYX ordering by default; we want Y x X x C
-    arr = img_obj.get_image_data("YXC", S=0, T=0, Z=0)  # H x W x C
+    # RGB CZIs store colour in the Samples dim "S" (C has size 1);
+    # scenes are selected via set_scene(), not an "S" index.
+    if "S" in img_obj.dims.order:
+        arr = img_obj.get_image_data("YXS", T=0, C=0, Z=0)  # H x W x 3
+    else:
+        arr = img_obj.get_image_data("YXC", T=0, Z=0)  # H x W x C
 
     if arr.ndim == 2:
         arr = np.stack([arr, arr, arr], axis=-1)

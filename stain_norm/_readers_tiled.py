@@ -266,12 +266,21 @@ class SlideSource:
                 "CZI physical_pixel_sizes.X"
             )
 
-            self.arr = self.obj.get_image_dask_data(
-                'YXC',
-                S=0,
-                T=0,
-                Z=0,
-            )
+            # RGB CZIs store colour in the Samples dim 'S' (C has size 1);
+            # scenes are selected via set_scene(), not an 'S' index.
+            if 'S' in self.obj.dims.order:
+                self.arr = self.obj.get_image_dask_data(
+                    'YXS',
+                    T=0,
+                    C=0,
+                    Z=0,
+                )
+            else:
+                self.arr = self.obj.get_image_dask_data(
+                    'YXC',
+                    T=0,
+                    Z=0,
+                )
 
         else:
             raise ValueError(
