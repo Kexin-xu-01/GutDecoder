@@ -256,9 +256,9 @@ class SlideSource:
         # 3. CZI
         # ============================================================
         elif ext == '.czi':
-            from aicsimageio import AICSImage
+            from ._czi import open_czi
 
-            self.obj = AICSImage(str(self.path))
+            self.obj = open_czi(self.path)
             self.kind = 'czi'
 
             native = validate_mpp(

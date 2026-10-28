@@ -62,6 +62,8 @@ import os
 
 import tempfile
 
+import traceback
+
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from pathlib import Path
@@ -291,7 +293,7 @@ def _normalize_one(args: tuple) -> tuple[Path | None, str | None]:
 
     except Exception as exc:
 
-        return None, f"{slide_path}: {exc}"
+        return None, f"{slide_path}: {exc}\n{traceback.format_exc()}"
 
 
 
