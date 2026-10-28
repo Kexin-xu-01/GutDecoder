@@ -166,14 +166,14 @@ def _read_openslide(path: Path, target_mpp: float) -> tuple[np.ndarray, float]:
 
 def _read_czi(path: Path, target_mpp: float) -> tuple[np.ndarray, float]:
     try:
-        from aicsimageio import AICSImage
+        from ._czi import open_czi
+        img_obj = open_czi(path)
     except ImportError as e:
         raise ImportError(
             "aicsimageio is required to read CZI files. "
             "Install with: pip install aicsimageio[czi]"
         ) from e
 
-    img_obj = AICSImage(str(path))
     mpp_x = float(img_obj.physical_pixel_sizes.X or 0.5)
     if mpp_x <= 0:
         mpp_x = 0.5
