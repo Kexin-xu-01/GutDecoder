@@ -83,9 +83,12 @@ def predict_and_aggregate_models(X_test, results_dir):
     - np.array: The aggregated predictions.
     """
 
-    # Load models from the specified directory
     models = load_models_from_directories(results_dir)
+    return predict_with_models(X_test, models)
 
+
+def predict_with_models(X_test, models):
+    """Predict using already-loaded models, preserving their order and arithmetic."""
     predictions = []
     model_names = []
 
@@ -111,8 +114,6 @@ def predict_and_aggregate_models(X_test, results_dir):
 
     # Set any negative predictions to 0
     # average_predictions = np.where(average_predictions < 0, 0.0, average_predictions)
-
-    del models
 
     return average_predictions, sd_predictions, predictions, model_names
 
@@ -158,6 +159,8 @@ def infer(
     # Set device once
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    models = load_models_from_directories(dir_models_and_results)
+    gene_names = load_gene_list(dir_models_and_results)
     saved_paths = []
 
     for sample_path in sample_paths:
@@ -175,10 +178,9 @@ def infer(
 
         logger.debug(f"Running regression predictions for {name_data}")
         # Make predictions and aggregate results across cross-validation regression models
-        average_predictions, sd_predictions, per_model_predictions, model_names = predict_and_aggregate_models(X_test, dir_models_and_results)
+        average_predictions, sd_predictions, per_model_predictions, model_names = predict_with_models(X_test, models)
 
         # Convert the predictions to a DataFrame (rounded to 2 decimal places)
-        gene_names = load_gene_list(dir_models_and_results)
         # prediction = pd.DataFrame(np.round(average_predictions, 2), index=coords, columns=gene_names)
         # prediction = prediction.reset_index(names="coords")
 
@@ -259,5 +261,10 @@ def infer(
 
         saved_paths.append(out_path)
 
+    from gutdecoder.utils.provenance import write_manifest
+    write_manifest(Path(out_dir) / "inference_manifest.json",
+                   {"model_directory": dir_models_and_results, "training_config": args_dict,
+                    "model_names": list(models)},
+                   [config_path, *sample_paths, *Path(dir_models_and_results).glob("*/model.pkl")])
     logger.info(f"Finished processing {len(sample_paths)} sample(s)")
     return saved_paths

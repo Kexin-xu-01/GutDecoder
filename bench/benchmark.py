@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from pathlib import Path
 from operator import itemgetter
 from typing import Callable, List, Optional, Tuple
 from dataclasses import dataclass, asdict, field
@@ -19,6 +20,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from tqdm import tqdm
 import joblib
+import h5py
 
 from gutdecoder.bench.cpath_model_zoo.inference_models import (
     CustomInferenceEncoder, InferenceEncoder, inf_encoder_factory)
@@ -231,148 +233,6 @@ def get_bench_weights(weights_root, name):
     else:
         raise ValueError(f"Please specify the weights path to {name} in {local_ckpt_registry}")
 
-def predict_single_split(train_split, test_split, args, save_dir, dataset_name, model_name, device, bench_data_root, custom_encoder, extract_tiles):
-    """ Predict a single split for a single model """
-
-    if not os.path.isfile(train_split):
-        train_split = os.path.join(bench_data_root, 'splits', train_split)
-    if not os.path.isfile(test_split):
-        test_split = os.path.join(bench_data_root, 'splits', test_split)
-    
-    train_df = pd.read_csv(train_split)
-    test_df = pd.read_csv(test_split)
-    
-    embedding_dir = os.path.join(get_path(args.embed_dataroot), dataset_name, model_name)
-    os.makedirs(embedding_dir, exist_ok=True)
-    
-    # Embed patches
-    logger.info(f"Embedding tiles for {dataset_name} using {model_name} encoder")
-    weights_path = get_bench_weights(args.weights_root, model_name)
-    if model_name == 'custom_encoder':
-        encoder = custom_encoder
-        args.overwrite = True # always overwrite custom encoders
-    else:
-        encoder: InferenceEncoder = inf_encoder_factory(model_name)(weights_path)
-    precision = encoder.precision
-    
-    for split in [train_df, test_df]:
-        for i in tqdm(range(len(split))):
-            sample_id = split.iloc[i]['sample_id']
-            tile_h5_path = os.path.join(bench_data_root, split.iloc[i]['patches_path'])
-            assert os.path.isfile(tile_h5_path)
-            embed_path = os.path.join(embedding_dir, f'{sample_id}.h5')
-            if extract_tiles: 
-                if not os.path.isfile(embed_path) or args.overwrite:
-                    
-                    _ = encoder.eval()
-                    encoder.to(device)
-
-                    tile_dataset = H5PatchDataset(tile_h5_path, img_transform=encoder.eval_transforms)
-                    tile_dataloader = torch.utils.data.DataLoader(tile_dataset,
-                                                            batch_size=args.batch_size,
-                                                            shuffle=False,
-                                                            num_workers=args.num_workers)
-                    
-                    _ = embed_tiles(tile_dataloader, encoder, embed_path, device, precision)
-                else:
-                    logger.info(f"Skipping {sample_id} as it already exists")
-
-
-    with open(os.path.join(save_dir, 'config.json'), 'w') as f:
-        json.dump(vars(args), f, sort_keys=True, indent=4)
-
-    
-    # load and gather all data
-    all_split_assets = {}
-    
-    gene_list = args.gene_list
-
-    print(f'using gene_list {gene_list}')
-    with open(os.path.join(bench_data_root, gene_list), 'r') as f:
-        genes = json.load(f)['genes']
-
-    test_sample_ids = []
-    test_sample_barcodes = []
-
-    for split_key, split in zip(['train', 'test'], [train_df, test_df]):
-        split_assets = {}
-        for i in tqdm(range(len(split))):
-            sample_id = split.iloc[i]['sample_id']
-            embed_path = os.path.join(embedding_dir, f'{sample_id}.h5')
-            expr_path = os.path.join(bench_data_root, split.iloc[i]['expr_path'])
-            assets, _ = read_assets_from_h5(embed_path)
-            _raw_bc = assets.get("barcodes")
-            barcodes = _raw_bc.flatten().astype(str).tolist() if _raw_bc is not None else None
-            adata = load_adata(expr_path, genes=genes, barcodes=barcodes, normalize=args.normalize, library_size_normalize=args.library_size_normalize)
-            assets['adata'] = adata.values
-            split_assets = merge_dict(split_assets, assets)
-
-            if split_key == 'test':
-                test_sample_ids.append(sample_id)
-                test_sample_barcodes.append(barcodes)
-
-        for key, val in split_assets.items(): 
-            split_assets[key] = np.concatenate(val, axis=0)
-        
-        all_split_assets[split_key] = split_assets  
-        logger.info(f"Loaded {split_key} split with {len(split_assets['embeddings'])} samples: {split_assets['embeddings'].shape}")
-    
-    X_train, y_train = all_split_assets['train']['embeddings'], all_split_assets['train']['adata']
-    X_test, y_test = all_split_assets['test']['embeddings'], all_split_assets['test']['adata']
-    
-    model_bundle ={}
-
-    if args.dimreduce == 'PCA':
-        from sklearn.decomposition import PCA
-        
-        print('perform PCA dim reduction')
-        pipe = Pipeline([('scaler', StandardScaler()), (f'PCA', PCA(n_components=args.latent_dim, random_state=args.seed))])
-        X_train, X_test = torch.Tensor(pipe.fit_transform(X_train)), torch.Tensor(pipe.transform(X_test))
-        model_bundle["pca_pipeline"] = pipe
-
-      
-    probe_results, linprobe_dump, reg = train_test_reg(X_train, X_test, y_train, y_test, random_state=args.seed, genes=genes, method=args.method)
-    
-    # ----- NEW: stash per-sample barcode metadata so viz can align preds_all without re-deriving ----- 
-    linprobe_dump['test_sample_ids'] = test_sample_ids
-    linprobe_dump['test_sample_barcodes'] = test_sample_barcodes    
-
-
-    model_bundle["regression_model"] = reg
-
-    model_path = os.path.join(save_dir, "model.pkl")
-    joblib.dump(model_bundle, model_path)
-
-    print(f"Model (and scaler + PCA if used) saved in '{model_path}'")
-
-    
-    probe_summary = {}
-    probe_summary.update({'n_train': len(y_train), 'n_test': len(y_test)})
-    probe_summary.update({key: val for key, val in probe_results.items()})
-    #logger.info(probe_summary)
-    with open(os.path.join(save_dir, f'results.json'), 'w') as f:
-        json.dump(probe_results, f, sort_keys=True, indent=4)
-    with open(os.path.join(save_dir, f'summary.json'), 'w') as f:
-        json.dump(probe_summary, f, sort_keys=True, indent=4)
-    save_pkl(os.path.join(save_dir, f'inference_dump.pkl'), linprobe_dump)
-    return probe_results
-
-import os
-import json
-import h5py
-import joblib
-import numpy as np
-import pandas as pd
-import torch
-
-from tqdm import tqdm
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
-
-## ---- add slide embedding ----
-
-
-
 def _read_single_slide_embedding(slide_h5_path, preferred_keys=("embeddings", "features", "feature")):
     """
     Read a slide-level h5 containing one feature vector.
@@ -464,138 +324,46 @@ def _fuse_tile_and_slide_assets(
 
 
 def predict_single_split_tile_slide_fusion(
-    train_split,
-    test_split,
-    args,
-    save_dir,
-    dataset_name,
-    model_name,
-    device,
-    bench_data_root,
-    custom_encoder,
-    extract_tiles,
-    slide_emb_root,
-    fusion="concat",
+    train_split, test_split, args, save_dir, dataset_name, model_name, device,
+    bench_data_root, custom_encoder, extract_tiles, slide_emb_root, fusion="concat",
 ):
-    """
-    Predict a single split using fused tile-level and slide-level embeddings.
-
-    Main difference from predict_single_split:
-        - tile-level H5:
-            contains barcodes + per-tile embeddings
-        - slide-level H5:
-            contains one feature vector per slide/sample
-        - for each barcode/tile:
-            fused_embedding = concat(tile_embedding, slide_embedding)
-
-    Parameters
-    ----------
-    slide_emb_root : str
-
-        /project/gutdecoder/kxu/xenium/he/xenium/trident_processed/hest/20x_512px_0px_overlap/slide_features_titan
+    """Compatibility entry point for tile + slide feature concatenation."""
+    return predict_single_split(
+        train_split, test_split, args, save_dir, dataset_name, model_name, device,
+        bench_data_root, custom_encoder, extract_tiles, slide_emb_root, fusion,
+        _legacy_fusion_schema=True,
+    )
 
 
-    fusion : str
-        Currently only "concat".
-    """
+def merge_fold_results(arr):
+    aggr_dict = {}
+    for dict in arr:
+        for item in dict['pearson_corrs']:
+            gene_name = item['name']
+            correlation = item['pearson_corr']
+            aggr_dict[gene_name] = aggr_dict.get(gene_name, []) + [correlation]
+    
+    aggr_results = []
+    all_corrs = []
+    for key, value in aggr_dict.items():
+        aggr_results.append({
+            "name": key,
+            "pearson_corrs": value,
+            "mean": np.mean(value),
+            "std": np.std(value)
+        })
+        all_corrs += value
+        
+    mean_per_split = [d['pearson_mean'] for d in arr]    
+        
+    return {"pearson_corrs": aggr_results, "pearson_mean": np.mean(mean_per_split), "pearson_std": np.std(mean_per_split), "mean_per_split": mean_per_split}
 
-    # -------------------------
-    # Resolve split paths
-    # -------------------------
-    if not os.path.isfile(train_split):
-        train_split = os.path.join(bench_data_root, "splits", train_split)
-    if not os.path.isfile(test_split):
-        test_split = os.path.join(bench_data_root, "splits", test_split)
-
-    train_df = pd.read_csv(train_split)
-    test_df = pd.read_csv(test_split)
-
-    # -------------------------
-    # Tile embedding directory
-    # -------------------------
-    embedding_dir = os.path.join(args.embed_dataroot, dataset_name, model_name)
-    os.makedirs(embedding_dir, exist_ok=True)
-
-    # -------------------------
-    # Embed patches if requested
-    # -------------------------
-    logger.info(f"Embedding tiles for {dataset_name} using {model_name} encoder")
-
-    weights_path = get_bench_weights(args.weights_root, model_name)
-
-    if model_name == "custom_encoder":
-        encoder = custom_encoder
-        args.overwrite = True
-    else:
-        encoder: InferenceEncoder = inf_encoder_factory(model_name)(weights_path)
-
-    precision = encoder.precision
-
-    for split in [train_df, test_df]:
-        for i in tqdm(range(len(split))):
-            sample_id = split.iloc[i]["sample_id"]
-
-            tile_h5_path = os.path.join(bench_data_root, split.iloc[i]["patches_path"])
-            assert os.path.isfile(tile_h5_path), f"Missing tile H5: {tile_h5_path}"
-
-            embed_path = os.path.join(embedding_dir, f"{sample_id}.h5")
-
-            if extract_tiles:
-                if not os.path.isfile(embed_path) or args.overwrite:
-                    _ = encoder.eval()
-                    encoder.to(device)
-
-                    tile_dataset = H5PatchDataset(
-                        tile_h5_path,
-                        img_transform=encoder.eval_transforms,
-                    )
-
-                    tile_dataloader = torch.utils.data.DataLoader(
-                        tile_dataset,
-                        batch_size=args.batch_size,
-                        shuffle=False,
-                        num_workers=args.num_workers,
-                    )
-
-                    _ = embed_tiles(
-                        tile_dataloader,
-                        encoder,
-                        embed_path,
-                        device,
-                        precision,
-                    )
-                else:
-                    logger.info(f"Skipping {sample_id} as it already exists")
-
-    # -------------------------
-    # Save config
-    # -------------------------
-    os.makedirs(save_dir, exist_ok=True)
-
-    config_dict = vars(args).copy()
-    config_dict["slide_emb_root"] = slide_emb_root
-    config_dict["fusion"] = fusion
-
-    with open(os.path.join(save_dir, "config.json"), "w") as f:
-        json.dump(config_dict, f, sort_keys=True, indent=4)
-
-    # -------------------------
-    # Load gene list
-    # -------------------------
+def _load_split_assets(train_df, test_df, args, bench_data_root, embedding_dir,
+                       genes, slide_emb_root, fusion):
+    """Load expression and embeddings in the legacy sample/barcode order."""
+    use_slide_embedding = slide_emb_root is not None
     all_split_assets = {}
-
-    gene_list = args.gene_list
-    print(f"using gene_list {gene_list}")
-
-    with open(os.path.join(bench_data_root, gene_list), "r") as f:
-        genes = json.load(f)["genes"]
-
-    test_sample_ids = []
-    test_sample_barcodes = []
-
-    # -------------------------
-    # Load tile + slide embeddings and expression
-    # -------------------------
+    test_sample_ids, test_sample_barcodes = [], []
     for split_key, split in zip(["train", "test"], [train_df, test_df]):
         split_assets = {}
 
@@ -605,27 +373,34 @@ def predict_single_split_tile_slide_fusion(
             embed_path = os.path.join(embedding_dir, f"{sample_id}.h5")
             expr_path = os.path.join(bench_data_root, split.iloc[i]["expr_path"])
 
-            slide_h5_path = os.path.join(
-                slide_emb_root,
-                f"{sample_id}.h5",
-            )
-
             if not os.path.isfile(embed_path):
                 raise FileNotFoundError(f"Missing tile embedding H5: {embed_path}")
-
-            if not os.path.isfile(slide_h5_path):
-                raise FileNotFoundError(f"Missing slide embedding H5: {slide_h5_path}")
 
             # Tile-level H5 assets
             assets, _ = read_assets_from_h5(embed_path)
 
-            # Fuse tile-level and slide-level features
-            assets = _fuse_tile_and_slide_assets(
-                tile_assets=assets,
-                slide_h5_path=slide_h5_path,
-                sample_id=sample_id,
-                fusion=fusion,
-            )
+            # Optional slide-level fusion
+            if use_slide_embedding:
+                slide_h5_path = os.path.join(
+                    slide_emb_root,
+                    f"{sample_id}.h5",
+                )
+
+                if not os.path.isfile(slide_h5_path):
+                    raise FileNotFoundError(
+                        f"Missing slide embedding H5 for {sample_id}: {slide_h5_path}"
+                    )
+
+                assets = _fuse_tile_and_slide_assets(
+                    tile_assets=assets,
+                    slide_h5_path=slide_h5_path,
+                    sample_id=sample_id,
+                    fusion=fusion,
+                )
+            else:
+                # Keep this for consistent downstream debugging.
+                # The actual model still uses assets["embeddings"] only.
+                pass  # Alias assigned after concatenation to avoid a second copy.
 
             _raw_bc = assets.get("barcodes")
             barcodes = _raw_bc.flatten().astype(str).tolist() if _raw_bc is not None else None
@@ -639,6 +414,11 @@ def predict_single_split_tile_slide_fusion(
             )
 
             assets["adata"] = adata.values
+            if use_slide_embedding:
+                # Diagnostic views can be reconstructed from fused features after
+                # concatenation, avoiding two additional full-size allocations.
+                tile_width = assets.pop("tile_embeddings").shape[1]
+                assets.pop("slide_embeddings")
 
             split_assets = merge_dict(split_assets, assets)
 
@@ -649,6 +429,11 @@ def predict_single_split_tile_slide_fusion(
         for key, val in split_assets.items():
             split_assets[key] = np.concatenate(val, axis=0)
 
+        if use_slide_embedding:
+            split_assets["tile_embeddings"] = split_assets["embeddings"][:, :tile_width]
+            split_assets["slide_embeddings"] = split_assets["embeddings"][:, tile_width:]
+        else:
+            split_assets["tile_embeddings"] = split_assets["embeddings"]
         all_split_assets[split_key] = split_assets
 
         logger.info(
@@ -657,22 +442,35 @@ def predict_single_split_tile_slide_fusion(
             f"{split_assets['embeddings'].shape}"
         )
 
-        logger.info(
-            f"{split_key} tile embeddings: "
-            f"{split_assets['tile_embeddings'].shape}; "
-            f"slide embeddings repeated: "
-            f"{split_assets['slide_embeddings'].shape}"
-        )
+        if use_slide_embedding:
+            logger.info(
+                f"{split_key} tile embeddings: "
+                f"{split_assets['tile_embeddings'].shape}; "
+                f"slide embeddings repeated: "
+                f"{split_assets['slide_embeddings'].shape}; "
+                f"fused embeddings: "
+                f"{split_assets['embeddings'].shape}"
+            )
+        else:
+            logger.info(
+                f"{split_key} tile-only embeddings: "
+                f"{split_assets['embeddings'].shape}"
+            )
 
-    # -------------------------
-    # Train/test arrays
-    # -------------------------
-    X_train = all_split_assets["train"]["embeddings"]
-    y_train = all_split_assets["train"]["adata"]
+    return all_split_assets, test_sample_ids, test_sample_barcodes
 
-    X_test = all_split_assets["test"]["embeddings"]
-    y_test = all_split_assets["test"]["adata"]
 
+def _extract_sample_embeddings(tile_h5_path, embed_path, encoder, args, device):
+    """Extract one sample using the existing transforms, order, and precision."""
+    dataset = H5PatchDataset(tile_h5_path, img_transform=encoder.eval_transforms)
+    loader = torch.utils.data.DataLoader(
+        dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers,
+    )
+    return embed_tiles(loader, encoder, embed_path, device, encoder.precision)
+
+
+def _fit_split(X_train, X_test, y_train, y_test, args, genes):
+    """Fit preprocessing on training rows only, then fit the existing regressor."""
     model_bundle = {}
 
     # -------------------------
@@ -714,64 +512,9 @@ def predict_single_split_tile_slide_fusion(
         method=args.method,
     )
 
-    # Keep metadata for visualization alignment
-    linprobe_dump["test_sample_ids"] = test_sample_ids
-    linprobe_dump["test_sample_barcodes"] = test_sample_barcodes
-
-    # Also record fusion info
-    linprobe_dump["fusion"] = fusion
-    linprobe_dump["slide_emb_root"] = slide_emb_root
-
     model_bundle["regression_model"] = reg
-    model_bundle["fusion"] = fusion
-    model_bundle["slide_emb_root"] = slide_emb_root
+    return probe_results, linprobe_dump, model_bundle, X_train, X_test
 
-    model_path = os.path.join(save_dir, "model.pkl")
-    joblib.dump(model_bundle, model_path)
-
-    print(f"Model saved in '{model_path}'")
-    print(f"Fused train shape: {X_train.shape}")
-    print(f"Fused test shape: {X_test.shape}")
-
-    # -------------------------
-    # Save outputs
-    # -------------------------
-    probe_summary = {}
-    probe_summary.update({"n_train": len(y_train), "n_test": len(y_test)})
-    probe_summary.update({key: val for key, val in probe_results.items()})
-
-    with open(os.path.join(save_dir, "results.json"), "w") as f:
-        json.dump(probe_results, f, sort_keys=True, indent=4)
-
-    with open(os.path.join(save_dir, "summary.json"), "w") as f:
-        json.dump(probe_summary, f, sort_keys=True, indent=4)
-
-    save_pkl(os.path.join(save_dir, "inference_dump.pkl"), linprobe_dump)
-
-    return probe_results
-
-def merge_fold_results(arr):
-    aggr_dict = {}
-    for dict in arr:
-        for item in dict['pearson_corrs']:
-            gene_name = item['name']
-            correlation = item['pearson_corr']
-            aggr_dict[gene_name] = aggr_dict.get(gene_name, []) + [correlation]
-    
-    aggr_results = []
-    all_corrs = []
-    for key, value in aggr_dict.items():
-        aggr_results.append({
-            "name": key,
-            "pearson_corrs": value,
-            "mean": np.mean(value),
-            "std": np.std(value)
-        })
-        all_corrs += value
-        
-    mean_per_split = [d['pearson_mean'] for d in arr]    
-        
-    return {"pearson_corrs": aggr_results, "pearson_mean": np.mean(mean_per_split), "pearson_std": np.std(mean_per_split), "mean_per_split": mean_per_split}
 
 def predict_single_split(
     train_split,
@@ -786,6 +529,8 @@ def predict_single_split(
     extract_tiles,
     slide_emb_root=None,
     fusion="concat",
+    *,
+    _legacy_fusion_schema=False,
 ):
     """
     Predict a single split.
@@ -838,51 +583,25 @@ def predict_single_split(
     # -------------------------
     logger.info(f"Embedding tiles for {dataset_name} using {model_name} encoder")
 
-    weights_path = get_bench_weights(args.weights_root, model_name)
-
     if model_name == "custom_encoder":
-        encoder = custom_encoder
         args.overwrite = True
-    else:
-        encoder: InferenceEncoder = inf_encoder_factory(model_name)(weights_path)
-
-    precision = encoder.precision
-
-    for split in [train_df, test_df]:
-        for i in tqdm(range(len(split))):
-            sample_id = split.iloc[i]["sample_id"]
-
-            tile_h5_path = os.path.join(bench_data_root, split.iloc[i]["patches_path"])
+    encoder = None
+    for split in (train_df, test_df):
+        for row in split.itertuples(index=False):
+            tile_h5_path = os.path.join(bench_data_root, row.patches_path)
             assert os.path.isfile(tile_h5_path), f"Missing tile H5: {tile_h5_path}"
-
-            embed_path = os.path.join(embedding_dir, f"{sample_id}.h5")
-
-            if extract_tiles:
-                if not os.path.isfile(embed_path) or args.overwrite:
-                    _ = encoder.eval()
-                    encoder.to(device)
-
-                    tile_dataset = H5PatchDataset(
-                        tile_h5_path,
-                        img_transform=encoder.eval_transforms,
-                    )
-
-                    tile_dataloader = torch.utils.data.DataLoader(
-                        tile_dataset,
-                        batch_size=args.batch_size,
-                        shuffle=False,
-                        num_workers=args.num_workers,
-                    )
-
-                    _ = embed_tiles(
-                        tile_dataloader,
-                        encoder,
-                        embed_path,
-                        device,
-                        precision,
-                    )
-                else:
-                    logger.info(f"Skipping {sample_id} as it already exists")
+            embed_path = os.path.join(embedding_dir, f"{row.sample_id}.h5")
+            if not extract_tiles:
+                continue
+            if os.path.isfile(embed_path) and not args.overwrite:
+                logger.info(f"Skipping {row.sample_id} as it already exists")
+                continue
+            if encoder is None:
+                encoder = (custom_encoder if model_name == "custom_encoder" else
+                           inf_encoder_factory(model_name)(get_bench_weights(args.weights_root, model_name)))
+                encoder.eval()
+                encoder.to(device)
+            _extract_sample_embeddings(tile_h5_path, embed_path, encoder, args, device)
 
     # -------------------------
     # Save config
@@ -891,7 +610,8 @@ def predict_single_split(
 
     config_dict = vars(args).copy()
     config_dict["slide_emb_root"] = slide_emb_root
-    config_dict["use_slide_embedding"] = use_slide_embedding
+    if not _legacy_fusion_schema:
+        config_dict["use_slide_embedding"] = use_slide_embedding
     config_dict["fusion"] = fusion if use_slide_embedding else None
 
     with open(os.path.join(save_dir, "config.json"), "w") as f:
@@ -900,102 +620,18 @@ def predict_single_split(
     # -------------------------
     # Load gene list
     # -------------------------
-    all_split_assets = {}
-
     gene_list = args.gene_list
     print(f"using gene_list {gene_list}")
 
     with open(os.path.join(bench_data_root, gene_list), "r") as f:
         genes = json.load(f)["genes"]
 
-    test_sample_ids = []
-    test_sample_barcodes = []
-
     # -------------------------
     # Load embeddings and expression
     # -------------------------
-    for split_key, split in zip(["train", "test"], [train_df, test_df]):
-        split_assets = {}
-
-        for i in tqdm(range(len(split))):
-            sample_id = split.iloc[i]["sample_id"]
-
-            embed_path = os.path.join(embedding_dir, f"{sample_id}.h5")
-            expr_path = os.path.join(bench_data_root, split.iloc[i]["expr_path"])
-
-            if not os.path.isfile(embed_path):
-                raise FileNotFoundError(f"Missing tile embedding H5: {embed_path}")
-
-            # Tile-level H5 assets
-            assets, _ = read_assets_from_h5(embed_path)
-
-            # Optional slide-level fusion
-            if use_slide_embedding:
-                slide_h5_path = os.path.join(
-                    slide_emb_root,
-                    f"{sample_id}.h5",
-                )
-
-                if not os.path.isfile(slide_h5_path):
-                    raise FileNotFoundError(
-                        f"Missing slide embedding H5 for {sample_id}: {slide_h5_path}"
-                    )
-
-                assets = _fuse_tile_and_slide_assets(
-                    tile_assets=assets,
-                    slide_h5_path=slide_h5_path,
-                    sample_id=sample_id,
-                    fusion=fusion,
-                )
-            else:
-                # Keep this for consistent downstream debugging.
-                # The actual model still uses assets["embeddings"] only.
-                assets["tile_embeddings"] = assets["embeddings"]
-
-            _raw_bc = assets.get("barcodes")
-            barcodes = _raw_bc.flatten().astype(str).tolist() if _raw_bc is not None else None
-
-            adata = load_adata(
-                expr_path,
-                genes=genes,
-                barcodes=barcodes,
-                normalize=args.normalize,
-                library_size_normalize=args.library_size_normalize,
-            )
-
-            assets["adata"] = adata.values
-
-            split_assets = merge_dict(split_assets, assets)
-
-            if split_key == "test":
-                test_sample_ids.append(sample_id)
-                test_sample_barcodes.append(barcodes)
-
-        for key, val in split_assets.items():
-            split_assets[key] = np.concatenate(val, axis=0)
-
-        all_split_assets[split_key] = split_assets
-
-        logger.info(
-            f"Loaded {split_key} split with "
-            f"{len(split_assets['embeddings'])} samples: "
-            f"{split_assets['embeddings'].shape}"
-        )
-
-        if use_slide_embedding:
-            logger.info(
-                f"{split_key} tile embeddings: "
-                f"{split_assets['tile_embeddings'].shape}; "
-                f"slide embeddings repeated: "
-                f"{split_assets['slide_embeddings'].shape}; "
-                f"fused embeddings: "
-                f"{split_assets['embeddings'].shape}"
-            )
-        else:
-            logger.info(
-                f"{split_key} tile-only embeddings: "
-                f"{split_assets['embeddings'].shape}"
-            )
+    all_split_assets, test_sample_ids, test_sample_barcodes = _load_split_assets(
+        train_df, test_df, args, bench_data_root, embedding_dir, genes, slide_emb_root, fusion,
+    )
 
     # -------------------------
     # Train/test arrays
@@ -1006,45 +642,8 @@ def predict_single_split(
     X_test = all_split_assets["test"]["embeddings"]
     y_test = all_split_assets["test"]["adata"]
 
-    model_bundle = {}
-
-    # -------------------------
-    # Optional PCA
-    # -------------------------
-    if args.dimreduce == "PCA":
-        from sklearn.decomposition import PCA
-
-        print("perform PCA dim reduction")
-
-        pipe = Pipeline(
-            [
-                ("scaler", StandardScaler()),
-                (
-                    "PCA",
-                    PCA(
-                        n_components=args.latent_dim,
-                        random_state=args.seed,
-                    ),
-                ),
-            ]
-        )
-
-        X_train = torch.Tensor(pipe.fit_transform(X_train))
-        X_test = torch.Tensor(pipe.transform(X_test))
-
-        model_bundle["pca_pipeline"] = pipe
-
-    # -------------------------
-    # Regression
-    # -------------------------
-    probe_results, linprobe_dump, reg = train_test_reg(
-        X_train,
-        X_test,
-        y_train,
-        y_test,
-        random_state=args.seed,
-        genes=genes,
-        method=args.method,
+    probe_results, linprobe_dump, model_bundle, X_train, X_test = _fit_split(
+        X_train, X_test, y_train, y_test, args, genes,
     )
 
     # Keep metadata for visualization alignment
@@ -1052,12 +651,13 @@ def predict_single_split(
     linprobe_dump["test_sample_barcodes"] = test_sample_barcodes
 
     # Record whether slide fusion was used
-    linprobe_dump["use_slide_embedding"] = use_slide_embedding
+    if not _legacy_fusion_schema:
+        linprobe_dump["use_slide_embedding"] = use_slide_embedding
     linprobe_dump["slide_emb_root"] = slide_emb_root
     linprobe_dump["fusion"] = fusion if use_slide_embedding else None
 
-    model_bundle["regression_model"] = reg
-    model_bundle["use_slide_embedding"] = use_slide_embedding
+    if not _legacy_fusion_schema:
+        model_bundle["use_slide_embedding"] = use_slide_embedding
     model_bundle["slide_emb_root"] = slide_emb_root
     model_bundle["fusion"] = fusion if use_slide_embedding else None
 
@@ -1087,6 +687,9 @@ def predict_single_split(
         json.dump(probe_summary, f, sort_keys=True, indent=4)
 
     save_pkl(os.path.join(save_dir, "inference_dump.pkl"), linprobe_dump)
+    from gutdecoder.utils.provenance import write_manifest
+    write_manifest(Path(save_dir) / "benchmark_manifest.json", config_dict,
+                   [train_split, test_split, Path(bench_data_root) / gene_list])
 
     return probe_results
 

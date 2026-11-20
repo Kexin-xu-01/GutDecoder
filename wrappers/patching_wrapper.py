@@ -1,6 +1,9 @@
 import pandas as pd
 import h5py
 from pathlib import Path
+import json
+import tempfile
+from gutdecoder.utils.artifacts import patch_is_complete
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 from PIL import Image
@@ -79,6 +82,7 @@ def patch_hest_samples(
           tissue_seg/                 (optional; used as mask if present)
     """
     root = Path(root)
+    settings = dict(target_patch_size=target_patch_size, target_pixel_size=target_pixel_size, threshold=threshold)
 
     # auto-detect sample IDs (folder names)
     if ids is None:
@@ -95,11 +99,10 @@ def patch_hest_samples(
             print(f"[WARN] Skipping {sample_id}: folder does not exist at {sample_dir}")
             continue
 
-     # --- skip if any patch .h5 already exists under the sample (e.g. ROI/*/patches/*.h5) ---
-        existing_patch_files = list(sample_dir.glob("**/patches/*.h5"))
-        if existing_patch_files:
+        patch_path = sample_dir / "patches" / f"{sample_id}.h5"
+        if patch_is_complete(patch_path, settings):
             if verbose:
-                print(f"[INFO] Skipping {sample_id}: found existing patch files ({len(existing_patch_files)}) — e.g. {existing_patch_files[0]}")
+                print(f"[INFO] Skipping {sample_id}: validated existing patch file {patch_path}")
             continue
 
         try:
@@ -133,7 +136,25 @@ def patch_hest_samples(
                 threshold=threshold,
             )
 
-            st.dump_patches(**dump_kwargs)
+            # Publish only a complete HDF5 file. Temporary data live on the same
+            # filesystem so replacement is atomic and existing outputs survive failures.
+            with tempfile.TemporaryDirectory(prefix=".patch-", dir=sample_patches_dir) as staging:
+                dump_kwargs["patch_save_dir"] = staging
+                st.dump_patches(**dump_kwargs)
+                staged_patch = Path(staging) / f"{sample_id}.h5"
+                # Preserve the public output location in TRIDENT metadata.
+                with h5py.File(staged_patch, "r+") as handle:
+                    if "coords" in handle and "savetodir" in handle["coords"].attrs:
+                        handle["coords"].attrs["savetodir"] = str(sample_patches_dir)
+                if not patch_is_complete(staged_patch, settings):
+                    raise ValueError(f"Incomplete patch output: {staged_patch}")
+                staged_patch.replace(patch_save_path)
+                staged_vis = Path(staging) / f"{sample_id}_patch_vis.png"
+                if staged_vis.exists():
+                    staged_vis.replace(vis_save_path)
+                patch_save_path.with_suffix(".complete.json").write_text(
+                    json.dumps({"settings": settings}, sort_keys=True) + "\n"
+                )
 
             # Move visualization into sample's patches_vis
             default_vis_path = sample_patches_dir / f"{sample_id}_patch_vis.png"

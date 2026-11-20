@@ -16,31 +16,15 @@ import scanpy as sc
 # --- HEST ---
 from hest import iter_hest
 from hest.utils import get_k_genes
-from hest.HESTData import create_splits
+from gutdecoder.utils.split_plan import create_legacy_splits as create_splits
+from gutdecoder.utils.split_plan import round_robin_plan, write_plan
 
 from gutdecoder.config import HEST_METADATA_CSV as _DEFAULT_METADATA_CSV
 from loguru import logger
 
 
 # ---------- helpers ----------
-def coerce_bool(x) -> bool:
-    if isinstance(x, bool):
-        return x
-    if isinstance(x, (int, float)):
-        return bool(x)
-    return str(x).lower() not in ("0", "false", "no", "none", "")
-
-
-def _int_or_str_lower(val):
-    """Return val as int if possible, otherwise as lowercased str. Keeps None as-is."""
-    if val is None:
-        return None
-    if isinstance(val, int):
-        return val
-    try:
-        return int(val)
-    except (ValueError, TypeError):
-        return str(val).lower()
+from gutdecoder.utils.workflow_config import coerce_bool, _int_or_str_lower
 
 
 def _sanitize_tag(s: str, maxlen: int = 8) -> str:
@@ -579,39 +563,9 @@ def create_benchmark_data_multislide(
     splits_dir = save_dir / "splits"
     splits_dir.mkdir(parents=True, exist_ok=True)
 
-    # Use HEST create_splits for compatibility (this will write the HEST-native split files)
-    try:
-        create_splits(str(splits_dir), group, K=int(K))
-        logger.info(f"Wrote {K}-fold splits to {splits_dir} (via create_splits)")
-    except Exception as e:
-        logger.warning(f"create_splits raised: {e} — continuing and will write CSV splits manually.")
-
-    # Additionally write train_i.csv / test_i.csv with patient and paths (3/4 column format)
-    # If create_splits produced fold files we could read them; to be robust we simply generate folds ourselves
-    # Make an ordered list of group keys, shuffle deterministically and assign groups to folds round-robin
-    group_keys = list(group.keys())
-    rng.shuffle(group_keys)
-    folds = [[] for _ in range(int(K))]
-    for i, gk in enumerate(group_keys):
-        folds[i % int(K)].extend(group[gk])
-
-    def make_df_rows(sample_list: List[str]) -> pd.DataFrame:
-        df = pd.DataFrame({"sample_id": sample_list})
-        df = df.merge(meta[["id", "patient"]].rename(columns={"id": "sample_id"}), on="sample_id", how="left")
-        df["patches_path"] = df["sample_id"].apply(lambda x: f"patches/{x}.h5")
-        df["expr_path"] = df["sample_id"].apply(lambda x: f"adata/{x}.h5ad")
-        return df[["sample_id", "patient", "patches_path", "expr_path"]]
-
-    for i in range(int(K)):
-        test_samples = sorted(set(folds[i]))
-        train_samples = sorted(set(sum([folds[j] for j in range(int(K)) if j != i], [])))
-
-        df_train = make_df_rows(train_samples)
-        df_test = make_df_rows(test_samples)
-
-        df_train.to_csv(splits_dir / f"train_{i}.csv", index=False, sep=",")
-        df_test.to_csv(splits_dir / f"test_{i}.csv", index=False, sep=",")
-        logger.info(f"Wrote split CSVs: train_{i}.csv ({len(df_train)} rows), test_{i}.csv ({len(df_test)} rows)")
+    # Plan once, preserving the final CSV assignment and ordering from legacy runs.
+    plan = round_robin_plan(group, int(K), rng)
+    write_plan(splits_dir, plan, meta)
 
     # Write per-patient metadata CSV
     per_patient = (
