@@ -59,7 +59,7 @@ def load_hest_sample(sample_dir: Path):
     return st
 
 def patch_hest_samples(
-    root: Path = Path("/project/simmons_hts/kxu/hest/xenium_data/broad/"),
+    root: Path = Path("/project/gutdecoder/kxu/hest/xenium_data/broad/"),
     ids=None,
     target_patch_size: int = 224,
     target_pixel_size: float = 0.5,

@@ -62,9 +62,9 @@ def apply_qc_patch(
 
             if not percent_top_filtered:
                 if fallback is None:
-                    kwargs.pop("percent_top", None)
+                    kwargs["percent_top"] = None
                     logger.info(
-                        "QC patch: n_vars=%d too small; disabling percent_top.",
+                        "QC patch: n_vars=%d too small; disabling percent_top.", 
                         n_vars,
                     )
                 else:
