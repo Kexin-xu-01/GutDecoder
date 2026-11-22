@@ -210,5 +210,29 @@ __marimo__/
 *.pt
 *.csv
 
+# agent tooling and personal config
 .codex-storage/
-stain_norm/.codex-storage/
+.codex/
+.agents/
+.claude/
+.aws/
+.mcp.json
+.gitconfig
+.bashrc
+.bash_profile
+.profile
+.zprofile
+.zshrc
+.ripgreprc
+.idea
+.vscode
+
+# data and model outputs
+*.h5
+*.h5ad
+*.pkl
+*.tif
+*.tiff
+*.svs
+*.czi
+*.zarr/

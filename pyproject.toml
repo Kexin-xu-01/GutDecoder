@@ -1,0 +1,73 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gutdecoder"
+version = "0.1.0"
+description = "Wrapper and extensions around HEST for H&E-to-spatial-transcriptomics benchmarking"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "hest @ git+https://github.com/mahmoodlab/HEST.git",
+    "trident[patch-encoders] @ git+https://github.com/mahmoodlab/TRIDENT.git",
+    "torch",
+    "torchvision",
+    "timm",
+    "transformers",
+    "huggingface_hub",
+    "safetensors",
+    "numpy",
+    "pandas",
+    "scipy",
+    "scikit-learn",
+    "scikit-image",
+    "scanpy",
+    "anndata",
+    "h5py",
+    "dask",
+    "zarr",
+    "pillow",
+    "tifffile",
+    "tiffslide",
+    "openslide-python",
+    "pyvips",
+    "aicsimageio",
+    "torchstain",
+    "matplotlib",
+    "seaborn",
+    "adjustText",
+    "umap-learn",
+    "harmonypy",
+    "xgboost",
+    "pypdf",
+    "reportlab",
+    "loguru",
+    "pyyaml",
+    "tqdm",
+    "joblib",
+    "openpyxl",
+]
+
+[project.optional-dependencies]
+gpu = ["cupy", "cuml", "cucim"]
+test = ["pytest"]
+
+# The repo root is the package itself, so map it explicitly.
+[tool.setuptools]
+package-dir = { "gutdecoder" = "." }
+packages = [
+    "gutdecoder",
+    "gutdecoder.bench",
+    "gutdecoder.bench.cpath_model_zoo",
+    "gutdecoder.inference",
+    "gutdecoder.reader",
+    "gutdecoder.stain_norm",
+    "gutdecoder.utils",
+    "gutdecoder.utils.patch",
+    "gutdecoder.vis",
+    "gutdecoder.wrappers",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
