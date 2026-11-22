@@ -14,7 +14,7 @@ os.environ["TQDM_DISABLE"] = "1"
 
 try:
     import cupy as cp
-except Exception:
+except ImportError:
     cp = None
 
 
@@ -37,24 +37,18 @@ class MLP(nn.Module):
 
 
 def can_use_cuml():
-    if bool(int(os.environ.get("FORCE_CPU", "0"))):
+    """True when the GPU random forest can run; otherwise the sklearn CPU version is used."""
+    if bool(int(os.environ.get("FORCE_CPU", "0"))) or not torch.cuda.is_available():
         return False
     try:
-        if not torch.cuda.is_available():
-            return False
-    except Exception:
+        from cuml.ensemble import RandomForestRegressor  # noqa: F401
+    except ImportError as e:
+        warnings.warn(f"cuML not importable, using CPU random forest: {e}")
         return False
     try:
-        import cuml
-        from cuml.ensemble import RandomForestRegressor  # noqa
-    except Exception as e:
-        warnings.warn(f"cuML import failed: {e}")
-        return False
-    try:
-        import cupy as cp
-        _ = cp.cuda.runtime.getDeviceCount()
-    except Exception as e:
-        warnings.warn(f"CUDA not usable for cuML (driver/runtime issue): {e}")
+        cp.cuda.runtime.getDeviceCount()
+    except cp.cuda.runtime.CUDARuntimeError as e:
+        warnings.warn(f"CUDA not usable for cuML (driver/runtime issue), using CPU random forest: {e}")
         return False
     return True
 
@@ -114,11 +108,8 @@ def _train_rf(X_train, X_test, y_train, random_state):
             y1 = y_tr[:, i].ravel()
             reg_i.fit(X_tr, y1)
             res = reg_i.predict(X_te)
-            try:
-                if cp is not None and isinstance(res, cp.ndarray):
-                    res = cp.asnumpy(res)
-            except Exception:
-                pass
+            if isinstance(res, cp.ndarray):
+                res = cp.asnumpy(res)
             preds_per_target.append(np.asarray(res).ravel())
             regs.append(reg_i)
         return np.column_stack(preds_per_target), regs
@@ -224,17 +215,11 @@ def _compute_metrics(preds_all, y_test, genes=None):
         denom = np.sum((true - np.mean(true)) ** 2)
         r2 = float('nan') if denom == 0 else float(1 - np.sum((true - pred) ** 2) / denom)
 
-        try:
-            pc, _ = pearsonr(true, pred)
-        except Exception:
-            pc = float('nan')
+        pc, _ = pearsonr(true, pred)
         if np.isnan(pc):
             logger.warning(f"NaN pearson for target {i}")
 
-        try:
-            sc, _ = spearmanr(true, pred)
-        except Exception:
-            sc = float('nan')
+        sc, _ = spearmanr(true, pred)
         if np.isnan(sc):
             logger.warning(f"NaN spearman for target {i}")
 

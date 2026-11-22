@@ -1,5 +1,4 @@
 import os
-import traceback
 from abc import abstractmethod
 from typing import Optional, Tuple
 
@@ -44,10 +43,11 @@ def _download_hf_timm_weights(repo_id: str) -> str:
     Tries safetensors first, then falls back to pytorch_model.bin.
     """
     from huggingface_hub import hf_hub_download
+    from huggingface_hub.utils import EntryNotFoundError
     for fname in ("model.safetensors", "pytorch_model.bin"):
         try:
             return hf_hub_download(repo_id=repo_id, filename=fname)
-        except Exception:
+        except EntryNotFoundError:
             continue
     raise RuntimeError(
         f"Could not download weights from {repo_id}. "
@@ -78,15 +78,13 @@ class ConchInferenceEncoder(InferenceEncoder):
 
         try:
             from conch.open_clip_custom import create_model_from_pretrained
-        except:
-            traceback.print_exc()
-            raise Exception("Please install CONCH `pip install git+https://github.com/Mahmoodlab/CONCH.git`")
+        except ImportError as e:
+            raise ImportError("Please install CONCH `pip install git+https://github.com/Mahmoodlab/CONCH.git`") from e
         
         try:
             model, preprocess = create_model_from_pretrained('conch_ViT-B-16', "hf_hub:MahmoodLab/conch")
-        except:
-            traceback.print_exc()
-            raise Exception("Failed to download CONCHv1.5 model, make sure that you were granted access and that you correctly registered your token")
+        except Exception as e:
+            raise RuntimeError("Failed to download CONCH v1 model, make sure that you were granted access and that you correctly registered your token") from e
         
         eval_transform = preprocess
         precision = torch.float32
@@ -96,10 +94,7 @@ class ConchInferenceEncoder(InferenceEncoder):
     def forward(self, x):
         return self.model.encode_image(x, proj_contrast=False, normalize=False)
 
-try:
-    from trident.patch_encoder_models.load import BasePatchEncoder
-except Exception:
-    BasePatchEncoder = InferenceEncoder  # fallback so class definition doesn't crash
+from trident.patch_encoder_models.load import BasePatchEncoder
 
 # redefine. the conchv15 to take weights_path as a second argument
 class Conchv15InferenceEncoder(BasePatchEncoder):
@@ -119,8 +114,6 @@ class Conchv15InferenceEncoder(BasePatchEncoder):
 
     def _build(self, img_size=448):
         from trident.patch_encoder_models.model_zoo.conchv1_5.conchv1_5 import create_model_from_pretrained
-        import traceback, torch
-
         self.enc_name = 'conch_v15'
 
         self.ensure_has_internet(self.enc_name)
@@ -128,9 +121,8 @@ class Conchv15InferenceEncoder(BasePatchEncoder):
             model, eval_transform = create_model_from_pretrained(
                 checkpoint_path="hf_hub:MahmoodLab/conchv1_5", img_size=img_size
             )
-        except Exception:
-            traceback.print_exc()
-            raise Exception("Failed to download CONCH v1.5 model, make sure that you were granted access and that you correctly registered your token")
+        except Exception as e:
+            raise RuntimeError("Failed to download CONCH v1.5 model, make sure that you were granted access and that you correctly registered your token") from e
 
         # set precision according to device availability (optional improvement)
         precision = torch.float16 if torch.cuda.is_available() else torch.float32
@@ -295,9 +287,8 @@ class UNIInferenceEncoder(InferenceEncoder):
         
         try:
             model = timm.create_model("hf-hub:MahmoodLab/uni", pretrained=True, **timm_kwargs)
-        except:
-            traceback.print_exc()
-            raise Exception("Failed to download UNI model, make sure that you were granted access and that you correctly registered your token")
+        except Exception as e:
+            raise RuntimeError("Failed to download UNI model, make sure that you were granted access and that you correctly registered your token") from e
         
         eval_transform = create_transform(**resolve_data_config(model.pretrained_cfg, model=model))
         precision = torch.float16
@@ -306,17 +297,9 @@ class UNIInferenceEncoder(InferenceEncoder):
 
 class UNI2InferenceEncoder(InferenceEncoder):
     def _build(self, weights_path=None, return_cls=True):
-        """
-        Robust loader for MahmoodLab/UNI2-h (ViT-h/14-reg8).
-        Attempts timm HF-hub direct load first; falls back to hf_hub_download + strict load with explicit timm kwargs.
-        Requires an authenticated Hugging Face token for gated model access.
-        """
-        import os
-        import timm
-        import torch
+        """Load MahmoodLab/UNI2-h (ViT-h/14-reg8); needs a Hugging Face token with access to the gated model."""
         from timm.data import resolve_data_config
         from timm.data.transforms_factory import create_transform
-        from huggingface_hub import hf_hub_download, login
 
         # exact timm kwargs recommended by model card
         timm_kwargs = dict(
@@ -335,70 +318,19 @@ class UNI2InferenceEncoder(InferenceEncoder):
             dynamic_img_size=True,
         )
 
-        # Fast path: let timm fetch from HF hub (requires compatible timm version)
         try:
             model = timm.create_model("hf-hub:MahmoodLab/UNI2-h", pretrained=True, **timm_kwargs)
-            eval_transform = create_transform(**resolve_data_config(model.pretrained_cfg, model=model))
-            precision = torch.float16
-            self.return_cls = return_cls
-            return model, eval_transform, precision
-        except Exception as e_fast:
-            # Keep the original exception for debugging
-            fast_exc = e_fast
-
-        # Fallback: download weights manually and load into exact architecture
-        try:
-            # ensure HF token is present; if not, this will raise
-            #login()  # optional: user can call huggingface_hub.login() before running
-            local_dir = os.path.expanduser("~/.cache/uni2h_ckpt")
-            os.makedirs(local_dir, exist_ok=True)
-            # this will raise if the model is gated and user is not authorized
-            local_ckpt = hf_hub_download("MahmoodLab/UNI2-h", filename="pytorch_model.bin", local_dir=local_dir, force_filename="pytorch_model.bin")
-        except Exception as e_hf:
-            # Provide a helpful combined error message
-            traceback.print_exc()
-            raise Exception(
-                "Failed to download UNI2-h weights from Hugging Face. "
-                "Ensure you are logged in and have accepted the model terms & gating on https://huggingface.co/MahmoodLab/UNI2-h. "
-                f"\nFast attempt error: {fast_exc}\nHF download error: {e_hf}"
-            )
-
-        try:
-            model = timm.create_model(pretrained=False, **timm_kwargs)  # note pretrained=False
-            state = torch.load(local_ckpt, map_location="cpu")
-            # model expects a normal state_dict; if the HF file contains 'model' key wrap accordingly
-            if isinstance(state, dict) and "model" in state and isinstance(state["model"], dict):
-                state_dict = state["model"]
-            else:
-                state_dict = state
-            model.load_state_dict(state_dict, strict=True)
-            try:
-                eval_transform = create_transform(**resolve_data_config(model.pretrained_cfg, model=model))
-            except Exception:
-                from torchvision import transforms
-                eval_transform = transforms.Compose([
-                    transforms.Resize(224),
-                    transforms.ToTensor(),
-                    transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-                ])
-
-            precision = torch.float16
-            self.return_cls = return_cls
-            return model, eval_transform, precision
-
-        except Exception as e_load:
-            traceback.print_exc()
-            raise Exception(
-                "Failed to build UNI2-h model architecture and load the checkpoint. "
-                "This may be due to an incompatible timm version or a corrupted checkpoint. See inner exceptions."
-                f"\nFast attempt error: {fast_exc}\nLoad fallback error: {e_load}"
-            )
+        except Exception as e:
+            raise RuntimeError(
+                "Failed to load UNI2-h from Hugging Face. Make sure you are logged in and have accepted "
+                "the model terms at https://huggingface.co/MahmoodLab/UNI2-h."
+            ) from e
+        eval_transform = create_transform(**resolve_data_config(model.pretrained_cfg, model=model))
+        self.return_cls = return_cls
+        return model, eval_transform, torch.float16
 
     def forward(self, x):
-        try:
-            out = self.model(x)
-        except Exception:
-            out = self.model.forward_features(x) if hasattr(self.model, "forward_features") else self.model(x)
+        out = self.model(x)
         if isinstance(out, tuple):
             out = out[0]
         if out.ndim == 3:
@@ -783,6 +715,8 @@ class _Gemma4InferenceEncoder(InferenceEncoder):
             raise RuntimeError(
                 f"Gemma4 vision state dict missing {len(missing)} key(s): {missing[:3]} …"
             )
+        if unexpected:
+            logger.warning(f"Gemma4 checkpoint has {len(unexpected)} key(s) the vision model does not use: {unexpected[:3]} …")
 
         processor = Gemma4ImageProcessor.from_pretrained(src)
         return model, _GemmaImageTransform(processor), torch.bfloat16
