@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from loguru import logger
 
-from gutdecoder.bench.benchmark import BenchmarkConfig, _fit_split, _resolve_args, predict_single_split
+from gutdecoder.bench.benchmark import BenchmarkConfig, _fit_split, _parse_args, _resolve_args, predict_single_split
 
 
 @pytest.fixture
@@ -65,3 +65,49 @@ def test_custom_encoder_does_not_turn_on_overwrite_for_later_runs(tmp_path):
         )
 
     assert args.overwrite is False
+
+
+@pytest.mark.parametrize("argv, expected", [
+    ([], None),
+    (["--log_normalize", "true"], True),
+    (["--log_normalize", "false"], False),
+    # Old name and old spelling still work, and "False" now really means False.
+    (["--normalize", "False"], False),
+    (["--normalize", "True"], True),
+])
+def test_log_normalize_flag(argv, expected):
+    assert _parse_args(argv).normalize is expected
+
+
+@pytest.mark.parametrize("value, expected", [("true", True), ("false", False), ("0", False)])
+def test_library_size_normalize_flag(value, expected):
+    assert _parse_args(["--library_size_normalize", value]).library_size_normalize is expected
+
+
+def test_normalize_flag_rejects_typos():
+    with pytest.raises(SystemExit):
+        _parse_args(["--log_normalize", "flase"])
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("log_normalize: false\n", False),
+    ("log_normalize: true\n", True),
+    ("log_normalize: 'false'\n", False),
+    ("normalize: false\n", False),  # old key still works
+])
+def test_config_file_accepts_log_normalize(tmp_path, text, expected):
+    config = tmp_path / "config.yaml"
+    config.write_text(text + "library_size_normalize: 'no'\n")
+
+    args = _resolve_args(Namespace(config=str(config)), {})
+
+    assert args.normalize is expected
+    assert args.library_size_normalize is False
+
+
+def test_config_file_rejects_conflicting_normalize_keys(tmp_path):
+    config = tmp_path / "config.yaml"
+    config.write_text("log_normalize: true\nnormalize: false\n")
+
+    with pytest.raises(ValueError, match="both log_normalize"):
+        _resolve_args(Namespace(config=str(config)), {})

@@ -33,11 +33,12 @@ from huggingface_hub import snapshot_download
 
 from gutdecoder.bench.st_dataset import load_adata
 from gutdecoder.bench.trainer import train_test_reg
+from gutdecoder.utils.workflow_config import coerce_bool
 from hest.bench.utils.file_utils import (read_assets_from_h5, save_hdf5,
                                          save_pkl)
 from hest.bench.utils.utils import merge_dict, get_current_time
 
-def _parse_args():
+def _parse_args(argv=None):
     parser = argparse.ArgumentParser(description='Configurations for linear probing')
     parser.add_argument('--seed', type=int)
     parser.add_argument('--overwrite', action='store_true', default=None)
@@ -54,8 +55,10 @@ def _parse_args():
     parser.add_argument('--alpha', type=float)
     parser.add_argument('--kfold', action='store_true', default=None)
     parser.add_argument('--benchmark_encoders', action='store_true', default=None)
-    parser.add_argument('--normalize', type=bool)
-    parser.add_argument('--library_size_normalize', type=bool)
+    # --normalize is kept as an alias; the stored setting is still called `normalize`.
+    parser.add_argument('--log_normalize', '--normalize', dest='normalize', type=coerce_bool,
+                        metavar='{true,false}')
+    parser.add_argument('--library_size_normalize', type=coerce_bool, metavar='{true,false}')
     parser.add_argument('--dimreduce', type=str)
     parser.add_argument('--latent_dim', type=int)
     parser.add_argument('--encoders', nargs='+')
@@ -63,7 +66,7 @@ def _parse_args():
     parser.add_argument('--config', type=str)
     parser.add_argument('--slide_emb_root', type=str)
     parser.add_argument('--fusion', type=str)
-    return parser.parse_args()
+    return parser.parse_args(argv)
             
 @dataclass
 class BenchmarkConfig:
@@ -675,6 +678,26 @@ def set_seed(seed):
     random.seed(seed)
 
 
+_BOOL_SETTINGS = ("normalize", "library_size_normalize")
+
+
+def _canonical_config(config, path):
+    """Accept `log_normalize` as the config-file name of `normalize`, and parse boolean settings."""
+    config = dict(config)
+    if "log_normalize" in config:
+        value = config.pop("log_normalize")
+        if "normalize" in config and coerce_bool(config["normalize"]) != coerce_bool(value):
+            raise ValueError(
+                f"Config file {path} sets both log_normalize={value!r} and normalize={config['normalize']!r}; "
+                "keep only log_normalize."
+            )
+        config["normalize"] = value
+    for key in _BOOL_SETTINGS:
+        if key in config:
+            config[key] = coerce_bool(config[key])
+    return config
+
+
 def _resolve_args(cli_args, kwargs):
     """Merge settings in order, each overriding the previous: defaults < CLI args < kwargs < config file."""
     args = Namespace(**asdict(BenchmarkConfig()))
@@ -691,7 +714,7 @@ def _resolve_args(cli_args, kwargs):
 
     if args.config is not None:
         with open(args.config) as stream:
-            config = yaml.safe_load(stream)
+            config = _canonical_config(yaml.safe_load(stream), args.config)
         for key, value in config.items():
             if key not in args:
                 logger.warning(f"Ignoring unknown key {key!r} in config file {args.config}")
