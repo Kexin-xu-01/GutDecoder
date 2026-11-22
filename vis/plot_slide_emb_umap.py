@@ -15,9 +15,6 @@ from sklearn.decomposition import PCA
 import umap
 import harmonypy as hm
 
-import warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-warnings.filterwarnings("ignore", category=FutureWarning)
 
 def load_feature_vector(
     h5_path: Path,
@@ -66,19 +63,8 @@ def load_features(
     records = []
 
     for p in h5_files:
-        try:
-            x = load_feature_vector(
-                p,
-                key=feature_key,
-            )
-
-            records.append({
-                "sample_id": p.stem,
-                "features": x.squeeze(),
-            })
-
-        except Exception as e:
-            print(f"Skipping {p.name}: {e}")
+        x = load_feature_vector(p, key=feature_key)
+        records.append({"sample_id": p.stem, "features": x.squeeze()})
 
     if not records:
         raise ValueError(

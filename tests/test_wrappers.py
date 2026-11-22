@@ -37,3 +37,23 @@ def test_count_patches_does_not_skip_unreadable_files(tmp_path):
 
     with pytest.raises(OSError):
         patching_wrapper.count_patches(tmp_path)
+
+
+def test_wrappers_share_one_loader_and_image_grid():
+    assert patching_wrapper.load_hest_sample is segment_wrapper.load_hest_sample
+    assert patching_wrapper.show_images is segment_wrapper.show_images
+
+
+def test_show_images_saves_grid_with_a_gap_for_unreadable_files(tmp_path):
+    import matplotlib
+    matplotlib.use("Agg")
+    from PIL import Image
+
+    seg = tmp_path / "A" / "tissue_seg"
+    seg.mkdir(parents=True)
+    Image.new("RGB", (20, 20)).save(seg / "ok.png")
+    (seg / "broken.png").write_text("not a png")
+
+    segment_wrapper.show_images(tmp_path, save_dir=tmp_path / "out")
+
+    assert (tmp_path / "out" / "image_grid.png").exists()

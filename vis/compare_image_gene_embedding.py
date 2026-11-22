@@ -1299,6 +1299,7 @@ def plot_embedding_all_samples(
     # --------------------------------------------------------
     # Open combined PDF
     # --------------------------------------------------------
+    failures = []
     with PdfPages(combined_pdf_path) as combined_pdf:
 
         for i, sample in enumerate(
@@ -1392,15 +1393,9 @@ def plot_embedding_all_samples(
                 )
 
             except Exception as e:
-
-                print(
-                    f"ERROR in {sample}: {e}"
-                )
-
-                # Make sure matplotlib doesn't retain
-                # partially generated figures
+                failures.append(f"{sample}: {type(e).__name__}: {e}")
+                # drop partially generated figures before the next sample
                 plt.close("all")
-
                 continue
 
     # --------------------------------------------------------
@@ -1432,5 +1427,8 @@ def plot_embedding_all_samples(
         f"\nCombined PDF saved to:\n"
         f"  {combined_pdf_path}"
     )
+
+    if failures:
+        raise RuntimeError(f"{len(failures)} of {len(samples_to_run)} samples failed:\n" + "\n".join(failures))
 
     return result_dict
