@@ -14,50 +14,39 @@ import pyvips
 from PIL import Image, ImageDraw
 
 
+def _literal(text):
+    """Parse a Python or JSON literal; None if the text is neither."""
+    try:
+        return ast.literal_eval(text)
+    except (ValueError, SyntaxError):
+        pass
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return None
+
+
 def parse_crop_rules(crop_str):
     """
-    Parse a crop_100_um cell into a list of rule dicts.
-    Handles:
-      - single dict
-      - multiple dicts separated by commas/newlines
-      - single/double quotes
-      - wrapped/unwrapped text
+    Parse a crop_100_um spreadsheet cell into a list of rule dicts.
+
+    Accepts a dict, a list of dicts, or several dicts separated by commas/newlines,
+    with single or double quotes. Raises ValueError if any part cannot be parsed,
+    so a typo never results in a silently unmasked slide.
     """
     if pd.isna(crop_str) or not str(crop_str).strip():
         return []
 
     s = str(crop_str).strip()
 
-    # Try literal eval directly
-    try:
-        obj = ast.literal_eval(s)
+    for candidate in (s, f"[{s}]"):
+        obj = _literal(candidate)
         if isinstance(obj, dict):
             return [obj]
         if isinstance(obj, list):
             return obj
-    except Exception:
-        pass
 
-    # Try wrapped in list
-    for candidate in (s, f"[{s}]"):
-        try:
-            obj = ast.literal_eval(candidate)
-            if isinstance(obj, dict):
-                return [obj]
-            if isinstance(obj, list):
-                return obj
-        except Exception:
-            pass
-        try:
-            obj = json.loads(candidate)
-            if isinstance(obj, dict):
-                return [obj]
-            if isinstance(obj, list):
-                return obj
-        except Exception:
-            pass
-
-    # Extract dict-like blocks
+    # Extract dict-like blocks, e.g. from text pasted with doubled quotes
     blocks = []
     depth = 0
     start = None
@@ -70,20 +59,18 @@ def parse_crop_rules(crop_str):
             depth -= 1
             if depth == 0 and start is not None:
                 blocks.append(s[start : i + 1])
+    if not blocks:
+        raise ValueError(f"No crop rule found in {crop_str!r}")
 
     rules = []
     for block in blocks:
         txt = block.replace('""', '"')
-        try:
-            obj = ast.literal_eval(txt)
-        except Exception:
-            try:
-                obj = json.loads(txt.replace("'", '"'))
-            except Exception:
-                continue
-        if isinstance(obj, dict):
-            rules.append(obj)
-
+        obj = _literal(txt)
+        if obj is None:
+            obj = _literal(txt.replace("'", '"'))
+        if not isinstance(obj, dict):
+            raise ValueError(f"Cannot parse crop rule {block!r} in {crop_str!r}")
+        rules.append(obj)
     return rules
 
 
@@ -360,12 +347,6 @@ def mask_tif(
             continue
 
         rules = parse_crop_rules(crop_str)
-        if not rules:
-            print(f"[COPY] parse failed: {tif_path.name}")
-            import shutil
-            shutil.copy2(tif_path, out_path)
-            continue
-
         print(f"[WRITE] {tif_path.name} -> {out_path.name}")
         mask_tif_openslide_readable(tif_path, out_path, rules, mpp=mpp)
 

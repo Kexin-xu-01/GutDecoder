@@ -93,10 +93,11 @@ def patch_hest_samples(
     if not ids:
         raise ValueError("No sample folders found to patch under the specified root.")
 
+    failures = []
     for sample_id in ids:
         sample_dir = root / sample_id
         if not sample_dir.exists():
-            print(f"[WARN] Skipping {sample_id}: folder does not exist at {sample_dir}")
+            failures.append(f"{sample_id}: folder does not exist at {sample_dir}")
             continue
 
         patch_path = sample_dir / "patches" / f"{sample_id}.h5"
@@ -156,19 +157,15 @@ def patch_hest_samples(
                     json.dumps({"settings": settings}, sort_keys=True) + "\n"
                 )
 
-            # Move visualization into sample's patches_vis
-            default_vis_path = sample_patches_dir / f"{sample_id}_patch_vis.png"
-            if default_vis_path.exists():
-                default_vis_path.rename(vis_save_path)
-
             if verbose:
                 print(f"[INFO] Patches saved for {sample_id}: {patch_save_path}")
                 print(f"[INFO] Patch visualization saved: {vis_save_path}")
 
-        except FileNotFoundError as e:
-            print(f"[ERROR] Missing required file(s) for {sample_id}: {e}")
         except Exception as e:
-            print(f"[ERROR] Failed to patch {sample_id}: {e}")
+            failures.append(f"{sample_id}: {type(e).__name__}: {e}")
+
+    if failures:
+        raise RuntimeError(f"Patching failed for {len(failures)} of {len(ids)} samples:\n" + "\n".join(failures))
             
 
 def show_images(
@@ -265,7 +262,7 @@ def show_images(
             ax.imshow(img)
             ax.axis("off")
             ax.set_title(f"{sample_id}\n{img_path.name}", fontsize=8)
-        except Exception as e:
+        except OSError as e:  # unreadable or not an image; show the gap in the grid
             ax.axis("off")
             ax.set_title(f"Failed: {img_path.name}", fontsize=8)
             print(f"[ERROR] Could not open {img_path}: {e}")
@@ -315,12 +312,9 @@ def count_patches(root, save_csv=None):
         # expect one .h5 per sample (but support >1 just in case)
         for h5_file in patches_dir.glob("*.h5"):
             sample_id = sample_dir.name  # folder name is sample ID
-            try:
-                with h5py.File(h5_file, "r") as f:
-                    num_patches = f["img"].shape[0]
-                results.append({"sample_id": sample_id, "num_patches": num_patches})
-            except Exception as e:
-                print(f"[ERROR] Failed reading {h5_file}: {e}")
+            with h5py.File(h5_file, "r") as f:
+                num_patches = f["img"].shape[0]
+            results.append({"sample_id": sample_id, "num_patches": num_patches})
 
     df = pd.DataFrame(results).sort_values("sample_id")
     total_patches = df["num_patches"].sum()

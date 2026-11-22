@@ -4,6 +4,8 @@ _per_gene.py — per-gene plots.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -129,3 +131,70 @@ def plot_gene_correlation_histogram(df, dataset_name, encoder_name,
     ax.set_ylabel("Number of genes")
     ax.set_title(_format_title("Gene Correlation Histogram", dataset_name, encoder_name))
     return fig
+
+
+def plot_mean_std_ranked(
+    df,
+    gene_col="gene",
+    mean_col="mean_corr",
+    std_col="std_corr",
+    top_n=None,
+    figsize=(12, 4),
+    dpi=150,
+    xlabel=None,
+    ylabel="Prediction correlation",
+    title=None,
+    max_labels=20,
+    savepath=None,
+):
+    """
+    Genes ranked by ``mean_col`` (descending) with ``std_col`` error bars.
+
+    top_n: keep only the top-N genes (None = all).
+    max_labels: with more than 40 genes, every k-th label is shown, k = len(genes) // max_labels.
+    savepath: if given, saves <savepath>.pdf and <savepath>.png at 300 dpi.
+    Returns (fig, ax).
+    """
+    missing = [c for c in (gene_col, mean_col, std_col) if c not in df.columns]
+    if missing:
+        raise ValueError(f"Columns not found in DataFrame: {missing}")
+
+    df_plot = (df[[gene_col, mean_col, std_col]]
+               .dropna(subset=[mean_col])
+               .sort_values(mean_col, ascending=False))
+    if top_n is not None:
+        df_plot = df_plot.iloc[:int(top_n)]
+
+    genes = df_plot[gene_col].astype(str).tolist()
+    x = np.arange(len(genes))
+
+    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+    ax.errorbar(x, df_plot[mean_col].astype(float).values, yerr=df_plot[std_col].astype(float).values,
+                fmt="o", ecolor="black", elinewidth=1, capsize=3, markersize=4)
+    ax.set_xlim(-0.5, len(genes) - 0.5)
+    ax.set_xticks(x)
+    if len(genes) > 40:
+        ticks = np.arange(0, len(genes), max(1, len(genes) // max_labels))
+        ax.set_xticks(ticks)
+        ax.set_xticklabels([genes[i] for i in ticks], rotation=90, fontsize=7)
+    elif len(genes) > 8:
+        ax.set_xticklabels(genes, rotation=45, fontsize=10, ha="right")
+    else:
+        ax.set_xticklabels(genes, rotation=0, fontsize=9)
+
+    ax.set_xlabel(xlabel, fontsize=10)
+    ax.set_ylabel(ylabel, fontsize=10)
+    ax.set_title(title)
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
+    ax.spines[["top", "right"]].set_visible(False)
+    plt.tight_layout()
+
+    if savepath:
+        p = Path(savepath)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(p.with_suffix(".pdf"), bbox_inches="tight", dpi=300)
+        fig.savefig(p.with_suffix(".png"), bbox_inches="tight", dpi=300)
+        print(f"Saved: {p.with_suffix('.pdf')} and {p.with_suffix('.png')}")
+
+    plt.show()
+    return fig, ax

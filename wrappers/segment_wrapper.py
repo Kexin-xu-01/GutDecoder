@@ -83,7 +83,7 @@ def segment_hest_tissue(hest_root: Path, ids=None, method="deep",target_pxl_size
     if not ids:
         raise ValueError(f"No sample folders found for segmentation in {broad_dir}")
 
-    # iterate through each sample
+    failures = []
     for sample_id in ids:
         sample_dir = broad_dir / sample_id
         tissue_dir = sample_dir / "tissue_seg"
@@ -110,7 +110,10 @@ def segment_hest_tissue(hest_root: Path, ids=None, method="deep",target_pxl_size
 
             print(f"[INFO] Segmentation complete for {sample_id} → {tissue_dir}")
         except Exception as e:
-            print(f"[ERROR] Failed segmentation for {sample_id}: {e}")
+            failures.append(f"{sample_id}: {type(e).__name__}: {e}")
+
+    if failures:
+        raise RuntimeError(f"Segmentation failed for {len(failures)} of {len(ids)} samples:\n" + "\n".join(failures))
 
 import math
 from pathlib import Path
@@ -200,7 +203,7 @@ def show_images(
             ax.imshow(img)
             ax.axis("off")
             ax.set_title(f"{sample_id}\n{img_path.name}", fontsize=8)
-        except Exception as e:
+        except OSError as e:  # unreadable or not an image; show the gap in the grid
             ax.axis("off")
             ax.set_title(f"Failed: {img_path.name}", fontsize=8)
             print(f"[ERROR] Could not open {img_path}: {e}")
