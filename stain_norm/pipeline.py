@@ -250,6 +250,23 @@ def normalize_slide(
 
 
 
+def _output_name(slide: Path) -> str:
+    """Output file name for a slide: its name without the slide extension, plus .ome.tiff."""
+    name = slide.name
+    for ext in (".ome.tiff", ".ome.tif"):
+        if name.lower().endswith(ext):
+            return name[: -len(ext)] + ".ome.tiff"
+    return slide.stem + ".ome.tiff"
+
+
+def _output_collisions(slides: list[Path]) -> dict[str, list[Path]]:
+    """Output names shared by more than one slide, e.g. a.czi and a.svs."""
+    groups: dict[str, list[Path]] = {}
+    for slide in slides:
+        groups.setdefault(_output_name(slide), []).append(slide)
+    return {name: group for name, group in groups.items() if len(group) > 1}
+
+
 # ---------------------------------------------------------------------------
 
 # Worker for parallel batch processing
@@ -444,6 +461,15 @@ def batch_normalize(
 
 
 
+    if output_dir.resolve() == input_dir.resolve():
+        raise ValueError("output_dir must differ from input_dir, or outputs could overwrite source slides.")
+    collisions = _output_collisions(slides)
+    if collisions:
+        raise ValueError(
+            "These slides would write to the same output file; rename or move them first:\n"
+            + "\n".join(f"  {name}: {', '.join(p.name for p in group)}" for name, group in collisions.items())
+        )
+
     # If reference is a numpy array, write to a temp file so workers can load it
 
     _tmp_ref: str | None = None
@@ -472,7 +498,7 @@ def batch_normalize(
 
             slide,
 
-            output_dir / (slide.stem + ".ome.tiff"),
+            output_dir / _output_name(slide),
 
             method,
 

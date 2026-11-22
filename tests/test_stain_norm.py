@@ -1,9 +1,12 @@
+from pathlib import Path
+
 import numpy as np
 import pytest
 import tifffile
 
-from gutdecoder.stain_norm import normalize_slide
+from gutdecoder.stain_norm import batch_normalize, normalize_slide
 from gutdecoder.stain_norm._normalizers import get_normalizer
+from gutdecoder.stain_norm.pipeline import _output_name
 
 MPP = 0.5
 
@@ -52,3 +55,30 @@ def test_transform_requires_source_fit(method):
 
     with pytest.raises(RuntimeError, match="fit_source"):
         normaliser.transform(REFERENCE)
+
+
+@pytest.mark.parametrize("name, expected", [
+    ("a.svs", "a.ome.tiff"),
+    ("a.ome.tiff", "a.ome.tiff"),
+    ("a.OME.TIF", "a.ome.tiff"),
+    ("a.b.czi", "a.b.ome.tiff"),
+])
+def test_output_name_strips_compound_extensions(name, expected):
+    assert _output_name(Path(name)) == expected
+
+
+def test_batch_refuses_slides_that_share_an_output_name(tmp_path):
+    src = tmp_path / "in"
+    src.mkdir()
+    (src / "a.czi").touch()
+    (src / "a.svs").touch()
+
+    with pytest.raises(ValueError, match="a.ome.tiff: a.czi, a.svs"):
+        batch_normalize(src, tmp_path / "out", reference=REFERENCE)
+
+
+def test_batch_refuses_writing_into_the_input_dir(tmp_path):
+    (tmp_path / "a.ome.tiff").touch()
+
+    with pytest.raises(ValueError, match="output_dir must differ"):
+        batch_normalize(tmp_path, tmp_path, reference=REFERENCE)
