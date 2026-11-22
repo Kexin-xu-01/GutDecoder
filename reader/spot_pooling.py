@@ -49,13 +49,11 @@ import pandas as pd
 import scanpy as sc
 from loguru import logger
 
-from hest.utils import load_wsi, read_xenium_alignment
+from hest.utils import read_xenium_alignment, register_downscale_img
 import dask.dataframe as dd
 
 # HEST / Gutdecoder imports
-import hest
 from hest import HESTData, XeniumReader
-from hest.HESTData import XeniumHESTData
 from hest.readers import pool_transcripts_xenium
 from gutdecoder.reader.h5ad_reader import *  # noqa: F401,F403
 
@@ -132,116 +130,30 @@ def _resolve_path(base: Path, maybe_path: Any) -> Path:
     p = Path(str(maybe_path))
     return p if p.is_absolute() else base / p
 
-def __transcript_bbox(self, transcript_df, key_x: str = "he_x", key_y: str = "he_y"):
-    """
-    Return transcript bbox as (ymin, ymax, xmin, xmax).
-    Works for both pandas and dask dataframes.
-    """
-    if isinstance(transcript_df, dd.DataFrame):
-        xmin, xmax, ymin, ymax = dask.compute(
-            transcript_df[key_x].min(),
-            transcript_df[key_x].max(),
-            transcript_df[key_y].min(),
-            transcript_df[key_y].max(),
-        )
-    else:
-        xmin = float(transcript_df[key_x].min())
-        xmax = float(transcript_df[key_x].max())
-        ymin = float(transcript_df[key_y].min())
-        ymax = float(transcript_df[key_y].max())
-
+def _transcript_bbox(transcript_df, key_x: str = "he_x", key_y: str = "he_y"):
+    """Return transcript bbox as (ymin, ymax, xmin, xmax) for a pandas or dask dataframe."""
+    xmin, xmax, ymin, ymax = dask.compute(
+        transcript_df[key_x].min(),
+        transcript_df[key_x].max(),
+        transcript_df[key_y].min(),
+        transcript_df[key_y].max(),
+    )
     return float(ymin), float(ymax), float(xmin), float(xmax)
 
-def get_transcript_bbox(
-    self,
-    img_path: str,
-    experiment_path: str,
-    alignment_file_path: str = None,
-    feature_matrix_path: str = None, 
-    transcripts_path: str = None,
-    cells_path: str = None,
-    nucleus_bound_path: str = None,
-    cell_bound_path: str = None,
-    dapi_path = None,
-    load_img=True,
-    use_dask=True,
-    spot_size_um=100.,
-    nb_partitions=30):
-    """ Read a Xenium sample
 
-    Args:
-        img_path (str): path to the WSI
-        experiment_path (str): path to a `experiment.xenium` file
-        alignment_file_path (str, optional): path to a DAPI->H&E matrix/keypoints alignment file, None if the H&E is already aligned with the DAPI. Defaults to None.
-        feature_matrix_path (str, optional): path to a `cell_feature_matrix.h5`. Defaults to None.
-        transcripts_path (str, optional): path to a transcripts.parquet, None to not load the transcripts. Defaults to None.
-        cells_path (str, optional): path to a `cells.parquet` file, None to not load the cells. Defaults to None.
-        nucleus_bound_path (str, optional): path to a `nucleus_boundaries.parquet` file. Defaults to None.
-        cell_bound_path (str, optional): path to a `cell_boundaries` file. Defaults to None.
-        dapi_path (_type_, optional): path to a `morphology_focus_0000.ome.tif`/`morphology_focus.ome.tif` file. Defaults to None.
-        load_img (bool, optional): whenever to load the WSI. Defaults to True.
-        use_dask (bool, optional): whenever to load the transcript dataframe with DASK (recommended if the transcript dataframe does not fit into the RAM). Defaults to False.
-        spot_size_um (float, optional): transcripts are pooled into squares of spot_size_um x spot_size_um mirometers and then stored in `HESTData.adata`
-        nb_partitions (int, optional): number of dask partition to use if use_dask is True. Defaults to 30
-
-    Returns:
-        XeniumHESTData: Xenium sample
-    """
-
-    if load_img:
-        print("Loading the WSI... (can be slow for large images)")
-        img, pixel_size_embedded = load_wsi(img_path)
-    else:
-        img, pixel_size_embedded = wsi_factory(np.zeros((1, 1, 3)), mpp=1.0), None
-
-    dict = {}
-    dict['pixel_size_um_embedded'] = pixel_size_embedded
-
+def get_transcript_bbox(transcripts_path, experiment_path, alignment_file_path=None, use_dask=True):
+    """Bbox (ymin, ymax, xmin, xmax) of a Xenium sample's transcripts in H&E pixel coordinates."""
     with open(experiment_path) as f:
-        dict_exp = json.load(f)
-        pixel_size_morph = dict_exp['pixel_size']
-    dict = {**dict, **dict_exp}
-
-    shapes = []
-
-
+        pixel_size_morph = json.load(f)["pixel_size"]
     alignment_matrix = read_xenium_alignment(alignment_file_path) if alignment_file_path else None
-    dict['pixel_size_um_estimated'] = self._XeniumReader__xenium_estimate_pixel_size(pixel_size_morph, alignment_matrix)
-    if cell_bound_path is not None:
-        shapes.append(LazyShapes(cell_bound_path, 'tenx_cell', 'dapi', 
-                                 reader=XeniumParquetCellReader, 
-                                 reader_kwargs={'pixel_size_morph': pixel_size_morph}))
-        if alignment_matrix is not None:
-            shapes.append(LazyShapes(cell_bound_path, 'tenx_cell', 'he', 
-                                     reader=XeniumParquetCellReader, 
-                                     reader_kwargs={
-                                         'pixel_size_morph': pixel_size_morph, 
-                                         'alignment_matrix': alignment_matrix}))
 
-    if nucleus_bound_path is not None:
-        shapes.append(LazyShapes(nucleus_bound_path, 'tenx_nucleus', 'dapi', 
-                                 reader=XeniumParquetCellReader, 
-                                 reader_kwargs={'pixel_size_morph': pixel_size_morph}))
-        if alignment_matrix is not None:
-            shapes.append(LazyShapes(nucleus_bound_path, 'tenx_nucleus', 'he', 
-                                     reader=XeniumParquetCellReader, 
-                                     reader_kwargs={
-                                         'pixel_size_morph': pixel_size_morph, 
-                                         'alignment_matrix': alignment_matrix}))
-
-
-    if transcripts_path is not None:
-        print('Loading transcripts...')
-        transcript_df = self._XeniumReader__load_transcripts(transcripts_path, alignment_matrix, pixel_size_morph, 
-                                                use_dask)
-        
-        transcript_bbox = self.__transcript_bbox(transcript_df)
-        print(f"Transcript bbox (ymin, ymax, xmin, xmax): {transcript_bbox}")
-
-    return transcript_bbox
-
-XeniumReader.get_transcript_bbox = get_transcript_bbox
-XeniumReader.__transcript_bbox = __transcript_bbox
+    logger.info("Loading transcripts...")
+    transcript_df = XeniumReader()._XeniumReader__load_transcripts(
+        transcripts_path, alignment_matrix, pixel_size_morph, use_dask
+    )
+    bbox = _transcript_bbox(transcript_df)
+    logger.info(f"Transcript bbox (ymin, ymax, xmin, xmax): {bbox}")
+    return bbox
 
 def get_indices_chunk(partition, key_x, key_y, 
                       x_min, y_min, spot_size_um, pixel_size_he, n, spot_grid_columns):
@@ -505,7 +417,6 @@ def main() -> None:
         run_name = str(row.get(args.run_col, "")).strip()
 
         base_img_dir = Path(row[args.img_dir_col])
-        image_name = Path(row[args.image_col])
         alignment_name = row.get(args.alignment_col)
         if pd.isna(alignment_name) or alignment_name is None:
             print(f"⚠️ Missing alignment file for sample={sample}, roi={roi}; skipping")
@@ -518,7 +429,6 @@ def main() -> None:
 
         exp_stem = Path(row[args.input_root_col])
         h5ad_path = Path(h5ad_value)
-        img_path = _resolve_path(base_img_dir, image_name)
         alignment_file = _resolve_path(base_img_dir, alignment_name)
         transcript_path = exp_stem / "transcripts.parquet"
 
@@ -586,11 +496,10 @@ def main() -> None:
 
         if args.pool_by_transcript_coord:
             # Use transcript bbox to force the same grid as transcript-level pooling
-            bbox = XeniumReader().get_transcript_bbox(
-                img_path=str(img_path),
+            bbox = get_transcript_bbox(
+                transcripts_path=transcript_path,
                 experiment_path=exp_stem / "experiment.xenium",
                 alignment_file_path=alignment_file,
-                transcripts_path=transcript_path,
             )
 
             adata_cells_pooled = pool_transcripts_xenium_bbox(
