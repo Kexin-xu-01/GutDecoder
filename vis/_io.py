@@ -26,17 +26,6 @@ from ._helpers import _safe_read_json, _find_col_ci
 
 
 # --- Count training patches ----#
-def _find_col_ci(df: pd.DataFrame, target: str):
-    lowmap = {c.lower(): c for c in df.columns}
-    return lowmap.get(target.lower())
-
-def _find_any_col_ci(df: pd.DataFrame, targets):
-    for t in targets:
-        c = _find_col_ci(df, t)
-        if c is not None:
-            return c
-    return None
-
 def _dataset_prefixes(dataset: str):
     """
     XeniumPR10   -> ['XeniumPR10']
@@ -61,19 +50,19 @@ def _pick_patch_col(meta: pd.DataFrame, dataset: str):
     ds = str(dataset).lower()
 
     if "cell_centered" in ds:
-        return _find_any_col_ci(meta, ["num_patches_cell_centered"])
+        return _find_col_ci(meta, ["num_patches_cell_centered"])
     if "cell" in ds:
-        return _find_any_col_ci(meta, ["num_patches_cell_100um"])
+        return _find_col_ci(meta, ["num_patches_cell_100um"])
     if "_25um" in ds:
-        return _find_any_col_ci(meta, ["num_patches_25um"])
+        return _find_col_ci(meta, ["num_patches_25um"])
     if "_50um" in ds:
-        return _find_any_col_ci(meta, ["num_patches_50um"])
+        return _find_col_ci(meta, ["num_patches_50um"])
     if "unfiltered" in ds:
-        return _find_any_col_ci(meta, ["num_patches_100um_unfiltered"])
-    return _find_any_col_ci(meta, ["num_patches_100um", "num_patches_100um_unfiltered"])
+        return _find_col_ci(meta, ["num_patches_100um_unfiltered"])
+    return _find_col_ci(meta, ["num_patches_100um", "num_patches_100um_unfiltered"])
 
 def count_dataset_patches(meta: pd.DataFrame, dataset: str) -> float:
-    sample_col = _find_col_ci(meta, "sample_id")
+    sample_col = _find_col_ci(meta, ["sample_id"])
     if sample_col is None or meta.empty:
         return np.nan
 
@@ -113,28 +102,14 @@ def add_num_training_patches_mean(
     except Exception:
         brd = pd.DataFrame()
 
-    # ---- case-insensitive column helpers ----
-    def _find_col_ci(df: pd.DataFrame, target: str):
-        if df.empty:
-            return None
-        lowmap = {c.lower(): c for c in df.columns}
-        return lowmap.get(target.lower())
-
-    def _find_any_col_ci(df: pd.DataFrame, targets: list[str]):
-        for t in targets:
-            col = _find_col_ci(df, t)
-            if col is not None:
-                return col
-        return None
-
     def _safe_mean_ci(df: pd.DataFrame, col_candidates: list[str]) -> float:
-        col = _find_any_col_ci(df, col_candidates)
+        col = _find_col_ci(df, col_candidates)
         if col is None:
             return np.nan
         return pd.to_numeric(df[col], errors="coerce").dropna().mean()
 
     # --- resolve commonly used columns case-insensitively ---
-    col_sample_id_xen = _find_col_ci(xen, "sample_id")
+    col_sample_id_xen = _find_col_ci(xen, ["sample_id"])
 
     # xenium means
     xen_mean_num_patches = _safe_mean_ci(xen, ["num_patches_100um_unfiltered"])
