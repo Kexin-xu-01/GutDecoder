@@ -9,6 +9,8 @@ import hest
 import pandas as pd
 from loguru import logger
 import scanpy as sc
+
+from gutdecoder.reader.rules import Box, exclusion_regions
 import matplotlib.pyplot as plt
 from hest import XeniumReader 
 import dask
@@ -465,212 +467,27 @@ def _points_in_polygon(px, py, poly_x, poly_y):
     return inside
 
 
-def apply_spot_exclusions(sx, sy, bbox, rules):
+def apply_spot_exclusions(sx, sy, bbox, rules, mpp=None):
     """
-    Exclude spots by region rules. Returns a boolean mask of spots to KEEP.
+    Boolean mask of spots to KEEP after excluding every rule region.
 
-    Parameters
-    ----------
-    sx, sy : 1D arrays of spot coordinates (pixels)
-    bbox   : (xmin, xmax, ymin, ymax) in pixels
-    rules  : list of dicts. Supported types:
-      - {'type':'corner', 'corner':'top-left|top-right|bottom-left|bottom-right',
-         'width': <float>, 'height': <float>, 'units':'px'|'frac'}
-      - {'type':'strip', 'side':'top|bottom|left|right', 'size': <float>, 'units':'px'|'frac'}
-        OR to define a middle strip:
-        - {'type':'strip', 'axis':'x'|'y', 'bounds': (start, end), 'units':'px'|'frac'}
-          * For axis='y' bounds are (ymin_rel, ymax_rel) (0..1 in 'frac') or pixel coords in 'px'
-          * For axis='x' bounds are (xmin_rel, xmax_rel) similarly.
-          * If `bounds` is provided it takes precedence over side/size behavior.
-      - {'type':'rect', 'xmin': <float>, 'xmax': <float>, 'ymin': <float>, 'ymax': <float>, 'units':'px'|'frac'}
-        * For 'rect' in 'frac' units, values are in [0,1] relative to the bbox (0=left/top, 1=right/bottom).
-      - {'type':'trapezoid', 'orientation':'top|bottom|left|right',
-         'top_width': <float>, 'bottom_width': <float>, 'height': <float>,
-         'units':'px'|'frac', 'center_offset': <float (px or frac)>}
-        * 'orientation' describes which bbox edge the trapezoid base sits on:
-           - 'top' : base along top edge y = ymin and trapezoid points downward
-           - 'bottom': base along bottom edge y = ymax and trapezoid points upward
-           - 'left' : base along left edge x = xmin and trapezoid points rightward
-           - 'right': base along right edge x = xmax and trapezoid points leftward
-        * widths/heights are in px or fraction of bbox width/height depending on 'units'.
-        * 'center_offset' (optional, default 0) shifts the trapezoid along the edge axis (positive moves right for top/bottom, down for left/right).
+    sx, sy are spot coordinates in pixels, bbox is (xmin, xmax, ymin, ymax).
+    See gutdecoder.reader.rules.exclusion_regions for the rule format.
     """
-    xmin, xmax, ymin, ymax = bbox
-    w = xmax - xmin
-    h = ymax - ymin
-
-    exclude = np.zeros_like(sx, dtype=bool)
-
-    for r in rules:
-        rtype = r.get('type')
-
-        if rtype == 'corner':
-            units = r.get('units', 'px')
-            corner = r['corner']
-            ww = r['width']
-            hh = r['height']
-            if units == 'frac':
-                ww = ww * w
-                hh = hh * h
-
-            if corner == 'top-left':
-                cond = (sx < xmin + ww) & (sy < ymin + hh)
-            elif corner == 'top-right':
-                cond = (sx > xmax - ww) & (sy < ymin + hh)
-            elif corner == 'bottom-left':
-                cond = (sx < xmin + ww) & (sy > ymax - hh)
-            elif corner == 'bottom-right':
-                cond = (sx > xmax - ww) & (sy > ymax - hh)
+    sx, sy = np.asarray(sx, dtype=float), np.asarray(sy, dtype=float)
+    exclude = np.zeros(sx.shape, dtype=bool)
+    for region in exclusion_regions(rules, bbox, mpp=mpp):
+        if isinstance(region, Box):
+            if region.closed:
+                inside = (sx >= region.x0) & (sx <= region.x1) & (sy >= region.y0) & (sy <= region.y1)
             else:
-                raise ValueError("corner must be one of: top-left, top-right, bottom-left, bottom-right")
-            exclude |= cond
-
-        elif rtype == 'strip':
-            # New behaviour: if 'bounds' provided, it defines an arbitrary strip region
-            # bounds = (start, end) in 'px' or 'frac' relative to bbox
-            bounds = r.get('bounds', None)
-            units = r.get('units', 'px')
-
-            if bounds is not None:
-                if not (isinstance(bounds, (list, tuple)) and len(bounds) == 2):
-                    raise ValueError("strip 'bounds' must be a 2-tuple/list (start, end)")
-
-                start, end = bounds
-                # convert frac to pixels relative to bbox
-                if units == 'frac':
-                    # If both values between 0 and 1 we treat them as fractions of bbox
-                    # For clarity: start=0 -> left/top; end=1 -> right/bottom
-                    if r.get('axis') == 'x' or r.get('side') in ('left', 'right'):
-                        sx_min = xmin + start * w
-                        sx_max = xmin + end * w
-                        cond = (sx >= min(sx_min, sx_max)) & (sx <= max(sx_min, sx_max))
-                    else:
-                        # default axis is 'y' if unspecified or if side is top/bottom
-                        sy_min = ymin + start * h
-                        sy_max = ymin + end * h
-                        cond = (sy >= min(sy_min, sy_max)) & (sy <= max(sy_min, sy_max))
-                else:
-                    # units == 'px'
-                    if r.get('axis') == 'x' or r.get('side') in ('left', 'right'):
-                        sx_min = start
-                        sx_max = end
-                        cond = (sx >= min(sx_min, sx_max)) & (sx <= max(sx_min, sx_max))
-                    else:
-                        sy_min = start
-                        sy_max = end
-                        cond = (sy >= min(sy_min, sy_max)) & (sy <= max(sy_min, sy_max))
-
-                exclude |= cond
-
-            else:
-                # legacy edge-strip behavior using 'side' + 'size'
-                side = r['side']
-                ss = r['size']
-                if units == 'frac':
-                    ss = ss * (h if side in ('top','bottom') else w)
-
-                if side == 'top':
-                    cond = sy < ymin + ss
-                elif side == 'bottom':
-                    cond = sy > ymax - ss
-                elif side == 'left':
-                    cond = sx < xmin + ss
-                elif side == 'right':
-                    cond = sx > xmax - ss
-                else:
-                    raise ValueError("side must be one of: top, bottom, left, right")
-                exclude |= cond
-
-        elif rtype == 'rect':
-            units = r.get('units', 'px')
-            if units == 'frac':
-                rxmin = xmin + r['xmin'] * w
-                rxmax = xmin + r['xmax'] * w
-                rymin = ymin + r['ymin'] * h
-                rymax = ymin + r['ymax'] * h
-            else:
-                rxmin, rxmax = r['xmin'], r['xmax']
-                rymin, rymax = r['ymin'], r['ymax']
-            cond = (sx >= rxmin) & (sx <= rxmax) & (sy >= rymin) & (sy <= rymax)
-            exclude |= cond
-
-        elif rtype == 'trapezoid':
-            # Parameters & defaults
-            units = r.get('units', 'px')
-            ori = r.get('orientation', 'top')
-            top_w = r.get('top_width')
-            bot_w = r.get('bottom_width')
-            height = r.get('height')
-            offset = r.get('center_offset', 0.0)
-
-            if top_w is None or bot_w is None or height is None:
-                raise ValueError("trapezoid requires 'top_width', 'bottom_width', and 'height'")
-
-            # Convert frac to px if needed
-            if units == 'frac':
-                if ori in ('top', 'bottom'):
-                    top_w = top_w * w
-                    bot_w = bot_w * w
-                    height = height * h
-                    offset = offset * w
-                else:
-                    top_w = top_w * h  # for left/right, interpret widths along vertical axis
-                    bot_w = bot_w * h
-                    height = height * w
-                    offset = offset * h
-
-            # Build polygon vertices depending on orientation.
-            if ori == 'top':
-                cx = (xmin + xmax) / 2.0 + offset
-                top_left_x = cx - top_w / 2.0
-                top_right_x = cx + top_w / 2.0
-                bot_left_x = cx - bot_w / 2.0
-                bot_right_x = cx + bot_w / 2.0
-
-                poly_x = np.array([top_left_x, top_right_x, bot_right_x, bot_left_x])
-                poly_y = np.array([ymin, ymin, ymin + height, ymin + height])
-
-            elif ori == 'bottom':
-                cx = (xmin + xmax) / 2.0 + offset
-                top_left_x = cx - bot_w / 2.0
-                top_right_x = cx + bot_w / 2.0
-                bot_left_x = cx - top_w / 2.0
-                bot_right_x = cx + top_w / 2.0
-
-                poly_x = np.array([top_left_x, top_right_x, bot_right_x, bot_left_x])
-                poly_y = np.array([ymax - height, ymax - height, ymax, ymax])
-
-            elif ori == 'left':
-                cy = (ymin + ymax) / 2.0 + offset
-                top_left_y = cy - top_w / 2.0
-                bottom_left_y = cy + top_w / 2.0
-                top_right_y = cy - bot_w / 2.0
-                bottom_right_y = cy + bot_w / 2.0
-
-                poly_x = np.array([xmin, xmin, xmin + height, xmin + height])
-                poly_y = np.array([top_left_y, bottom_left_y, bottom_right_y, top_right_y])
-
-            elif ori == 'right':
-                cy = (ymin + ymax) / 2.0 + offset
-                top_left_y = cy - bot_w / 2.0
-                bottom_left_y = cy + bot_w / 2.0
-                top_right_y = cy - top_w / 2.0
-                bottom_right_y = cy + top_w / 2.0
-
-                poly_x = np.array([xmax - height, xmax - height, xmax, xmax])
-                poly_y = np.array([top_left_y, bottom_left_y, bottom_right_y, top_right_y])
-
-            else:
-                raise ValueError("orientation must be one of: top, bottom, left, right")
-
-            # Now check which points are inside polygon (requires your _points_in_polygon helper)
-            inside_trap = _points_in_polygon(sx, sy, poly_x, poly_y)
-            exclude |= inside_trap
-
+                inside = (sx > region.x0) & (sx < region.x1) & (sy > region.y0) & (sy < region.y1)
         else:
-            raise ValueError(f"Unknown rule type: {rtype}")
+            poly_x, poly_y = np.asarray(region, dtype=float).T
+            inside = _points_in_polygon(sx, sy, poly_x, poly_y)
+        exclude |= inside
+    return ~exclude
 
-    return ~exclude  # keep mask
 
 def rule_based_spot_exclusion(
     st,

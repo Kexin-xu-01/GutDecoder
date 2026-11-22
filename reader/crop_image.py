@@ -10,196 +10,21 @@ from matplotlib.path import Path as MplPath
 import pyvips
 from PIL import Image, ImageDraw
 
-from gutdecoder.reader.rules import parse_crop_rules
-
-
-def _to_pixels(value, units, dim, mpp=None):
-    if units == "frac":
-        return int(round(float(value) * dim))
-    if units in {"px", "pixel", "pixels"}:
-        return int(round(float(value)))
-    if units in {"um", "µm", "micron", "microns"}:
-        if mpp is None:
-            raise ValueError("mpp is required when units are um")
-        return int(round(float(value) / float(mpp)))
-    raise ValueError(f"Unknown units: {units}")
+from gutdecoder.reader.rules import Box, exclusion_regions, parse_crop_rules
 
 
 def build_exclusion_mask_pil(width, height, rules, mpp=None):
-    """
-    Build a PIL 'L' mask image:
-      0 = keep
-      255 = exclude
-    """
+    """PIL 'L' mask of the image: 0 = keep, 255 = exclude."""
     mask = Image.new("L", (width, height), 0)
     draw = ImageDraw.Draw(mask)
-
-    for r in rules:
-        rtype = r.get("type")
-
-        if rtype == "corner":
-            units = r.get("units", "px")
-            corner = r["corner"]
-            ww = _to_pixels(r["width"], units, width, mpp=mpp)
-            hh = _to_pixels(r["height"], units, height, mpp=mpp)
-
-            ww = max(0, min(width, ww))
-            hh = max(0, min(height, hh))
-
-            if corner == "top-left":
-                box = (0, 0, ww, hh)
-            elif corner == "top-right":
-                box = (width - ww, 0, width, hh)
-            elif corner == "bottom-left":
-                box = (0, height - hh, ww, height)
-            elif corner == "bottom-right":
-                box = (width - ww, height - hh, width, height)
-            else:
-                raise ValueError("corner must be one of: top-left, top-right, bottom-left, bottom-right")
-
-            draw.rectangle(box, fill=255)
-
-        elif rtype == "strip":
-            units = r.get("units", "px")
-            bounds = r.get("bounds", None)
-
-            if bounds is not None:
-                if not (isinstance(bounds, (list, tuple)) and len(bounds) == 2):
-                    raise ValueError("strip 'bounds' must be a 2-tuple/list (start, end)")
-
-                start, end = bounds
-                axis = r.get("axis")
-                side = r.get("side")
-
-                if axis == "x" or side in ("left", "right"):
-                    if units == "frac":
-                        x0 = int(round(min(start, end) * width))
-                        x1 = int(round(max(start, end) * width))
-                    else:
-                        x0 = int(round(min(start, end)))
-                        x1 = int(round(max(start, end)))
-                    x0 = max(0, min(width, x0))
-                    x1 = max(0, min(width, x1))
-                    if x1 > x0:
-                        draw.rectangle((x0, 0, x1, height), fill=255)
-                else:
-                    if units == "frac":
-                        y0 = int(round(min(start, end) * height))
-                        y1 = int(round(max(start, end) * height))
-                    else:
-                        y0 = int(round(min(start, end)))
-                        y1 = int(round(max(start, end)))
-                    y0 = max(0, min(height, y0))
-                    y1 = max(0, min(height, y1))
-                    if y1 > y0:
-                        draw.rectangle((0, y0, width, y1), fill=255)
-
-            else:
-                side = r["side"]
-                ss = _to_pixels(r["size"], units, height if side in ("top", "bottom") else width, mpp=mpp)
-                ss = max(0, ss)
-
-                if side == "top":
-                    draw.rectangle((0, 0, width, min(height, ss)), fill=255)
-                elif side == "bottom":
-                    draw.rectangle((0, max(0, height - ss), width, height), fill=255)
-                elif side == "left":
-                    draw.rectangle((0, 0, min(width, ss), height), fill=255)
-                elif side == "right":
-                    draw.rectangle((max(0, width - ss), 0, width, height), fill=255)
-                else:
-                    raise ValueError("side must be one of: top, bottom, left, right")
-
-        elif rtype == "rect":
-            units = r.get("units", "px")
-            if units == "frac":
-                rxmin = int(round(float(r["xmin"]) * width))
-                rxmax = int(round(float(r["xmax"]) * width))
-                rymin = int(round(float(r["ymin"]) * height))
-                rymax = int(round(float(r["ymax"]) * height))
-            else:
-                rxmin = _to_pixels(r["xmin"], units, width, mpp=mpp)
-                rxmax = _to_pixels(r["xmax"], units, width, mpp=mpp)
-                rymin = _to_pixels(r["ymin"], units, height, mpp=mpp)
-                rymax = _to_pixels(r["ymax"], units, height, mpp=mpp)
-
-            x0, x1 = sorted((rxmin, rxmax))
-            y0, y1 = sorted((rymin, rymax))
-            x0 = max(0, min(width, x0))
-            x1 = max(0, min(width, x1))
-            y0 = max(0, min(height, y0))
-            y1 = max(0, min(height, y1))
+    for region in exclusion_regions(rules, (0, width, 0, height), mpp=mpp):
+        if isinstance(region, Box):
+            x0, x1 = (int(round(min(max(v, 0), width))) for v in (region.x0, region.x1))
+            y0, y1 = (int(round(min(max(v, 0), height))) for v in (region.y0, region.y1))
             if x1 > x0 and y1 > y0:
                 draw.rectangle((x0, y0, x1, y1), fill=255)
-
-        elif rtype == "trapezoid":
-            units = r.get("units", "px")
-            ori = r.get("orientation", "top")
-            top_w = r.get("top_width")
-            bot_w = r.get("bottom_width")
-            height_w = r.get("height")
-            offset = r.get("center_offset", 0.0)
-
-            if top_w is None or bot_w is None or height_w is None:
-                raise ValueError("trapezoid requires 'top_width', 'bottom_width', and 'height'")
-
-            if units == "frac":
-                if ori in ("top", "bottom"):
-                    top_w = float(top_w) * width
-                    bot_w = float(bot_w) * width
-                    height_w = float(height_w) * height
-                    offset = float(offset) * width
-                else:
-                    top_w = float(top_w) * height
-                    bot_w = float(bot_w) * height
-                    height_w = float(height_w) * width
-                    offset = float(offset) * height
-            else:
-                top_w = _to_pixels(top_w, units, width if ori in ("top", "bottom") else height, mpp=mpp)
-                bot_w = _to_pixels(bot_w, units, width if ori in ("top", "bottom") else height, mpp=mpp)
-                height_w = _to_pixels(height_w, units, height if ori in ("top", "bottom") else width, mpp=mpp)
-                offset = _to_pixels(offset, units, width if ori in ("top", "bottom") else height, mpp=mpp)
-
-            if ori == "top":
-                cx = width / 2.0 + offset
-                poly = [
-                    (cx - top_w / 2.0, 0),
-                    (cx + top_w / 2.0, 0),
-                    (cx + bot_w / 2.0, height_w),
-                    (cx - bot_w / 2.0, height_w),
-                ]
-            elif ori == "bottom":
-                cx = width / 2.0 + offset
-                poly = [
-                    (cx - bot_w / 2.0, height - height_w),
-                    (cx + bot_w / 2.0, height - height_w),
-                    (cx + top_w / 2.0, height),
-                    (cx - top_w / 2.0, height),
-                ]
-            elif ori == "left":
-                cy = height / 2.0 + offset
-                poly = [
-                    (0, cy - top_w / 2.0),
-                    (0, cy + top_w / 2.0),
-                    (height_w, cy + bot_w / 2.0),
-                    (height_w, cy - bot_w / 2.0),
-                ]
-            elif ori == "right":
-                cy = height / 2.0 + offset
-                poly = [
-                    (width - height_w, cy - bot_w / 2.0),
-                    (width - height_w, cy + bot_w / 2.0),
-                    (width, cy + top_w / 2.0),
-                    (width, cy - top_w / 2.0),
-                ]
-            else:
-                raise ValueError("orientation must be one of: top, bottom, left, right")
-
-            draw.polygon(poly, fill=255)
-
         else:
-            raise ValueError(f"Unknown rule type: {rtype}")
-
+            draw.polygon(region, fill=255)
     return mask
 
 
