@@ -3096,3 +3096,84 @@ def make_joint_three_group_umap_pdf(
 
     return joint
 
+
+def plot_pca_elbow(
+    X: np.ndarray,
+    out_path: str | Path | None = None,
+    max_components: int = 100,
+    figsize: tuple[int, int] = (12, 5),
+    dpi: int = 200,
+):
+    """
+    Plot a PCA elbow plot.
+
+    Parameters
+    ----------
+    X : np.ndarray
+        Shape (n_samples, n_features).
+    out_path : str | Path | None
+        If provided, save the figure to this path.
+    max_components : int
+        Maximum number of PCs to compute/plot.
+    figsize : tuple
+        Figure size.
+    dpi : int
+        DPI for saving.
+
+    Returns
+    -------
+    pca : sklearn.decomposition.PCA
+        Fitted PCA object.
+    fig : matplotlib.figure.Figure
+        The figure object.
+    ax : matplotlib.axes.Axes
+        The main axis.
+    """
+    X = np.asarray(X)
+
+    if X.ndim != 2:
+        raise ValueError(f"X must be 2D, got shape {X.shape}")
+
+    if X.shape[0] < 2:
+        raise ValueError("Need at least 2 samples to run PCA")
+
+    # Standardize features
+    Xs = StandardScaler().fit_transform(X)
+
+    n_components = min(max_components, Xs.shape[0], Xs.shape[1])
+    pca = PCA(n_components=n_components, random_state=0)
+    pca.fit(Xs)
+
+    explained = pca.explained_variance_ratio_
+    cumulative = np.cumsum(explained)
+    pcs = np.arange(1, len(explained) + 1)
+
+    fig, ax1 = plt.subplots(figsize=figsize)
+
+    ax1.plot(pcs, explained, marker="o", linewidth=1.8, label="Explained variance")
+    ax1.set_xlabel("Principal component")
+    ax1.set_ylabel("Explained variance ratio")
+    ax1.set_title("PCA elbow plot")
+
+    ax1.set_xticks(pcs)
+
+    ax2 = ax1.twinx()
+    ax2.plot(pcs, cumulative, marker="s", linewidth=1.8, linestyle="--", label="Cumulative variance")
+    ax2.set_ylabel("Cumulative explained variance")
+    ax2.set_ylim(0, 1.02)
+
+
+    # Combine legends from both axes
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, frameon=False, loc="best")
+
+    fig.tight_layout()
+
+    if out_path is not None:
+        out_path = Path(out_path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(out_path, bbox_inches="tight", dpi=dpi)
+        print(f"Saved elbow plot to {out_path}")
+
+    return pca, fig, ax1

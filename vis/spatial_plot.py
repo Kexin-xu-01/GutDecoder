@@ -122,36 +122,10 @@ def combine_folder_pdf(folder: Path, out_writer: PdfWriter, pdf_name = "spatial_
     out_writer.add_page(title_reader.pages[0])
 
     for page in reader.pages:
-        try:
-            ow = float(page.mediabox.width)
-            oh = float(page.mediabox.height)
-        except Exception:
-            ow, oh = TARGET_WIDTH_PT, TARGET_WIDTH_PT * 0.75
-
-        scale = TARGET_WIDTH_PT / ow
-
-        # try to scale the page in-place
-        try:
-            page.scale_by(scale)
-        except Exception:
-            # fallback: leave unscaled (rare)
-            pass
-
-        new_w = float(page.mediabox.width)
-        new_h = float(page.mediabox.height)
-
-        # create a blank page of the scaled page size (width will equal TARGET_WIDTH_PT)
-        blank = out_writer.add_blank_page(width=new_w, height=new_h)
-
-        # merge the scaled page onto the blank at (0,0)
-        try:
-            blank.merge_translated_page(page, 0, 0)
-        except Exception:
-            try:
-                blank.mergeScaledTranslatedPage(page, 1.0, 0, 0)
-            except Exception:
-                # last resort: append page directly
-                out_writer.add_page(page)
+        # scale every page to the same width, then place it on a blank page of that size
+        page.scale_by(TARGET_WIDTH_PT / float(page.mediabox.width))
+        blank = out_writer.add_blank_page(width=float(page.mediabox.width), height=float(page.mediabox.height))
+        blank.merge_translated_page(page, 0, 0)
 
     return True
 
@@ -198,9 +172,7 @@ def generate_plot_per_run(
             out_filename = f"{re.sub(r'[^0-9A-Za-z]+', '_', match).strip('_')}.pdf"
 
     # load metadata if available
-    if metadata_path is None or not Path(metadata_path).exists():
-        if verbose:
-            print("xenium_directory.xlsx not found. Metadata columns will be empty.")
+    if metadata_path is None:
         meta_df = pd.DataFrame()
     else:
         meta_df = pd.read_excel(metadata_path)
@@ -223,7 +195,7 @@ def generate_plot_per_run(
 
         try:
             parts = [p.lower() for p in full_path.relative_to(ds_dir).parts]
-        except Exception:
+        except ValueError:  # not under ds_dir
             parts = [p.lower() for p in full_path.parts]
 
         slide_num = None
@@ -311,84 +283,85 @@ def generate_plot_per_run(
         for i, (ax, path) in enumerate(zip(axes, found)):
             try:
                 img = Image.open(path).convert("RGB")
-                img.thumbnail(thumb_size)
-                ax.imshow(img)
-                ax.axis("off")
+            except OSError as e:  # unreadable image: leave a labelled gap in the grid
+                print(f"[ERROR] Could not open {path}: {e}")
+                ax.text(0.5, 0.5, f"Unreadable\n{path.name}", ha="center", va="center", fontsize=8)
+                continue
+            img.thumbnail(thumb_size)
+            ax.imshow(img)
+            ax.axis("off")
 
-                sample_id = extract_sample_id_from_path(ds, path, ds_dir)
+            sample_id = extract_sample_id_from_path(ds, path, ds_dir)
 
-                # metadata lookup
-                meta_row = None
-                if not meta_df.empty:
-                    if sample_id in meta_df.index:
-                        meta_row = meta_df.loc[sample_id]
-                    else:
-                        short_id = re.sub(rf'^{re.escape(ds)}', "", sample_id, flags=re.IGNORECASE)
-                        if short_id in meta_df.index:
-                            meta_row = meta_df.loc[short_id]
-                        else:
-                            candidates = meta_df[meta_df.index.str.contains(re.escape(sample_id), case=False, na=False)]
-                            if not candidates.empty:
-                                meta_row = candidates.iloc[0]
-
-                if meta_row is None:
-                    rel = path.relative_to(ds_dir)
-                    subtitle_parts = [f"Sample: {sample_id}", f"Path: {rel}"]
+            # metadata lookup
+            meta_row = None
+            if not meta_df.empty:
+                if sample_id in meta_df.index:
+                    meta_row = meta_df.loc[sample_id]
                 else:
-                    patient_id = meta_row.get("patient_id", meta_row.get("Patient_ID", meta_row.get("Patient ID", "")))
-                    slide_id = meta_row.get("slide_id", meta_row.get("Slide_ID", meta_row.get("Slide ID", "")))
-
-                    disease_l0 = meta_row.get("disease_l0", "")
-                    disease_l1 = meta_row.get("disease_l1", "")
-
-                    location_l0 = meta_row.get("location_l0", meta_row.get("Location", meta_row.get("LOCATION", "")))
-                    location_l1 = meta_row.get("location_l1", meta_row.get("location_01", ""))
-                    location_l2 = meta_row.get("location_l2", "")
-
-                    patient_id = str(patient_id) if pd.notna(patient_id) else ""
-
-                    # slide_id: int if numeric, else keep string
-                    if pd.notna(slide_id) and str(slide_id).strip() != "":
-                        try:
-                            slide_id = str(int(float(slide_id)))
-                        except (ValueError, TypeError):
-                            slide_id = str(slide_id)
+                    short_id = re.sub(rf'^{re.escape(ds)}', "", sample_id, flags=re.IGNORECASE)
+                    if short_id in meta_df.index:
+                        meta_row = meta_df.loc[short_id]
                     else:
-                        slide_id = ""
+                        candidates = meta_df[meta_df.index.str.contains(re.escape(sample_id), case=False, na=False)]
+                        if not candidates.empty:
+                            meta_row = candidates.iloc[0]
 
-                    disease_l0 = str(disease_l0) if pd.notna(disease_l0) else ""
-                    disease_l1 = str(disease_l1) if pd.notna(disease_l1) else ""
+            if meta_row is None:
+                rel = path.relative_to(ds_dir)
+                subtitle_parts = [f"Sample: {sample_id}", f"Path: {rel}"]
+            else:
+                patient_id = meta_row.get("patient_id", meta_row.get("Patient_ID", meta_row.get("Patient ID", "")))
+                slide_id = meta_row.get("slide_id", meta_row.get("Slide_ID", meta_row.get("Slide ID", "")))
 
-                    location_l0 = str(location_l0) if pd.notna(location_l0) else ""
-                    location_l1 = str(location_l1) if pd.notna(location_l1) else ""
-                    location_l2 = str(location_l2) if pd.notna(location_l2) else ""
+                disease_l0 = meta_row.get("disease_l0", "")
+                disease_l1 = meta_row.get("disease_l1", "")
 
-                    subtitle_parts = [
-                        f"patient_id: {patient_id or 'NA'}",
-                        f"slide_id: {slide_id or 'NA'}",
-                        f"disease_l0: {disease_l0 or 'NA'}",
-                        f"disease_l1: {disease_l1 or 'NA'}",
-                        f"location_l0: {location_l0 or 'NA'}",
-                        f"location_l1: {location_l1 or 'NA'}",
-                        f"location_l2: {location_l2 or 'NA'}",
-                    ]
+                location_l0 = meta_row.get("location_l0", meta_row.get("Location", meta_row.get("LOCATION", "")))
+                location_l1 = meta_row.get("location_l1", meta_row.get("location_01", ""))
+                location_l2 = meta_row.get("location_l2", "")
 
-                wrapped = textwrap.fill(", ".join([p for p in subtitle_parts if p]), width=45)
-                # draw metadata above image, and push title higher
-                ax.text(
-                    0.5,
-                    1.01,
-                    wrapped,
-                    ha="center",
-                    va="bottom",
-                    fontsize=8,
-                    transform=ax.transAxes,
-                    bbox=dict(facecolor="white", alpha=0.7, edgecolor="none", pad=1)
-                )
-                ax.set_title(sample_id, fontsize=9, pad=30)
-            except Exception as e:
-                ax.axis("off")
-                ax.text(0.5, 0.5, f"Error\n{e}", ha="center", va="center", fontsize=8)
+                patient_id = str(patient_id) if pd.notna(patient_id) else ""
+
+                # slide_id: int if numeric, else keep string
+                if pd.notna(slide_id) and str(slide_id).strip() != "":
+                    try:
+                        slide_id = str(int(float(slide_id)))
+                    except (ValueError, TypeError):
+                        slide_id = str(slide_id)
+                else:
+                    slide_id = ""
+
+                disease_l0 = str(disease_l0) if pd.notna(disease_l0) else ""
+                disease_l1 = str(disease_l1) if pd.notna(disease_l1) else ""
+
+                location_l0 = str(location_l0) if pd.notna(location_l0) else ""
+                location_l1 = str(location_l1) if pd.notna(location_l1) else ""
+                location_l2 = str(location_l2) if pd.notna(location_l2) else ""
+
+                subtitle_parts = [
+                    f"patient_id: {patient_id or 'NA'}",
+                    f"slide_id: {slide_id or 'NA'}",
+                    f"disease_l0: {disease_l0 or 'NA'}",
+                    f"disease_l1: {disease_l1 or 'NA'}",
+                    f"location_l0: {location_l0 or 'NA'}",
+                    f"location_l1: {location_l1 or 'NA'}",
+                    f"location_l2: {location_l2 or 'NA'}",
+                ]
+
+            wrapped = textwrap.fill(", ".join([p for p in subtitle_parts if p]), width=45)
+            # draw metadata above image, and push title higher
+            ax.text(
+                0.5,
+                1.01,
+                wrapped,
+                ha="center",
+                va="bottom",
+                fontsize=8,
+                transform=ax.transAxes,
+                bbox=dict(facecolor="white", alpha=0.7, edgecolor="none", pad=1)
+            )
+            ax.set_title(sample_id, fontsize=9, pad=30)
 
         # hide unused axes
         for j in range(len(found), len(axes)):
