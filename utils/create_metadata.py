@@ -247,105 +247,46 @@ def build_merged_counts(
 
 def _read_barcodes_from_patch_h5(h5_path: Path) -> List[str]:
     """
-    Robustly read a 'barcode' array from a patch .h5 file.
-    Handles:
-      - datasets named 'barcode', 'barcodes', or nested under groups
-      - byte strings, shape (N,1) or (N,) arrays, arrays of arrays
-    Returns a list of unicode strings (may be empty).
+    Read the barcode dataset from a patch .h5 file as a list of strings.
+
+    The dataset is the first key (top level or one group down) whose name contains
+    "barcode", e.g. 'barcode' or 'barcodes'. Values may be bytes or str, shaped (N,) or (N, 1).
+    Returns [] with a warning when there is no such dataset, so the caller can fall back to
+    the adata `in_tissue` column visibly rather than silently.
     """
     h5_path = Path(h5_path)
     if not h5_path.exists():
         return []
 
     with h5py.File(h5_path, "r") as f:
-        # try direct known keys first
-        candidate_keys = []
+        keys = []
         for k in f.keys():
-            candidate_keys.append(k)
-            # also consider nested
+            keys.append(k)
             if isinstance(f[k], h5py.Group):
-                for kk in f[k].keys():
-                    candidate_keys.append(f"{k}/{kk}")
+                keys.extend(f"{k}/{kk}" for kk in f[k].keys())
 
-        # prefer exact 'barcode' substring matches (case-insensitive)
-        barcode_key = None
-        for key in candidate_keys:
-            if "barcode" in key.lower():
-                barcode_key = key
-                break
-
-        arr = None
-        if barcode_key is not None:
-            # access possibly nested key
-            try:
-                arr = np.array(f[barcode_key])
-            except Exception:
-                arr = None
-        else:
-            # fallback: scan for any 1D/2D dataset with string-like dtype or small object dtype
-            def walk_find(group):
-                for name, item in group.items():
-                    if isinstance(item, h5py.Dataset):
-                        try:
-                            a = np.array(item)
-                        except Exception:
-                            continue
-                        if a is None:
-                            continue
-                        # Accept 1-D of strings or (N,1) nested structures
-                        if (a.ndim == 1) or (a.ndim == 2 and a.shape[1] == 1):
-                            # if dtype string-like or object, accept as candidate
-                            if a.dtype.kind in ("S", "U", "O", "a"):
-                                return a
-                        # sometimes stored as (N,1) bytes in dtype 'S'
-                        if a.ndim == 2 and a.shape[1] == 1:
-                            return a
-                    elif isinstance(item, h5py.Group):
-                        res = walk_find(item)
-                        if res is not None:
-                            return res
-                return None
-            arr = walk_find(f)
-
-        if arr is None:
+        barcode_key = next((k for k in keys if "barcode" in k.lower()), None)
+        if barcode_key is None:
+            warnings.warn(f"[WARN] No barcode dataset in {h5_path} (keys: {keys})")
             return []
+        if not isinstance(f[barcode_key], h5py.Dataset):
+            warnings.warn(f"[WARN] '{barcode_key}' in {h5_path} is a group, not a barcode dataset")
+            return []
+        arr = f[barcode_key][()]
 
-        # flatten shapes like (N,1) -> (N,)
-        if arr.ndim > 1 and arr.shape[1] == 1:
-            arr = arr[:, 0]
+    # flatten shapes like (N,1) -> (N,)
+    if arr.ndim > 1 and arr.shape[1] == 1:
+        arr = arr[:, 0]
 
-        # convert bytes/arrays -> str
-        def to_str(x):
-            if x is None:
-                return None
-            # bytes -> decode
-            if isinstance(x, (bytes, bytearray)):
-                try:
-                    return x.decode("utf-8", errors="ignore")
-                except Exception:
-                    return str(x)
-            # numpy.bytes_ etc.
-            if isinstance(x, (np.bytes_, np.str_)):
-                try:
-                    return str(x)
-                except Exception:
-                    return None
-            # nested sequences like ['007x211']
-            if isinstance(x, (list, tuple, np.ndarray)):
-                if len(x) == 0:
-                    return None
-                return to_str(x[0])
-            # otherwise cast
-            return str(x)
+    def to_str(x):
+        if isinstance(x, (bytes, bytearray)):
+            return x.decode("utf-8", errors="ignore")
+        # nested sequences like ['007x211']
+        if isinstance(x, (list, tuple, np.ndarray)):
+            return to_str(x[0]) if len(x) else None
+        return str(x)
 
-        out = []
-        for el in arr:
-            s = to_str(el)
-            if s is None:
-                continue
-            s = s.strip()
-            out.append(s)
-        return out
+    return [b.strip() for b in map(to_str, arr) if b is not None]
 
 
 def _collect_patch_barcodes_from_dir(patches_dir: Path) -> List[str]:
@@ -360,8 +301,9 @@ def _collect_patch_barcodes_from_dir(patches_dir: Path) -> List[str]:
     for p in sorted(patches_dir.glob("*.h5")):
         try:
             barcodes = _read_barcodes_from_patch_h5(p)
-        except Exception as e:
-            warnings.warn(f"[WARN] Failed to read barcodes from {p}: {e}")
+        except OSError as e:
+            # h5py raises OSError for truncated or unreadable files; skip that file only.
+            warnings.warn(f"[WARN] Could not open {p}, skipping its barcodes: {e}")
             continue
         for b in barcodes:
             if b is None:
@@ -404,10 +346,7 @@ def return_qc(
     results = []
 
     def safe_mean(series):
-        try:
-            return round(float(pd.Series(series).mean()), round_decimals)
-        except Exception:
-            return None
+        return round(float(pd.Series(series).mean()), round_decimals)
 
     # iterate sample folders
     for sample_dir in sorted(root.iterdir()):
@@ -432,11 +371,7 @@ def return_qc(
         sample_id = sample_dir.name
 
         # load adata
-        try:
-            adata = sc.read_h5ad(adata_file)
-        except Exception as e:
-            warnings.warn(f"[WARN] Failed to read {adata_file}: {e}")
-            continue
+        adata = sc.read_h5ad(adata_file)
 
         obs = adata.obs
 
@@ -486,11 +421,7 @@ def return_qc(
                 "pct_in_tissue": None,
             })
         else:
-            if len(in_tissue_mask) != obs.shape[0]:
-                warnings.warn(f"[WARN] in_tissue mask length mismatch for {adata_file} ({len(in_tissue_mask)} vs {obs.shape[0]})")
-                obs_tissue = obs.iloc[[]]
-            else:
-                obs_tissue = obs.loc[in_tissue_mask]
+            obs_tissue = obs.loc[in_tissue_mask]
 
             n_in = int(obs_tissue.shape[0])
             pct_in = round((n_in / float(obs.shape[0])) * 100.0, round_decimals) if obs.shape[0] > 0 else None
@@ -570,15 +501,8 @@ def add_qc_from_all_runs(
         for r in sorted(run_dirs):
             print("  -", r)
 
-    # autodetect qc function if not provided
     if qc_func is None:
-        qc_func = (
-            globals().get("return_qc")
-            or globals().get("summarize_h5ad_qc_from_adata")
-            or globals().get("summarize_h5ad_qc_safe")
-        )
-        if qc_func is None:
-            raise ValueError("qc_func not provided and no default QC function found.")
+        qc_func = return_qc
 
     expected_cols = [
         "n_obs",
@@ -597,6 +521,8 @@ def add_qc_from_all_runs(
             meta[col] = pd.NA
 
     processed_runs = []
+    failures = []
+    new_rows = []
 
     for run_dir in sorted(run_dirs):
         run_name = run_dir.name
@@ -615,10 +541,8 @@ def add_qc_from_all_runs(
                     df_qc = qc_func(str(slide_path), save_csv=save_csv_name)
                 else:
                     df_qc = qc_func(str(slide_path))
-            except TypeError:
-                df_qc = qc_func(str(slide_path))
             except Exception as e:
-                print(f"[ERROR] QC failed on {slide_path}: {e}")
+                failures.append(f"{slide_path}: {type(e).__name__}: {e}")
                 continue
 
             if df_qc is None or df_qc.empty:
@@ -655,13 +579,16 @@ def add_qc_from_all_runs(
                             mask = meta["sample_id"] == sid
                             meta.loc[mask, col] = meta.loc[mask, col].fillna(row[col])
                 else:
-                    new_row = {c: pd.NA for c in meta.columns}
-                    new_row["sample_id"] = sid
-                    for col in expected_cols:
-                        new_row[col] = row[col]
-                    meta = pd.concat([meta, pd.DataFrame([new_row])], ignore_index=True)
+                    new_rows.append({"sample_id": sid, **{col: row[col] for col in expected_cols}})
+
+    if new_rows:
+        # Rebuild once instead of concatenating mostly-NA rows, which pandas is deprecating.
+        meta = pd.DataFrame(meta.to_dict("records") + new_rows, columns=meta.columns)
+
+    if failures:
+        raise RuntimeError(f"QC failed on {len(failures)} slide(s):\n" + "\n".join(failures))
 
     meta = meta.sort_values("sample_id").reset_index(drop=True)
 
-    print("\n✅ QC integration complete.")
+    print("\nQC integration complete.")
     return {"metadata": meta, "processed_runs": processed_runs}

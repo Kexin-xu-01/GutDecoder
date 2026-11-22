@@ -71,3 +71,9 @@ packages = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Deprecations raised inside installed third-party packages, not by gutdecoder.
+filterwarnings = [
+    "ignore:pkg_resources is deprecated as an API:UserWarning",
+    "ignore:Deprecated call to `pkg_resources.declare_namespace:DeprecationWarning",
+    "ignore:`product` is deprecated as of NumPy:DeprecationWarning:h5py",
+]
