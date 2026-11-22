@@ -155,10 +155,21 @@ def get_transcript_bbox(transcripts_path, experiment_path, alignment_file_path=N
     logger.info(f"Transcript bbox (ymin, ymax, xmin, xmax): {bbox}")
     return bbox
 
-def get_indices_chunk(partition, key_x, key_y, 
-                      x_min, y_min, spot_size_um, pixel_size_he, n, spot_grid_columns):
-    a = np.floor((partition[key_x] - x_min) / (spot_size_um / pixel_size_he)).astype(int)
-    b = np.floor((partition[key_y] - y_min) / (spot_size_um / pixel_size_he)).astype(int)
+def get_indices_chunk(partition, key_x, key_y, bbox, step, m, n, spot_grid_columns):
+    """Flat spot index and feature column of every point; raises if a point lies outside `bbox`."""
+    y_min, y_max, x_min, x_max = bbox
+    x, y = partition[key_x], partition[key_y]
+    outside = ~(x.between(x_min, x_max) & y.between(y_min, y_max))
+    if outside.any():
+        raise ValueError(
+            f"{int(outside.sum())} points lie outside the pooling bbox "
+            f"(ymin, ymax, xmin, xmax)={bbox} or have missing coordinates, e.g. "
+            f"{partition.loc[outside, [key_x, key_y]].head(3).to_dict('records')}"
+        )
+
+    # Points on the max edge of the bbox belong to the last row/column of spots.
+    a = np.minimum(np.floor((x - x_min) / step).astype(int), n - 1)
+    b = np.minimum(np.floor((y - y_min) / step).astype(int), m - 1)
 
     c = b * n + a
     cols = spot_grid_columns.get_indexer(partition['feature_name'])
@@ -179,6 +190,7 @@ def pool_transcripts_xenium_bbox(
 
             - 'he_x' and 'he_y' indicating the pixel coordinates of each transcripts in the morphology image
             - 'feature_name' indicating the transcript name
+        bbox: (ymin, ymax, xmin, xmax) of the spot grid in pixels; every point must lie inside it
         pixel_size_he (float): pixel size in um/px of 'he_x' and 'he_y'
         spot_size_um: pooling rectangle width in um
         key_x: column name of pixel x coordinate of each transcript in `df`
@@ -208,15 +220,15 @@ def pool_transcripts_xenium_bbox(
 
     m = math.ceil(m)
     n = math.ceil(n)
+    step = spot_size_um / pixel_size_he
     spot_grid = pd.DataFrame(0, index=range(m * n), columns=unique_features)
     spot_grid_np = spot_grid.values.astype(np.uint32)
     
     if isinstance(df, dd.DataFrame):
         import dask.array as da
             
-        cols_c = df.map_partitions(get_indices_chunk, key_x, key_y, 
-                      x_min, y_min, spot_size_um, pixel_size_he, n, spot_grid.columns,
-                      meta={'c': 'int64', 'cols': 'int64'})
+        cols_c = df.map_partitions(get_indices_chunk, key_x, key_y, bbox, step, m, n, spot_grid.columns,
+                                   meta={'c': 'int64', 'cols': 'int64'})
         
         num_rows = m * n
         num_cols = len(unique_features)
@@ -230,8 +242,7 @@ def pool_transcripts_xenium_bbox(
         spot_grid_np = h.astype(np.uint32).compute()
         
     else:
-        cols_c = get_indices_chunk(df,key_x, key_y, 
-                      x_min, y_min, spot_size_um, pixel_size_he, n, spot_grid.columns)
+        cols_c = get_indices_chunk(df, key_x, key_y, bbox, step, m, n, spot_grid.columns)
 
         c = cols_c['c']
         cols = cols_c['cols']
