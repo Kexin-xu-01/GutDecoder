@@ -24,7 +24,6 @@ from loguru import logger
 
 
 # ---------- helpers ----------
-from gutdecoder.utils.workflow_config import coerce_bool, _int_or_str_lower
 
 
 def _sanitize_tag(s: str, maxlen: int = 8) -> str:

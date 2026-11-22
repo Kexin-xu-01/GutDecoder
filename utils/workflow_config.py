@@ -5,12 +5,20 @@ from collections.abc import Mapping
 import yaml
 
 
+_TRUE = {"1", "true", "yes", "y", "on"}
+_FALSE = {"0", "false", "no", "n", "off", "none", ""}
+
+
 def coerce_bool(value):
+    """Parse a config boolean; raise on anything that is not a clear yes/no (e.g. a typo)."""
     if isinstance(value, bool):
         return value
-    if isinstance(value, (int, float)):
-        return bool(value)
-    return str(value).lower() not in ("0", "false", "no", "none", "")
+    text = "none" if value is None else str(value).strip().lower()
+    if text in _TRUE:
+        return True
+    if text in _FALSE:
+        return False
+    raise ValueError(f"Expected a boolean (true/false, yes/no, 1/0); got {value!r}")
 
 
 def _int_or_str_lower(value):
