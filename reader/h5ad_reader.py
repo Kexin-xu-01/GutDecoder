@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Dict, Iterable, Optional, Tuple
 
 import numpy as np
 import hest
 import pandas as pd
+from loguru import logger
 import scanpy as sc
 import matplotlib.pyplot as plt
 from hest import XeniumReader 
@@ -216,16 +218,22 @@ def fast_spatial(
     alpha: float = 0.6,
     cmap: str = "viridis",
     invert_y: bool = True,
+    *,
+    x: str | None = None,
+    y: str | None = None,
+    max_cells: int | None = None,
+    seed: int = 0,
 ):
     """
-    Quick scatterplot of spatial coordinates from .obsm["spatial"].
+    Quick scatterplot of spatial coordinates from .obsm["spatial"]
+    (or from obs columns ``x``/``y`` when both are given).
 
     Parameters
     ----------
     adata : AnnData
         Must contain .obsm["spatial"] (n×2 array).
     color : str or None
-        Column in adata.obs to color by. If None, plot plain points.
+        Column in adata.obs, or a gene in adata.var_names, to color by. If None, plot plain points.
     save : path-like or None
         If provided, save the figure to this path.
     figsize : tuple
@@ -238,6 +246,10 @@ def fast_spatial(
         Colormap name if coloring by a continuous variable.
     invert_y : bool
         Invert y-axis to match microscopy conventions.
+    x, y : str or None
+        obs columns holding coordinates, used instead of .obsm["spatial"] when both are given.
+    max_cells : int or None
+        Plot a random subsample of this many cells (reproducible via ``seed``).
 
     Returns
     -------
@@ -245,20 +257,34 @@ def fast_spatial(
     """
     import matplotlib.pyplot as plt
 
-    coords = adata.obsm.get("spatial", None)
-    if coords is None:
-        raise ValueError("AnnData object has no .obsm['spatial'].")
+    if (x is None) != (y is None):
+        raise ValueError("give both x and y obs columns, or neither")
+    if max_cells is not None and adata.n_obs > max_cells:
+        idx = np.random.default_rng(seed).choice(adata.n_obs, max_cells, replace=False)
+        adata = adata[np.sort(idx)]
 
-    x, y = coords[:, 0], coords[:, 1]
+    if x is not None:
+        xs, ys = adata.obs[x].to_numpy(), adata.obs[y].to_numpy()
+    else:
+        coords = adata.obsm.get("spatial", None)
+        if coords is None:
+            raise ValueError("AnnData object has no .obsm['spatial'].")
+        xs, ys = coords[:, 0], coords[:, 1]
 
     fig, ax = plt.subplots(figsize=figsize)
 
     if color is None:
-        sca = ax.scatter(x, y, s=point_size, alpha=alpha, c="k")
+        sca = ax.scatter(xs, ys, s=point_size, alpha=alpha, c="k")
     else:
-        vals = adata.obs[color]
+        if color in adata.obs.columns:
+            vals = adata.obs[color]
+        elif color in adata.var_names:
+            col = adata[:, color].X
+            vals = pd.Series(np.asarray(col.todense() if hasattr(col, "todense") else col).ravel())
+        else:
+            raise ValueError(f"{color!r} not found in adata.obs or adata.var_names")
         if vals.dtype.kind in "iufc":  # numeric
-            sca = ax.scatter(x, y, s=point_size, alpha=alpha, c=vals, cmap=cmap)
+            sca = ax.scatter(xs, ys, s=point_size, alpha=alpha, c=vals, cmap=cmap)
             cbar = plt.colorbar(sca, ax=ax)
             cbar.set_label(color)
         else:
@@ -266,7 +292,7 @@ def fast_spatial(
             colors = plt.cm.tab20(np.linspace(0, 1, len(cats.cat.categories)))
             for col, ct in zip(colors, cats.cat.categories):
                 m = cats == ct
-                ax.scatter(x[m], y[m], s=point_size, alpha=alpha, c=[col], label=str(ct))
+                ax.scatter(xs[np.asarray(m)], ys[np.asarray(m)], s=point_size, alpha=alpha, c=[col], label=str(ct))
             ax.legend(markerscale=2, bbox_to_anchor=(1.05, 1), loc="upper left")
 
     if invert_y:
@@ -747,6 +773,109 @@ def rule_based_spot_exclusion(
 
     return final_keep, fig
 
+
+# ----------------------------------------------------------------------------- feature padding
+
+def pick_spatial_xy_columns(obs: pd.DataFrame) -> Tuple[str, str]:
+    """Return the (x, y) centroid column names of a cell table; KeyError if no known pair exists."""
+    for x_col, y_col in [("cell_centroid_x", "cell_centroid_y"), ("centroid_x", "centroid_y"),
+                         ("cell_x", "cell_y"), ("x_centroid", "y_centroid"), ("x", "y"), ("X", "Y")]:
+        if x_col in obs.columns and y_col in obs.columns:
+            return x_col, y_col
+    centroidish = [c for c in obs.columns if re.search(r"centroid|center", str(c), flags=re.IGNORECASE)]
+    raise KeyError(f"Could not find centroid x/y columns in obs. Centroid-like columns: {centroidish[:50]}")
+
+
+def collect_feature_union(rows: pd.DataFrame, h5ad_col: str, rename_map: Optional[Dict[str, str]] = None) -> list:
+    """
+    Sorted union of cell_type labels across the labelled h5ad files listed in ``rows[h5ad_col]``.
+    Files are opened backed (no count matrices loaded). Missing files are skipped with a warning.
+    """
+    features, seen = set(), set()
+    for value in rows[h5ad_col]:
+        if pd.isna(value) or not str(value).strip():
+            continue
+        path = Path(str(value).strip()).resolve()
+        if path in seen:
+            continue
+        seen.add(path)
+        if not path.is_file():
+            logger.warning(f"Feature union: labelled h5ad not found, its labels are excluded: {path}")
+            continue
+        labelled = sc.read_h5ad(path, backed="r")
+        try:
+            standardize_obs_columns(labelled, rename_map=rename_map)
+            if "cell_type" not in labelled.obs:
+                raise ValueError(f"Expected cell_type after annotation renaming: {path}")
+            labels = labelled.obs["cell_type"]
+            if not isinstance(labels, pd.Series):
+                raise ValueError(f"Multiple annotation columns renamed to cell_type: {path}")
+            features.update(labels.dropna().astype(str))
+        finally:
+            labelled.file.close()
+    if not features:
+        raise ValueError("No cell type/niche labels found for the selected samples")
+    return sorted(features)
+
+
+def pad_adata_to_var_union(adata: sc.AnnData, features: Iterable[str]) -> sc.AnnData:
+    """
+    Zero-fill and reorder the feature axis to exactly ``features``, preserving obs, obsm, obsp,
+    uns, layers, varm, varp and raw. Raises if ``adata`` has features outside ``features``.
+    A var column named ``_index`` (which h5ad writing rejects) is renamed to ``index_value``.
+    """
+    import anndata as ad
+    import scipy.sparse as sp
+    from copy import deepcopy
+
+    target = pd.Index(list(map(str, features)))
+    if not target.is_unique or not adata.var_names.is_unique:
+        raise ValueError("Feature names must be unique for zero padding")
+    unexpected = adata.var_names.difference(target)
+    if len(unexpected):
+        raise ValueError(f"Features absent from the shared feature list: {list(unexpected)}")
+
+    var = adata.var.rename(columns={"_index": "index_value"}) if "_index" in adata.var.columns else adata.var
+    if adata.var_names.equals(target):
+        if var is adata.var:
+            return adata
+        out = adata.copy()
+        out.var = var.copy()
+        return out
+
+    missing = target.difference(adata.var_names, sort=False)
+    order = adata.var_names.append(missing).get_indexer(target)
+
+    def pad_columns(matrix):
+        if matrix is None:
+            return None
+        if sp.issparse(matrix):
+            zeros = sp.csr_matrix((matrix.shape[0], len(missing)), dtype=matrix.dtype)
+            return sp.hstack([matrix, zeros], format="csr")[:, order]
+        zeros = np.zeros((matrix.shape[0], len(missing)), dtype=matrix.dtype)
+        return np.concatenate([matrix, zeros], axis=1)[:, order]
+
+    varm = {}
+    for key, values in adata.varm.items():
+        if isinstance(values, pd.DataFrame):
+            varm[key] = values.reindex(target, fill_value=0)
+        elif sp.issparse(values):
+            varm[key] = pad_columns(values.T).T.tocsr()
+        else:
+            zeros = np.zeros((len(missing),) + values.shape[1:], dtype=values.dtype)
+            varm[key] = np.concatenate([values, zeros], axis=0)[order]
+    padded = ad.AnnData(
+        X=pad_columns(adata.X), obs=adata.obs.copy(), var=var.reindex(target).copy(),
+        obsm=deepcopy(dict(adata.obsm)), obsp=deepcopy(dict(adata.obsp)), uns=deepcopy(adata.uns), varm=varm,
+        # recent AnnData versions expose X as layers[None]; it is supplied above
+        layers={key: pad_columns(value) for key, value in adata.layers.items() if key is not None},
+        varp={key: pad_columns(pad_columns(value).T).T for key, value in adata.varp.items()},
+    )
+    if adata.raw is not None:
+        padded.raw = adata.raw.to_adata()
+    return padded
+
+
 __all__ = [
     "coord_range",
     "get_xy_from_adata",
@@ -761,5 +890,8 @@ __all__ = [
     "save_all",
     "apply_spot_exclusions",
     'fast_spatial',
-    "rule_based_spot_exclusion"
+    "rule_based_spot_exclusion",
+    "pick_spatial_xy_columns",
+    "collect_feature_union",
+    "pad_adata_to_var_union",
 ]

@@ -42,6 +42,7 @@ def _fake_run(monkeypatch, missing=False):
     monkeypatch.setattr(_io, "extract_best_model_gene_corrs", lambda run, runs_root, verbose: (None, None, None))
     monkeypatch.setattr(_io, "merge_kfold_gene_corrs_with_test_metadata", lambda genes, splits: pd.DataFrame({
         "test_sample": ["A", "A", "A", "B"],
+        "gene": ["g1", "g2", "g3", "g1"],
         "corr": [0.2, 0.4, None, 0.9],
     }))
 
@@ -61,3 +62,41 @@ def test_sample_corr_stats_skips_unfinished_run_with_warning(tmp_path, monkeypat
 
     with pytest.warns(UserWarning, match="Skipping run_1"):
         assert _io.sample_corr_stats_for_run("run_1", ["A"], str(tmp_path), str(tmp_path)) is None
+
+
+def test_load_run_sample_corrs_keeps_gene_level_rows(tmp_path, monkeypatch):
+    _fake_run(monkeypatch)
+
+    dataset, df = _io.load_run_sample_corrs("run_1", ["A"], str(tmp_path), str(tmp_path))
+
+    assert dataset == "DS"
+    assert df["gene"].tolist() == ["g1", "g2", "g3"]
+    assert df["corr"].isna().sum() == 1
+
+
+def test_pngs_to_pdf_writes_one_page_per_png(tmp_path):
+    from PIL import Image
+
+    pngs = []
+    for i, mode in enumerate(["RGBA", "P"]):
+        path = tmp_path / f"{i}.png"
+        Image.new(mode, (10, 10)).save(path)
+        pngs.append(path)
+
+    pdf = _helpers._pngs_to_pdf(pngs, tmp_path / "out.pdf")
+
+    data = pdf.read_bytes()
+    assert data.startswith(b"%PDF")
+    assert data.count(b"/Type /Page") - data.count(b"/Type /Pages") == 2
+
+
+def test_grid_plot_lists_every_failed_dataset(tmp_path, monkeypatch):
+    from gutdecoder.vis import _summary
+
+    def broken(dataset_or_run, **kwargs):
+        raise FileNotFoundError(f"no splits for {dataset_or_run}")
+
+    monkeypatch.setattr(_summary, "plot_dataset_mean_across_runs", broken)
+
+    with pytest.raises(RuntimeError, match="DS1: FileNotFoundError.*\n.*DS2"):
+        _summary.grid_plot_for_datasets(["DS1", "DS2"], outdir=tmp_path)

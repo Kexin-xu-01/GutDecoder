@@ -535,13 +535,13 @@ def run_gene_list_name(run_path: Path) -> str:
     return ""
 
 
-def sample_corr_stats_for_run(run: str, samples, runs_root: str = DEFAULT_RUNS_ROOT,
-                              splits_root: str = DEFAULT_SPLITS_ROOT) -> Optional[pd.DataFrame]:
+def load_run_sample_corrs(run: str, samples, runs_root: str = DEFAULT_RUNS_ROOT,
+                          splits_root: str = DEFAULT_SPLITS_ROOT) -> Optional[Tuple[str, pd.DataFrame]]:
     """
-    Per-sample Pearson mean/std over genes for a run's best model, restricted to `samples`.
+    Gene-level correlations of a run's best model for the given samples.
 
-    Returns columns sample, run, dataset, gene_list, mean_pearson, std_pearson, n_genes,
-    or None (with a warning) when the run has no results or splits yet.
+    Returns (dataset_name, df) with columns sample, gene, corr (numeric), or None with a
+    warning when the run has no results or splits yet.
     """
     try:
         dataset_name, _, _ = load_run(run, runs_root=runs_root)
@@ -555,60 +555,28 @@ def sample_corr_stats_for_run(run: str, samples, runs_root: str = DEFAULT_RUNS_R
     sample_col = _find_col_ci(df_long, _SAMPLE_COLS)
     if sample_col is None:
         raise KeyError(f"No sample id column in merged results for {run}; columns: {list(df_long.columns)}")
-    df_long = df_long[df_long[sample_col].astype(str).isin([str(x) for x in samples])]
+    df = pd.DataFrame({
+        "sample": df_long[sample_col].astype(str),
+        "gene": df_long["gene"],
+        "corr": pd.to_numeric(df_long["corr"], errors="coerce"),
+    })
+    return dataset_name, df[df["sample"].isin([str(x) for x in samples])]
 
-    corr = pd.to_numeric(df_long["corr"], errors="coerce")
-    stats = corr.groupby(df_long[sample_col].astype(str).rename("sample")).agg(
-        mean_pearson="mean", std_pearson="std", n_genes="size"
-    ).reset_index()
+
+def sample_corr_stats_for_run(run: str, samples, runs_root: str = DEFAULT_RUNS_ROOT,
+                              splits_root: str = DEFAULT_SPLITS_ROOT) -> Optional[pd.DataFrame]:
+    """
+    Per-sample Pearson mean/std over genes for a run's best model, restricted to `samples`.
+
+    Returns columns sample, run, dataset, gene_list, mean_pearson, std_pearson, n_genes,
+    or None (with a warning) when the run has no results or splits yet.
+    """
+    loaded = load_run_sample_corrs(run, samples, runs_root, splits_root)
+    if loaded is None:
+        return None
+    dataset_name, df = loaded
+    stats = df.groupby("sample")["corr"].agg(mean_pearson="mean", std_pearson="std", n_genes="size").reset_index()
     stats["run"] = run
     stats["dataset"] = dataset_name
     stats["gene_list"] = run_gene_list_name(Path(runs_root) / run)
     return stats
-
-
-# ----------------------------------------------------------------------------- presentation loaders
-
-DEFAULT_MODEL_META_XLSX = (
-    "/project/gutdecoder/kxu/hest/metadata/foundation_model/pathology_foundation_models_plotting.xlsx"
-)
-
-
-def load_pred_adata(run: str, sample: str, runs_root: str = DEFAULT_RUNS_ROOT):
-    """Read <runs_root>/<run>/pred/<sample>.h5ad (predictions added by add_inference_to_adata_and_plot)."""
-    import scanpy as sc
-
-    path = Path(runs_root) / run / "pred" / f"{sample}.h5ad"
-    if not path.is_file():
-        raise FileNotFoundError(f"prediction AnnData not found: {path}")
-    return sc.read_h5ad(path)
-
-
-def stack_gene_corrs(frames: dict) -> pd.DataFrame:
-    """
-    Stack per-gene correlation tables of several runs for one plot.
-
-    frames: {dataset label: DataFrame}, in the order the datasets should appear.
-    Adds ``dataset`` (the label) and ``dataset_label`` ("<label>\n(<n> genes)").
-    """
-    if not frames:
-        raise ValueError("frames is empty")
-    df = pd.concat([f.assign(dataset=label) for label, f in frames.items()], ignore_index=True)
-    counts = df.groupby("dataset").size()
-    df["dataset_label"] = df["dataset"].map({k: f"{k}\n({v} genes)" for k, v in counts.items()})
-    return df
-
-
-def load_run_with_model_meta(run: str, model_meta_xlsx: str = DEFAULT_MODEL_META_XLSX,
-                             runs_root: str = DEFAULT_RUNS_ROOT) -> pd.DataFrame:
-    """
-    Encoder results of a run (load_run) left-joined with the foundation-model metadata sheet
-    on encoder_name == name. Encoders without a metadata row are kept and logged.
-    """
-    _dataset, results_df, _best = load_run(Path(runs_root) / run)
-    meta = pd.read_excel(model_meta_xlsx)
-    merged = results_df.merge(meta, left_on="encoder_name", right_on="name", how="left")
-    unmatched = sorted(set(results_df["encoder_name"]) - set(meta["name"]))
-    if unmatched:
-        logger.warning(f"load_run_with_model_meta: no metadata in {model_meta_xlsx} for encoders {unmatched}")
-    return merged

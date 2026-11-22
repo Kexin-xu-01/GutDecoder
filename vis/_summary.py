@@ -4,9 +4,7 @@ _summary.py — summary / aggregate plots.
 
 from __future__ import annotations
 
-import json
 import os
-import warnings
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
@@ -36,6 +34,8 @@ from ._helpers import (
     _sample_cmap,
     _format_title,
     _find_col_ci,
+    _pngs_to_pdf,
+    _safe_read_json,
 )
 from ._io import (
     load_run,
@@ -43,6 +43,8 @@ from ._io import (
     get_test_splits,
     merge_kfold_gene_corrs_with_test_metadata,
     annotate_genes_with_curated,
+    load_run_sample_corrs,
+    run_gene_list_name,
 )
 from ._per_gene import (
     plot_gene_correlation_barplot,
@@ -226,24 +228,7 @@ def plot_summary_bar_by_dataset(
     png_files = sorted(folder.glob("*.png"))
     combined_pdf_path = None
     if png_files:
-        images = []
-        for p in png_files:
-            try:
-                im = Image.open(p)
-                # convert to RGB if needed (PIL can't save RGBA to PDF)
-                if im.mode in ("RGBA", "LA") or (im.mode == "P"):
-                    im = im.convert("RGB")
-                images.append(im)
-            except Exception as e:
-                warnings.warn(f"Failed to open image {p}: {e}")
-
-        if images:
-            combined_pdf_path = outdir / "by_dataset_combined.pdf"
-            try:
-                images[0].save(combined_pdf_path, "PDF", resolution=200.0, save_all=True, append_images=images[1:])
-            except Exception as e:
-                warnings.warn(f"Failed to write combined PDF {combined_pdf_path}: {e}")
-                combined_pdf_path = None
+        combined_pdf_path = _pngs_to_pdf(png_files, outdir / "by_dataset_combined.pdf")
 
     return results, combined_pdf_path
 
@@ -343,23 +328,7 @@ def plot_gene_list_across_datasets(
     png_files = sorted(folder.glob("*.png"))
     combined_pdf_path = None
     if png_files:
-        images = []
-        for p in png_files:
-            try:
-                im = Image.open(p)
-                if im.mode in ("RGBA", "LA") or (im.mode == "P"):
-                    im = im.convert("RGB")
-                images.append(im)
-            except Exception as e:
-                warnings.warn(f"Failed to open image {p}: {e}")
-
-        if images:
-            combined_pdf_path = outdir / "by_gene_list_combined.pdf"
-            try:
-                images[0].save(combined_pdf_path, "PDF", resolution=200.0, save_all=True, append_images=images[1:])
-            except Exception as e:
-                warnings.warn(f"Failed to write combined PDF {combined_pdf_path}: {e}")
-                combined_pdf_path = None
+        combined_pdf_path = _pngs_to_pdf(png_files, outdir / "by_gene_list_combined.pdf")
 
     return results, combined_pdf_path
 
@@ -575,14 +544,11 @@ def plot_dataset_mean_across_runs(
     sample_col_candidates = ["test_sample", "sample_id", "SampleID"]
 
     if str(dataset_or_run).startswith("run_"):
-        try:
-            df_splits = get_test_splits(dataset_or_run, runs_root=str(runs_root), splits_root=str(splits_root))
-            sample_col = _find_col_ci(df_splits, sample_col_candidates)
-            if sample_col is None:
-                raise KeyError(f"No sample column found in splits for run {dataset_or_run}")
-            samples = sorted(df_splits[sample_col].dropna().astype(str).unique().tolist())
-        except Exception as e:
-            raise RuntimeError(f"Failed to read splits for run {dataset_or_run}: {e}")
+        df_splits = get_test_splits(dataset_or_run, runs_root=str(runs_root), splits_root=str(splits_root))
+        sample_col = _find_col_ci(df_splits, sample_col_candidates)
+        if sample_col is None:
+            raise KeyError(f"No sample column found in splits for run {dataset_or_run}")
+        samples = sorted(df_splits[sample_col].dropna().astype(str).unique().tolist())
         label_name = dataset_or_run
     else:
         ds_dir = splits_root / str(dataset_or_run) / "splits"
@@ -593,14 +559,11 @@ def plot_dataset_mean_across_runs(
             raise FileNotFoundError(f"No test_*.csv files found for dataset '{dataset_or_run}' in {ds_dir}")
         sample_set = set()
         for tf in test_files:
-            try:
-                df_t = pd.read_csv(tf)
-                sc = _find_col_ci(df_t, sample_col_candidates)
-                if sc is None:
-                    continue
-                sample_set.update(df_t[sc].dropna().astype(str).tolist())
-            except Exception:
-                continue
+            df_t = pd.read_csv(tf)
+            sc = _find_col_ci(df_t, sample_col_candidates)
+            if sc is None:
+                raise KeyError(f"No sample id column in {tf}; columns: {list(df_t.columns)}")
+            sample_set.update(df_t[sc].dropna().astype(str).tolist())
         samples = sorted(sample_set)
         label_name = dataset_or_run
 
@@ -615,103 +578,27 @@ def plot_dataset_mean_across_runs(
 
     candidate_runs = [str(r).split("/")[-1] for r in candidate_runs]
 
-    # 3) For each candidate run, compute per-sample mean Pearson, and compute SD across gene-level corrs
+    # 3) Per run: mean of per-sample mean Pearson, and SD across all gene-level correlations
     results = []
     for run_name in candidate_runs:
-        try:
-            # load splits for this run
-            try:
-                df_splits_run = get_test_splits(run_name, runs_root=str(runs_root), splits_root=str(splits_root))
-            except Exception:
-                continue
-
-            sample_col_run = _find_col_ci(df_splits_run, sample_col_candidates)
-            if sample_col_run is None:
-                continue
-
-            samples_present = df_splits_run[sample_col_run].astype(str).dropna().unique().tolist()
-            samples_in_common = sorted(set(samples) & set(samples_present))
-            if not samples_in_common:
-                continue
-
-            # load gene-level correlations for best model of this run
-            try:
-                best_info, ds_name, df_genes = extract_best_model_gene_corrs(run_name, runs_root=str(runs_root), verbose=False)
-            except Exception:
-                continue
-
-            # create long df with per-split entries attached to samples
-            try:
-                df_long = merge_kfold_gene_corrs_with_test_metadata(df_genes, df_splits_run)
-            except Exception:
-                continue
-
-            sample_col_long = _find_col_ci(df_long, sample_col_candidates)
-            if sample_col_long is None:
-                continue
-
-            # Filter df_long to rows for the samples_in_common
-            df_filtered = df_long[df_long[sample_col_long].astype(str).isin(samples_in_common)].copy()
-
-            if df_filtered.empty:
-                continue
-
-            # 3a) per-sample means (as before)
-            per_sample_means = (
-                df_filtered.groupby(sample_col_long)["corr"]
-                .agg(lambda s: pd.to_numeric(s, errors="coerce").dropna().mean())
-                .dropna()
-                .to_numpy()
-            )
-            if len(per_sample_means) == 0:
-                continue
-            mean_across_samples = float(pd.Series(per_sample_means).mean())
-
-            # 3b) sd across ALL gene-level correlations used for these samples
-            # convert corr column to numeric and dropna
-            all_corrs = pd.to_numeric(df_filtered["corr"], errors="coerce").dropna().to_numpy()
-            if all_corrs.size == 0:
-                continue
-            # use sample standard deviation (ddof=1). change to ddof=0 if you prefer population SD.
-            sd_on_genes = float(all_corrs.std(ddof=1)) if all_corrs.size > 1 else 0.0
-
-            # number of unique genes used (use 'gene' column if present)
-            if "gene" in df_filtered.columns:
-                n_genes_used = int(pd.Series(df_filtered["gene"].dropna().unique()).size)
-            else:
-                # fallback: count unique gene-sample pairs divided by number of samples (best-effort)
-                n_genes_used = int(max(1, df_filtered.shape[0] // max(1, len(samples_in_common))))
-
-            n_samples_used = len(set(df_filtered[sample_col_long].astype(str).unique().tolist()))
-
-            # discover gene_list for label
-            gene_list_name = ""
-            run_path = runs_root / run_name
-            try:
-                for dirpath, _, filenames in os.walk(run_path):
-                    if "config.json" in filenames:
-                        with open(Path(dirpath) / "config.json", "r") as cf:
-                            cfg = json.load(cf)
-                        gene_list_name = cfg.get("gene_list") or cfg.get("genes") or ""
-                        if isinstance(gene_list_name, str):
-                            gene_list_name = Path(gene_list_name).name
-                        break
-            except Exception:
-                gene_list_name = ""
-
-            results.append({
-                "run": run_name,
-                "dataset": ds_name,
-                "gene_list": gene_list_name or run_name,
-                "n_samples": n_samples_used,
-                "mean_of_sample_means": mean_across_samples,
-                "sd_on_genes": sd_on_genes,
-                "n_genes_used": n_genes_used,
-            })
-
-        except Exception as e:
-            warnings.warn(f"[plot_dataset_mean_across_runs] skipping run {run_name}: {e}")
+        loaded = load_run_sample_corrs(run_name, samples, str(runs_root), str(splits_root))
+        if loaded is None:
             continue
+        ds_name, df = loaded
+        df = df.dropna(subset=["corr"])
+        if df.empty:  # this run did not test any of these samples
+            continue
+        per_sample_means = df.groupby("sample")["corr"].mean()
+        results.append({
+            "run": run_name,
+            "dataset": ds_name,
+            "gene_list": run_gene_list_name(runs_root / run_name) or run_name,
+            "n_samples": int(per_sample_means.size),
+            "mean_of_sample_means": float(per_sample_means.mean()),
+            # sample standard deviation (ddof=1)
+            "sd_on_genes": float(df["corr"].std(ddof=1)) if len(df) > 1 else 0.0,
+            "n_genes_used": int(df["gene"].nunique()),
+        })
 
     if not results:
         raise ValueError("No candidate runs produced statistics — check candidate_runs and splits.")
@@ -789,48 +676,29 @@ def compare_models(
     """
     run_dir = Path(runs_root) / run
 
-    # Use the shared loader to parse dataset_results.json and pick up dataset name
-    try:
-        dataset_name, results_df, _best = load_run(run_dir)
-    except (FileNotFoundError, ValueError) as e:
-        print(f"[visualize_dataset_results] {e}")
-        return None
-
-    if results_df.empty:
-        print(f"[visualize_dataset_results] No encoder results found in {run_dir}")
-        return None
+    # load_run raises if dataset_results.json is missing or has no encoder results
+    dataset_name, results_df, _best = load_run(run_dir)
 
     # Extract encoders + stats
     encoders = results_df.get("encoder_name", pd.Series([], dtype="string")).astype(str).tolist()
     means = pd.to_numeric(results_df.get("pearson_mean", pd.Series([], dtype="float")), errors="coerce").to_numpy()
     stds  = pd.to_numeric(results_df.get("pearson_std",  pd.Series([], dtype="float")), errors="coerce").to_numpy()
 
-    # Find config.json anywhere in the run dir to show gene list info (optional)
+    # Gene list name and size for the title, from the first config.json in the run
     gene_list_name = ""
     gene_count = None
     for dirpath, _, filenames in os.walk(run_dir):
         if "config.json" in filenames:
-            config_path = Path(dirpath) / "config.json"
-            try:
-                with open(config_path, "r") as cf:
-                    config = json.load(cf)
-                gene_list_name = config.get("gene_list", "") or config.get("genes", "") or ""
-                # Try to count genes if file exists and contains a JSON list
-                if gene_list_name:
-                    gl_path = Path(gene_list_name)
-                    if not gl_path.is_file():
-                        gl_path = (Path(dirpath) / gene_list_name)
-                    if gl_path.is_file():
-                        try:
-                            with open(gl_path, "r") as gf:
-                                genes = json.load(gf)
-                            if isinstance(genes, list):
-                                gene_count = len(genes)
-                        except Exception:
-                            # Silently ignore if it's not JSON; you can extend to txt/tsv if needed
-                            pass
-            except Exception:
-                pass
+            config = _safe_read_json(Path(dirpath) / "config.json")
+            gene_list_name = config.get("gene_list", "") or config.get("genes", "") or ""
+            if gene_list_name:
+                gl_path = Path(gene_list_name)
+                if not gl_path.is_file():
+                    gl_path = Path(dirpath) / gene_list_name
+                if gl_path.is_file():
+                    genes = _safe_read_json(gl_path)
+                    genes = genes.get("genes", []) if isinstance(genes, dict) else genes
+                    gene_count = len(genes)
             break
 
     # Build the plot
@@ -989,42 +857,11 @@ def generate_all_plots(
         arts[f"per_sample_by_{gb}"] = p
 
     # ---- Per-sample Pearson vs sample metadata (n_obs / mean_total_counts / ... ) ----
-    try:
-        more_plots = plot_pearson_vs_sample_metadata(
-            df_long=df_long,
-            df_splits=df_splits,
-            outdir=outdir,
-            # you can pass metadata_cols_preference explicitly if you prefer
-            show=show,
-        )
-        arts.update(more_plots)
-    except Exception as e:
-        print(f"[warning] failed to create pearson vs metadata plots: {e}")
+    arts.update(plot_pearson_vs_sample_metadata(df_long=df_long, df_splits=df_splits, outdir=outdir, show=show))
 
-    # ---------------- Combine all PNGs into a single PDF called plots.pdf ----------------
-    try:
-        from PIL import Image
-        png_files = sorted(outdir.glob("*.png"))
-        if len(png_files) > 0:
-            # open images and convert to RGB as needed
-            pil_images = []
-            for idx, png in enumerate(png_files):
-                img = Image.open(png)
-                # convert RGBA -> RGB to avoid transparency issues in PDF
-                if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
-                    img = img.convert("RGB")
-                else:
-                    img = img.convert("RGB")
-                pil_images.append(img)
-
-            pdf_path = outdir / "plots.pdf"
-            # save first image and append the rest as additional pages
-            first_img, rest = pil_images[0], pil_images[1:]
-            first_img.save(pdf_path, "PDF", resolution=200.0, save_all=True, append_images=rest)
-            arts["plots_pdf"] = pdf_path
-    except Exception as e:
-        # non-fatal: if PIL missing or something goes wrong, continue but record no PDF
-        print(f"[warning] Failed to create combined PDF: {e}")
+    png_files = sorted(outdir.glob("*.png"))
+    if png_files:
+        arts["plots_pdf"] = _pngs_to_pdf(png_files, outdir / "plots.pdf")
 
     return arts
 
@@ -1126,6 +963,7 @@ def grid_plot_for_datasets(
     plotted_datasets = []  # keep order
 
     # 1) call the dataset-level routine for each requested dataset
+    failures = []
     for ds in datasets:
         try:
             df_stats, _ = plot_dataset_mean_across_runs(
@@ -1138,19 +976,16 @@ def grid_plot_for_datasets(
                 show=False,
                 dpi=dpi,
             )
-            if df_stats is None or df_stats.empty:
-                print(f"[grid] no stats for dataset {ds} -> skipping")
-                continue
-            # keep dataset name recorded so we can plot it later
-            df_stats["dataset_requested"] = ds
-            all_stats.append(df_stats)
-            plotted_datasets.append(ds)
         except Exception as e:
-            print(f"[grid] failed for dataset {ds}: {e}")
+            failures.append(f"{ds}: {type(e).__name__}: {e}")
             continue
+        # keep dataset name recorded so we can plot it later
+        df_stats["dataset_requested"] = ds
+        all_stats.append(df_stats)
+        plotted_datasets.append(ds)
 
     if not all_stats:
-        raise RuntimeError("No dataset produced stats; nothing to plot.")
+        raise RuntimeError("No dataset produced stats; nothing to plot:\n" + "\n".join(failures))
 
     df_combined = pd.concat(all_stats, ignore_index=True).convert_dtypes()
 
@@ -1224,6 +1059,10 @@ def grid_plot_for_datasets(
                 display(fig)
             plt.close(fig)
 
+    if failures:
+        raise RuntimeError(
+            f"Wrote {pdf_path} for {len(plotted_datasets)} dataset(s), but {len(failures)} failed:\n" + "\n".join(failures)
+        )
     return pdf_path, df_combined
 
 

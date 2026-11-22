@@ -140,3 +140,12 @@ def choose_existing_patch_col(candidate: str, meta_cols: list) -> str:
 
     # final fallback (keep the original candidate even if absent; generate_all_plots should handle missing values)
     return candidate
+
+
+def _pngs_to_pdf(png_files, pdf_path: Path, resolution: float = 200.0) -> Path:
+    """Write the PNGs, in order, as the pages of one PDF."""
+    from PIL import Image
+    pages = [Image.open(p).convert("RGB") for p in png_files]
+    pages[0].save(pdf_path, "PDF", resolution=resolution, save_all=True, append_images=pages[1:])
+    return Path(pdf_path)
+
