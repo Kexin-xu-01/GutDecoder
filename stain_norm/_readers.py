@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Union
 
 import numpy as np
+from loguru import logger
 
 PathLike = Union[str, Path]
 
@@ -42,26 +43,43 @@ def _get_format(path: Path) -> str:
 # Format-specific readers
 # ---------------------------------------------------------------------------
 
-def _mpp_from_tifffile(tf_page) -> float:
-    """Extract MPP from a tifffile page's tags (XResolution in cm or inch)."""
-    try:
-        import tifffile
-        res_unit = tf_page.tags.get("ResolutionUnit")
-        x_res = tf_page.tags.get("XResolution")
-        if res_unit is None or x_res is None:
-            return 0.0
-        unit_val = res_unit.value
-        num, den = x_res.value if isinstance(x_res.value, tuple) else (x_res.value, 1)
-        px_per_unit = num / (den or 1)
-        if hasattr(unit_val, "value"):
-            unit_val = unit_val.value
-        if unit_val == 3:       # centimetre
-            return 1e4 / px_per_unit   # µm/px
-        elif unit_val == 2:     # inch
-            return 25400.0 / px_per_unit
-    except Exception:
-        pass
-    return 0.0
+GUESSED_MPP = 0.5
+
+
+def _mpp_or_guess(mpp, path: Path) -> float:
+    """Return the stored MPP, or GUESSED_MPP with a warning if the metadata has no usable value."""
+    if mpp is None or not np.isfinite(float(mpp)) or float(mpp) <= 0:
+        logger.warning(
+            f"No usable MPP metadata in {path} (got {mpp!r}); guessing {GUESSED_MPP} um/px. "
+            "The slide will be processed at the wrong scale if that guess is wrong."
+        )
+        return GUESSED_MPP
+    return float(mpp)
+
+
+def _mpp_from_tifffile(tf_page):
+    """MPP from a tifffile page's XResolution/ResolutionUnit tags, or None if they are absent."""
+    res_unit = tf_page.tags.get("ResolutionUnit")
+    x_res = tf_page.tags.get("XResolution")
+    if res_unit is None or x_res is None:
+        return None
+    num, den = x_res.value if isinstance(x_res.value, tuple) else (x_res.value, 1)
+    px_per_unit = num / (den or 1)
+    um_per_unit = {2: 25400.0, 3: 1e4}.get(int(res_unit.value))  # 2 = inch, 3 = centimetre
+    if um_per_unit is None or px_per_unit <= 0:
+        return None
+    return um_per_unit / px_per_unit
+
+
+def _tiff_stored_mpp(path: Path, slide=None):
+    """MPP stored in a TIFF: tiffslide's parsed metadata if available, else the resolution tags."""
+    if slide is not None:
+        mpp = slide.properties.get("tiffslide.mpp-x") or slide.properties.get("openslide.mpp-x")
+        if mpp is not None:
+            return mpp
+    import tifffile
+    with tifffile.TiffFile(str(path)) as tf:
+        return _mpp_from_tifffile(tf.pages[0])
 
 
 def _read_tiff_fallback(path: Path, target_mpp: float) -> tuple[np.ndarray, float]:
@@ -70,9 +88,7 @@ def _read_tiff_fallback(path: Path, target_mpp: float) -> tuple[np.ndarray, floa
     from PIL import Image
 
     with tifffile.TiffFile(str(path)) as tf:
-        mpp_x = _mpp_from_tifffile(tf.pages[0])
-        if mpp_x <= 0:
-            mpp_x = 0.5
+        mpp_x = _mpp_or_guess(_mpp_from_tifffile(tf.pages[0]), path)
         data = tf.asarray()
 
     # Normalise to (H, W, 3) uint8 RGB
@@ -119,26 +135,18 @@ def _read_tiff(path: Path, target_mpp: float) -> tuple[np.ndarray, float]:
         # tiffslide imported but failed to open (e.g. flat TIFF) — use fallback
         return _read_tiff_fallback(path, target_mpp)
 
-    try:
-        mpp_x = float(
-            slide.properties.get("tiffslide.mpp-x") or
-            slide.properties.get("openslide.mpp-x") or 0
-        )
-        if mpp_x <= 0:
-            mpp_x = 0.5
+    with slide:
+        mpp_x = _mpp_or_guess(_tiff_stored_mpp(path, slide), path)
+        try:
+            downsample = max(1.0, target_mpp / mpp_x)
+            level = slide.get_best_level_for_downsample(downsample)
+            level_dims = slide.level_dimensions[level]  # (W, H)
 
-        downsample = max(1.0, target_mpp / mpp_x)
-        level = slide.get_best_level_for_downsample(downsample)
-        level_dims = slide.level_dimensions[level]  # (W, H)
-
-        region = slide.read_region((0, 0), level, level_dims)
-        img = np.array(region.convert("RGB"))
-        actual_mpp = mpp_x * slide.level_downsamples[level]
-    except Exception:
-        slide.close()
-        return _read_tiff_fallback(path, target_mpp)
-    finally:
-        slide.close()
+            region = slide.read_region((0, 0), level, level_dims)
+            img = np.array(region.convert("RGB"))
+            actual_mpp = mpp_x * slide.level_downsamples[level]
+        except Exception:
+            return _read_tiff_fallback(path, target_mpp)
     return img, actual_mpp
 
 
@@ -147,10 +155,7 @@ def _read_openslide(path: Path, target_mpp: float) -> tuple[np.ndarray, float]:
 
     slide = openslide.OpenSlide(str(path))
     try:
-        mpp_str = slide.properties.get(openslide.PROPERTY_NAME_MPP_X)
-        mpp_x = float(mpp_str) if mpp_str else 0.5
-        if mpp_x <= 0:
-            mpp_x = 0.5
+        mpp_x = _mpp_or_guess(slide.properties.get(openslide.PROPERTY_NAME_MPP_X), path)
 
         downsample = max(1.0, target_mpp / mpp_x)
         level = slide.get_best_level_for_downsample(downsample)
@@ -174,9 +179,7 @@ def _read_czi(path: Path, target_mpp: float) -> tuple[np.ndarray, float]:
             "Install with: pip install aicsimageio[czi]"
         ) from e
 
-    mpp_x = float(img_obj.physical_pixel_sizes.X or 0.5)
-    if mpp_x <= 0:
-        mpp_x = 0.5
+    mpp_x = _mpp_or_guess(img_obj.physical_pixel_sizes.X, path)
 
     # RGB CZIs store colour in the Samples dim "S" (C has size 1);
     # scenes are selected via set_scene(), not an "S" index.
@@ -233,34 +236,21 @@ def get_slide_mpp(path: PathLike) -> float:
     if fmt == "tiff":
         try:
             import tiffslide
-            slide = tiffslide.TiffSlide(str(path))
-            mpp = float(slide.properties.get("tiffslide.mpp-x") or
-                        slide.properties.get("openslide.mpp-x") or 0.0)
-            slide.close()
-            if mpp > 0:
-                return mpp
+            with tiffslide.TiffSlide(str(path)) as slide:
+                mpp = _tiff_stored_mpp(path, slide)
         except Exception:
-            pass
-        # Fallback: read MPP from tifffile resolution tags
-        import tifffile
-        with tifffile.TiffFile(str(path)) as tf:
-            mpp = _mpp_from_tifffile(tf.pages[0])
-        return mpp if mpp > 0 else 0.5
+            # Flat TIFFs that tiffslide cannot open: use the resolution tags.
+            mpp = _tiff_stored_mpp(path)
+        return _mpp_or_guess(mpp, path)
 
     if fmt == "openslide":
         import openslide
-        slide = openslide.OpenSlide(str(path))
-        mpp_str = slide.properties.get(openslide.PROPERTY_NAME_MPP_X)
-        slide.close()
-        return float(mpp_str) if mpp_str else 0.5
+        with openslide.OpenSlide(str(path)) as slide:
+            return _mpp_or_guess(slide.properties.get(openslide.PROPERTY_NAME_MPP_X), path)
 
-    if fmt == "czi":
-        from aicsimageio import AICSImage
-        img = AICSImage(str(path))
-        mpp = float(img.physical_pixel_sizes.X or 0.5)
-        return mpp if mpp > 0 else 0.5
-
-    return 0.5
+    # czi
+    from aicsimageio import AICSImage
+    return _mpp_or_guess(AICSImage(str(path)).physical_pixel_sizes.X, path)
 
 
 def write_ome_tiff(array: np.ndarray, path: PathLike, mpp: float) -> None:

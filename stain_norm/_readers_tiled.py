@@ -4,10 +4,11 @@ Dependencies: numpy, tifffile, zarr, scikit-image, pillow, and either
 openslide-python or tiffslide for WSI files. Flat TIFF uses tifffile memmap
 when possible. CZI uses aicsimageio lazy dask slicing.
 """
-from importlib.resources import path
 from pathlib import Path
 import math
 import numpy as np
+
+from ._readers import _mpp_from_tifffile, _mpp_or_guess
 
 
 def _rgb(a):
@@ -51,30 +52,6 @@ class SlideSource:
         ext = self.path.suffix.lower()
 
         # ============================================================
-        # Helper: validate MPP from image metadata
-        # ============================================================
-        def validate_mpp(value, source):
-            if value is None:
-                raise ValueError(
-                    f"MPP metadata missing in {self.path}\n"
-                    f"Expected metadata: {source}"
-                )
-
-            try:
-                mpp = float(value)
-            except (TypeError, ValueError) as e:
-                raise ValueError(
-                    f"Invalid MPP metadata ({source}): {value!r}"
-                ) from e
-
-            if not math.isfinite(mpp) or mpp <= 0:
-                raise ValueError(
-                    f"Invalid MPP metadata ({source}): {mpp}"
-                )
-
-            return mpp
-
-        # ============================================================
         # 1. OpenSlide formats
         # ============================================================
         if ext in (
@@ -86,12 +63,7 @@ class SlideSource:
             self.obj = openslide.OpenSlide(str(self.path))
             self.kind = 'wsi'
 
-            native = validate_mpp(
-                self.obj.properties.get(
-                    openslide.PROPERTY_NAME_MPP_X
-                ),
-                "openslide.mpp-x"
-            )
+            native = self.obj.properties.get(openslide.PROPERTY_NAME_MPP_X)
 
         # ============================================================
         # 2. TIFF / OME-TIFF
@@ -126,56 +98,11 @@ class SlideSource:
                                 "m": 1000000.0,
                             }
 
-                            if unit_x not in units_to_um:
-                                raise ValueError(
-                                    f"Unsupported OME MPP unit: {unit_x}"
-                                )
-
-                            native = validate_mpp(
-                                float(physical_x)
-                                * units_to_um[unit_x],
-                                "OME PhysicalSizeX"
-                            )
+                            if unit_x in units_to_um:
+                                native = float(physical_x) * units_to_um[unit_x]
 
                 if native is None:
-                    page = tf.series[0].pages[0]
-
-                    unit = page.tags.get("ResolutionUnit")
-                    res = page.tags.get("XResolution")
-
-                    if unit is None or res is None:
-                        raise ValueError(
-                            f"MPP metadata missing in {self.path}. "
-                            "Neither OME PhysicalSizeX nor TIFF "
-                            "XResolution/ResolutionUnit is available."
-                        )
-
-                    x = res.value
-                    x = (
-                        x[0] / x[1]
-                        if isinstance(x, tuple) and x[1]
-                        else float(x)
-                        if not isinstance(x, tuple)
-                        else 0.0
-                    )
-
-                    u = int(unit.value)
-
-                    if u == 2:
-                        native = validate_mpp(
-                            25400.0 / x if x > 0 else None,
-                            "TIFF XResolution (inch)"
-                        )
-                    elif u == 3:
-                        native = validate_mpp(
-                            10000.0 / x if x > 0 else None,
-                            "TIFF XResolution (centimetre)"
-                        )
-                    else:
-                        raise ValueError(
-                            f"Cannot calculate MPP for {self.path}: "
-                            f"unsupported ResolutionUnit={u}"
-                        )
+                    native = _mpp_from_tifffile(tf.series[0].pages[0])
 
             # Try tiffslide for efficient regional reading.
             try:
@@ -261,10 +188,7 @@ class SlideSource:
             self.obj = open_czi(self.path)
             self.kind = 'czi'
 
-            native = validate_mpp(
-                self.obj.physical_pixel_sizes.X,
-                "CZI physical_pixel_sizes.X"
-            )
+            native = self.obj.physical_pixel_sizes.X
 
             # RGB CZIs store colour in the Samples dim 'S' (C has size 1);
             # scenes are selected via set_scene(), not an 'S' index.
@@ -313,10 +237,7 @@ class SlideSource:
         # ============================================================
         # 5. Resolution and output dimensions
         # ============================================================
-        self.native_mpp = validate_mpp(
-            native,
-            "native image metadata"
-        )
+        self.native_mpp = _mpp_or_guess(native, self.path)
 
         self.scale = max(
             1.0,
