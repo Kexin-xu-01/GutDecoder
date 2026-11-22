@@ -20,8 +20,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from tqdm import tqdm
 import joblib
-import h5py
 
+from gutdecoder.bench.fusion import fuse_embeddings, read_slide_embedding
 from gutdecoder.bench.cpath_model_zoo.inference_models import (
     CustomInferenceEncoder, InferenceEncoder, inf_encoder_factory)
 
@@ -233,50 +233,6 @@ def get_bench_weights(weights_root, name):
     else:
         raise ValueError(f"Please specify the weights path to {name} in {local_ckpt_registry}")
 
-def _read_single_slide_embedding(slide_h5_path, preferred_keys=("embeddings", "features", "feature")):
-    """
-    Read a slide-level h5 containing one feature vector.
-
-    Supports common shapes:
-        (D,)
-        (1, D)
-        (D, 1)
-
-    Returns:
-        slide_emb: np.ndarray with shape (D,)
-    """
-
-    if not os.path.isfile(slide_h5_path):
-        raise FileNotFoundError(f"Slide-level H5 not found: {slide_h5_path}")
-
-    with h5py.File(slide_h5_path, "r") as f:
-        keys = list(f.keys())
-
-        # Prefer known feature keys
-        chosen_key = None
-        for key in preferred_keys:
-            if key in f:
-                chosen_key = key
-                break
-
-        if chosen_key is None:
-            raise KeyError(
-                f"No numeric slide embedding dataset found in {slide_h5_path}. "
-                f"Available keys: {keys}"
-            )
-
-        slide_emb = np.asarray(f[chosen_key][:])
-
-    slide_emb = np.squeeze(slide_emb)
-
-    if slide_emb.ndim != 1:
-        raise ValueError(
-            f"Expected slide embedding to squeeze to 1D, but got shape "
-            f"{slide_emb.shape} from {slide_h5_path}"
-        )
-
-    return slide_emb.astype(np.float32)
-
 
 def _fuse_tile_and_slide_assets(
     tile_assets,
@@ -298,26 +254,12 @@ def _fuse_tile_and_slide_assets(
             f"Available keys: {list(tile_assets.keys())}"
         )
 
-    tile_emb = np.asarray(tile_assets["embeddings"]).astype(np.float32)
-
-    if tile_emb.ndim != 2:
-        raise ValueError(
-            f"Tile embeddings for {sample_id} should be 2D, got shape {tile_emb.shape}"
-        )
-
-    n_tiles = tile_emb.shape[0]
-    slide_emb = _read_single_slide_embedding(slide_h5_path)
-
-    # Repeat same slide embedding for every barcode/tile
-    slide_emb_repeated = np.repeat(slide_emb[None, :], n_tiles, axis=0)
-
-    if fusion == "concat":
-        fused_emb = np.concatenate([tile_emb, slide_emb_repeated], axis=1)
-    else:
-        raise ValueError(f"Unsupported fusion method: {fusion}")
+    tile_emb = np.asarray(tile_assets["embeddings"], dtype=np.float32)
+    slide_emb = read_slide_embedding(slide_h5_path)
+    fused_emb = fuse_embeddings(tile_emb, slide_emb, fusion)
 
     tile_assets["tile_embeddings"] = tile_emb
-    tile_assets["slide_embeddings"] = slide_emb_repeated
+    tile_assets["slide_embeddings"] = fused_emb[:, tile_emb.shape[1]:]
     tile_assets["embeddings"] = fused_emb
 
     return tile_assets

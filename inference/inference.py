@@ -2,7 +2,6 @@ import os
 import json
 import gc
 import joblib
-from types import SimpleNamespace
 import glob
 from pathlib import Path
 
@@ -12,10 +11,8 @@ import math
 
 import scanpy as sc
 
-import torch
-from sklearn.decomposition import PCA
-
 from hest.bench.utils.file_utils import read_assets_from_h5
+from gutdecoder.bench.fusion import fuse_embeddings, read_slide_embedding
 from gutdecoder.config import RESULTS_ROOT as _DEFAULT_RESULTS_ROOT
 from loguru import logger
 
@@ -123,6 +120,7 @@ def infer(
     model_directory_path: str,
     out_dir: str,
     results_root: str = _DEFAULT_RESULTS_ROOT,
+    slide_emb_dir: str = None,
 ):
     """
     Find all sample_name.h5 files under `test_embed_dir`, run inference for each sample,
@@ -134,6 +132,8 @@ def infer(
         model_directory_path: path relative to results_root containing trained models.
         out_dir: directory where output .h5ad files are written.
         results_root: root directory where training results are stored.
+        slide_emb_dir: directory containing <sample_name>.h5 slide embeddings. Required
+            when the models were trained with slide fusion, and must be None otherwise.
     """
 
     os.makedirs(out_dir, exist_ok=True)
@@ -154,10 +154,18 @@ def infer(
     config_path = os.path.join(dir_models_and_results, "split0", "config.json")
     with open(config_path, "r") as f:
         args_dict = json.load(f)
-    args = SimpleNamespace(**args_dict)
-
-    # Set device once
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # Runs from before slide fusion existed have no slide_emb_root in their config.
+    trained_with_fusion = args_dict.get("slide_emb_root") is not None
+    if trained_with_fusion and slide_emb_dir is None:
+        raise ValueError(
+            f"Models in {dir_models_and_results} were trained with slide fusion "
+            f"({args_dict['fusion']}), so slide_emb_dir is required."
+        )
+    if not trained_with_fusion and slide_emb_dir is not None:
+        raise ValueError(
+            f"Models in {dir_models_and_results} were trained on tile embeddings only, "
+            f"but slide_emb_dir was given."
+        )
 
     models = load_models_from_directories(dir_models_and_results)
     gene_names = load_gene_list(dir_models_and_results)
@@ -174,6 +182,9 @@ def infer(
 
         # Extract embeddings features for prediction
         X_test = assets['features']
+        if trained_with_fusion:
+            slide_emb = read_slide_embedding(os.path.join(slide_emb_dir, f"{name_data}.h5"))
+            X_test = fuse_embeddings(X_test, slide_emb, args_dict["fusion"])
         logger.debug(f"Embedding shape: {X_test.shape}")
 
         logger.debug(f"Running regression predictions for {name_data}")
