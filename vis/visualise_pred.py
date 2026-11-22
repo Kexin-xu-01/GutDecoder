@@ -720,13 +720,10 @@ def save_adata_from_list(adata_list, RUN_ROOT, RUN, existing_pred_samples=None, 
             print(f"[SKIP SAVE] {safe_name} already exists in pred folder -> not overwriting")
             continue
 
-        try:
-            ad.write(out_path)
-            saved_paths.append(out_path)
-            action = "Overwrote" if os.path.exists(out_path) and safe_name in existing_pred_samples and force_overwrite else "Saved"
-            print(f"[OK] {action} {safe_name} → {out_path}")
-        except Exception as e:
-            print(f"[ERROR] Failed to save {safe_name}: {e}")
+        action = "Overwrote" if os.path.exists(out_path) else "Saved"
+        ad.write(out_path)
+        saved_paths.append(out_path)
+        print(f"[OK] {action} {safe_name} → {out_path}")
 
     print(f"Saved {len(saved_paths)} AnnData objects under {save_dir}")
     return saved_paths
