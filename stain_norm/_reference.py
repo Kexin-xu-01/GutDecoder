@@ -20,7 +20,7 @@ from typing import Union
 
 import numpy as np
 
-from ._readers import read_whole_slide, write_ome_tiff
+from ._readers import SLIDE_EXTENSIONS, read_whole_slide, to_rgb_uint8, write_ome_tiff
 
 PathLike = Union[str, Path]
 SlideSrc = Union[PathLike, list[PathLike]]  # directory, single file, or list of files
@@ -28,10 +28,6 @@ SlideSrc = Union[PathLike, list[PathLike]]  # directory, single file, or list of
 # Low resolution used only for computing the R/B ratio (fast thumbnail pass)
 _RATIO_MPP = 4.0  # ~2.5× magnification; adequate for per-channel mean
 
-_SLIDE_EXTS = (
-    ".ome.tiff", ".ome.tif", ".tiff", ".tif",
-    ".czi", ".ndpi", ".svs", ".mrxs", ".scn",
-)
 
 
 def _collect_slides(source: SlideSrc) -> list[Path]:
@@ -49,13 +45,13 @@ def _collect_slides(source: SlideSrc) -> list[Path]:
             slides = []
             for f in sorted(p.iterdir()):
                 if f.is_file() and any(
-                    f.name.lower().endswith(ext) for ext in _SLIDE_EXTS
+                    f.name.lower().endswith(ext) for ext in SLIDE_EXTENSIONS
                 ):
                     slides.append(f)
             if not slides:
                 raise FileNotFoundError(
                     f"No supported slide files found in directory: {p}\n"
-                    f"Supported extensions: {_SLIDE_EXTS}"
+                    f"Supported extensions: {SLIDE_EXTENSIONS}"
                 )
             return slides
         else:
@@ -186,19 +182,7 @@ def load_reference(path: PathLike) -> np.ndarray:
 
     if name.endswith(".ome.tiff") or name.endswith(".ome.tif") or suffix in {".tiff", ".tif"}:
         import tifffile
-        data = tifffile.imread(str(path))
-        if data.ndim == 2:
-            data = np.stack([data, data, data], axis=-1)
-        elif data.ndim == 3 and data.shape[2] == 4:
-            data = data[:, :, :3]
-        elif data.ndim == 3 and data.shape[0] in {1, 3, 4}:
-            # channel-first format
-            data = np.moveaxis(data, 0, -1)
-            if data.shape[2] == 4:
-                data = data[:, :, :3]
-            elif data.shape[2] == 1:
-                data = np.repeat(data, 3, axis=2)
-        return data.astype(np.uint8)
+        return to_rgb_uint8(tifffile.imread(str(path)))
     else:
         # PNG / JPG: use PIL to handle any format
         from PIL import Image

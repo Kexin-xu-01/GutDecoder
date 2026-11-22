@@ -8,25 +8,7 @@ from pathlib import Path
 import math
 import numpy as np
 
-from ._readers import _mpp_from_tifffile, _mpp_or_guess
-
-
-def _rgb(a):
-    a = np.asarray(a)
-    if a.ndim == 2:
-        a = a[..., None]
-    if a.ndim == 3 and a.shape[0] in (1, 3, 4) and a.shape[-1] not in (1, 3, 4):
-        a = np.moveaxis(a, 0, -1)
-    if a.shape[-1] == 1:
-        a = np.repeat(a, 3, axis=-1)
-    if a.shape[-1] >= 4:
-        a = a[..., :3]
-    if a.dtype != np.uint8:
-        if np.issubdtype(a.dtype, np.integer):
-            a = (a.astype(np.float32) * (255.0 / np.iinfo(a.dtype).max)).clip(0, 255).astype(np.uint8)
-        else:
-            a = (np.asarray(a, dtype=np.float32) * 255).clip(0, 255).astype(np.uint8)
-    return a
+from ._readers import _get_format, _mpp_from_tifffile, _mpp_or_guess, to_rgb_uint8
 
 
 class SlideSource:
@@ -49,15 +31,12 @@ class SlideSource:
         if target_mpp <= 0 or not math.isfinite(float(target_mpp)):
             raise ValueError("target_mpp must be a positive finite number")
 
-        ext = self.path.suffix.lower()
+        fmt = _get_format(self.path)
 
         # ============================================================
         # 1. OpenSlide formats
         # ============================================================
-        if ext in (
-            '.svs', '.ndpi', '.mrxs', '.scn',
-            '.bif', '.vms', '.vmu'
-        ):
+        if fmt == 'openslide':
             import openslide
 
             self.obj = openslide.OpenSlide(str(self.path))
@@ -68,7 +47,7 @@ class SlideSource:
         # ============================================================
         # 2. TIFF / OME-TIFF
         # ============================================================
-        elif ext in ('.tif', '.tiff'):
+        elif fmt == 'tiff':
             import tifffile
 
             # Read authoritative MPP from TIFF metadata first.
@@ -182,7 +161,7 @@ class SlideSource:
         # ============================================================
         # 3. CZI
         # ============================================================
-        elif ext == '.czi':
+        else:  # czi
             from ._czi import open_czi
 
             self.obj = open_czi(self.path)
@@ -206,10 +185,6 @@ class SlideSource:
                     Z=0,
                 )
 
-        else:
-            raise ValueError(
-                f"Unsupported slide format: {self.path}"
-            )
 
         # ============================================================
         # 4. Normalize flat TIFF dimensions
@@ -305,7 +280,7 @@ class SlideSource:
         a = self.arr[y0:y1, x0:x1]
         if self.kind == 'czi':
             a = a.compute()
-        a = _rgb(a)
+        a = to_rgb_uint8(a)
         if a.shape[:2] != (h, w):
             a = np.asarray(Image.fromarray(a).resize((w, h), Image.Resampling.LANCZOS))
         return a

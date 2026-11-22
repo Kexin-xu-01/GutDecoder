@@ -18,25 +18,41 @@ from loguru import logger
 
 PathLike = Union[str, Path]
 
-_OPENSLIDE_EXTS = frozenset({".ndpi", ".svs", ".mrxs", ".scn", ".bif", ".vms", ".vmu"})
+_OPENSLIDE_EXTS = (".ndpi", ".svs", ".mrxs", ".scn", ".bif", ".vms", ".vmu")
+SLIDE_EXTENSIONS = (".ome.tiff", ".ome.tif", ".tiff", ".tif", ".czi") + _OPENSLIDE_EXTS
 
 
 def _get_format(path: Path) -> str:
-    name = path.name.lower()
-    if name.endswith(".ome.tiff") or name.endswith(".ome.tif"):
-        return "tiff"
-    suffix = path.suffix.lower()
+    """'tiff', 'openslide' or 'czi' for a slide path; raises for anything else."""
+    suffix = path.suffix.lower()  # .ome.tif(f) ends in .tif(f)
     if suffix in {".tiff", ".tif"}:
         return "tiff"
     if suffix in _OPENSLIDE_EXTS:
         return "openslide"
     if suffix == ".czi":
         return "czi"
-    raise ValueError(
-        f"Unsupported slide format '{path.suffix}'. "
-        "Supported: .ome.tiff, .ome.tif, .tiff, .tif, .czi, "
-        ".ndpi, .svs, .mrxs, .scn"
-    )
+    raise ValueError(f"Unsupported slide format '{path.suffix}'. Supported: {', '.join(SLIDE_EXTENSIONS)}")
+
+
+def to_rgb_uint8(a) -> np.ndarray:
+    """
+    (H, W, 3) uint8 RGB from grey, channel-first, RGBA or higher bit-depth arrays.
+    Integer data is scaled by its dtype's maximum (uint16 65535 -> 255); floats are taken as 0-1.
+    """
+    a = np.asarray(a)
+    if a.ndim == 2:
+        a = a[..., None]
+    if a.ndim == 3 and a.shape[0] in (1, 3, 4) and a.shape[-1] not in (1, 3, 4):
+        a = np.moveaxis(a, 0, -1)
+    if a.shape[-1] == 1:
+        a = np.repeat(a, 3, axis=-1)
+    if a.shape[-1] >= 4:
+        a = a[..., :3]
+    if a.dtype == np.uint8:
+        return a
+    if np.issubdtype(a.dtype, np.integer):
+        return (a.astype(np.float32) * (255.0 / np.iinfo(a.dtype).max)).clip(0, 255).astype(np.uint8)
+    return (a.astype(np.float32) * 255).clip(0, 255).astype(np.uint8)
 
 
 # ---------------------------------------------------------------------------
@@ -91,25 +107,7 @@ def _read_tiff_fallback(path: Path, target_mpp: float) -> tuple[np.ndarray, floa
         mpp_x = _mpp_or_guess(_mpp_from_tifffile(tf.pages[0]), path)
         data = tf.asarray()
 
-    # Normalise to (H, W, 3) uint8 RGB
-    if data.ndim == 2:
-        data = np.stack([data, data, data], axis=-1)
-    elif data.ndim == 3 and data.shape[0] in {1, 3, 4}:
-        data = np.moveaxis(data, 0, -1)
-    if data.shape[2] == 4:
-        data = data[:, :, :3]
-    elif data.shape[2] == 1:
-        data = np.repeat(data, 3, axis=2)
-
-    if data.dtype != np.uint8:
-        mx = data.max()
-        if mx == 0:
-            data = data.astype(np.uint8)
-        elif mx > 255:
-            # uint16 or higher bit-depth — scale to full 8-bit range
-            data = (data.astype(np.float32) / mx * 255).astype(np.uint8)
-        else:
-            data = data.astype(np.uint8)
+    data = to_rgb_uint8(data)
 
     # Downsample to target_mpp if needed
     actual_mpp = mpp_x
@@ -188,15 +186,7 @@ def _read_czi(path: Path, target_mpp: float) -> tuple[np.ndarray, float]:
     else:
         arr = img_obj.get_image_data("YXC", T=0, Z=0)  # H x W x C
 
-    if arr.ndim == 2:
-        arr = np.stack([arr, arr, arr], axis=-1)
-    elif arr.shape[2] == 1:
-        arr = np.repeat(arr, 3, axis=2)
-    elif arr.shape[2] > 3:
-        arr = arr[:, :, :3]
-
-    img = arr.astype(np.uint8)
-    return img, mpp_x
+    return to_rgb_uint8(arr), mpp_x
 
 
 # ---------------------------------------------------------------------------

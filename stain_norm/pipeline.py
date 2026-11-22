@@ -78,7 +78,7 @@ import numpy as np
 
 from loguru import logger
 
-from ._readers import write_ome_tiff
+from ._readers import SLIDE_EXTENSIONS, write_ome_tiff
 from ._readers_tiled import SlideSource, sample_slide, write_tiled_ome_tiff
 
 from ._normalizers import get_normalizer, _GPU_METHODS
@@ -99,17 +99,7 @@ PathLike = Union[str, Path]
 
 
 
-_SUPPORTED_EXTENSIONS = (
-
-    ".ome.tiff", ".ome.tif",
-
-    ".tiff", ".tif",
-
-    ".czi",
-
-    ".ndpi", ".svs", ".mrxs", ".scn",
-
-)
+_SUPPORTED_EXTENSIONS = SLIDE_EXTENSIONS
 
 
 

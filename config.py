@@ -29,7 +29,7 @@ SUMMARY_PLOT_DIR = os.environ.get(
 # --- Curated gene list Excel file ---
 CURATED_XLSX = os.environ.get(
     "GUTDECODER_CURATED_XLSX",
-    "/project/gutdecoder/kxu/hest/curated_gene_list.xlsx",
+    "/project/gutdecoder/kxu/hest/metadata/curated_gene_list.xlsx",
 )
 
 # --- Sample metadata CSVs ---
