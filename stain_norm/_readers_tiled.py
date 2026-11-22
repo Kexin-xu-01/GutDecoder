@@ -337,18 +337,14 @@ class SlideSource:
 
 
 
-def _stats(rgb):
-    from skimage.color import rgb2lab
-    lab = rgb2lab(rgb)
-    # Exclude white background; avoid all-background samples.
-    mask = np.mean(rgb, axis=-1) < 235
-    v = lab[mask] if mask.sum() >= 100 else lab.reshape(-1, 3)
-    return v.mean(axis=0), v.std(axis=0).clip(1e-4), len(v)
+def sample_slide(slide, sample_size=1024, grid=5, thumb=256):
+    """Pixels from a grid x grid set of windows spread over the slide, as a (1, N, 3) uint8 image.
 
-
-def estimate_slide_stats(slide, sample_size=1024, grid=5):
+    Normalisers fit their source parameters on this sample, so a slide gets the same
+    parameters whether it is later normalised whole or in tiles.
+    """
     from PIL import Image
-    means, stds, counts = [], [], []
+    pixels = []
     for j in range(grid):
         for i in range(grid):
             w = min(slide.width, max(1, slide.width // grid))
@@ -358,29 +354,9 @@ def estimate_slide_stats(slide, sample_size=1024, grid=5):
             # For very large slides, read small windows rather than huge grid cells.
             w, h = min(w, sample_size), min(h, sample_size)
             rgb = slide.read(x, y, w, h)
-            rgb = np.asarray(Image.fromarray(rgb).resize((min(256, w), min(256, h))))
-            m, s, n = _stats(rgb)
-            means.append(m); stds.append(s); counts.append(n)
-    counts = np.asarray(counts, dtype=float)
-    means = np.asarray(means); stds = np.asarray(stds)
-    mu = np.average(means, axis=0, weights=counts)
-    var = np.average(stds ** 2 + (means - mu) ** 2, axis=0, weights=counts)
-    return mu, np.sqrt(var).clip(1e-4)
-
-
-def _normalize(rgb, source_stats, target_stats):
-    from skimage.color import rgb2lab, lab2rgb
-    mu_s, sd_s = source_stats
-    mu_t, sd_t = target_stats
-    lab = rgb2lab(rgb)
-    lab = (lab - mu_s) * (sd_t / sd_s) + mu_t
-    lab[..., 0] = lab[..., 0].clip(0, 100)
-    # Preserve near-white background exactly to avoid a tinted canvas.
-    background = rgb.mean(axis=-1) >= 245
-    out = (lab2rgb(lab).clip(0, 1) * 255).astype(np.uint8)
-    out[background] = rgb[background]
-    return out
-
+            rgb = np.asarray(Image.fromarray(rgb).resize((min(thumb, w), min(thumb, h))))
+            pixels.append(rgb.reshape(-1, 3))
+    return np.concatenate(pixels)[None]
 
 
 def write_tiled_ome_tiff(slide, output_path, transform, memory_limit_gb=8,
@@ -388,7 +364,7 @@ def write_tiled_ome_tiff(slide, output_path, transform, memory_limit_gb=8,
     """Run a fitted normalizer over memory-sized regions and stream OME-TIFF.
 
     Crops overlapping read halos, storing each output pixel exactly once.
-    This is NOT feathering: tile-local color-statistics can still cause seams.
+    Normalisers with fixed source parameters (fit_source) give seam-free output.
     """
     import math
     import tempfile

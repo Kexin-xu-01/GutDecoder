@@ -76,8 +76,10 @@ import numpy as np
 
 
 
-from ._readers import read_whole_slide, write_ome_tiff
-from ._readers_tiled import SlideSource, write_tiled_ome_tiff, estimate_slide_stats, _stats, _normalize
+from loguru import logger
+
+from ._readers import write_ome_tiff
+from ._readers_tiled import SlideSource, sample_slide, write_tiled_ome_tiff
 
 from ._normalizers import get_normalizer, _GPU_METHODS
 
@@ -219,22 +221,24 @@ def normalize_slide(
 
 
     with SlideSource(slide_path, target_mpp=target_mpp) as slide:
+        # Source parameters come from one slide-wide sample, so the in-memory and tiled
+        # paths below produce the same output.
+        normaliser.fit_source(sample_slide(slide))
         # Conservative estimate of peak working memory (not just RGB bytes).
         estimated_bytes = slide.width * slide.height * 64
         budget = float('inf') if memory_limit_gb is None else memory_limit_gb * 1024**3
         if estimated_bytes <= budget:
-            slide_img, mpp = read_whole_slide(slide_path, target_mpp=target_mpp)
-            normalised = normaliser.transform(slide_img)
-            write_ome_tiff(normalised, output_path, mpp=mpp)
+            normalised = normaliser.transform(slide.read(0, 0, slide.width, slide.height))
+            write_ome_tiff(normalised, output_path, mpp=slide.mpp)
         else:
-            transform = normaliser.transform
-            if method.lower() == 'reinhard':
-                # Shared slide-wide statistics prevent per-patch Reinhard seams.
-                source_stats = estimate_slide_stats(slide)
-                reference_stats = _stats(ref_img)[:2]
-                transform = lambda rgb: _normalize(rgb, source_stats, reference_stats)
+            if method.lower() in _GPU_METHODS:
+                logger.warning(
+                    f"{Path(slide_path).name} is too large to normalise in memory and GPU method "
+                    f"'{method}' re-estimates stains per tile, so tile seams are possible. "
+                    "Use the CPU method or raise memory_limit_gb for seam-free output."
+                )
             write_tiled_ome_tiff(
-                slide, output_path, transform,
+                slide, output_path, normaliser.transform,
                 memory_limit_gb=memory_limit_gb,
                 overlap=overlap,
                 max_patch_px=max_patch_px,

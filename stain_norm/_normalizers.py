@@ -9,7 +9,11 @@ Three methods are provided:
 
 All classes expose the same interface:
     normalizer.fit(reference_image)    # reference: (H,W,3) uint8 RGB
+    normalizer.fit_source(sample)      # pixels representative of the slide to normalise
     normalizer.transform(image)        # image: (H,W,3) uint8 RGB → (H,W,3) uint8 RGB
+
+transform() applies fixed parameters pixel by pixel, so normalising a slide whole
+or tile by tile gives the same result.
 """
 
 from __future__ import annotations
@@ -22,6 +26,15 @@ from skimage.color import rgb2lab, lab2rgb
 # Reinhard (2001)
 # ---------------------------------------------------------------------------
 
+def _lab_stats(rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """LAB mean and std of tissue pixels, excluding white background."""
+    lab = rgb2lab(rgb)
+    mask = np.mean(rgb, axis=-1) < 235
+    # A sample that is almost all background has no tissue to measure; use every pixel.
+    v = lab[mask] if mask.sum() >= 100 else lab.reshape(-1, 3)
+    return v.mean(axis=0), v.std(axis=0).clip(1e-4)
+
+
 class ReinhardNormalizer:
     """
     Colour statistics transfer in CIE LAB space.
@@ -31,39 +44,92 @@ class ReinhardNormalizer:
     """
 
     def __init__(self) -> None:
-        self._target_mean: np.ndarray | None = None
-        self._target_std: np.ndarray | None = None
+        self._target = None
+        self._source = None
 
     def fit(self, reference: np.ndarray) -> "ReinhardNormalizer":
-        """Compute LAB statistics from the reference image."""
-        lab = rgb2lab(reference)
-        self._target_mean = lab.mean(axis=(0, 1))
-        self._target_std = lab.std(axis=(0, 1))
+        self._target = _lab_stats(reference)
+        return self
+
+    def fit_source(self, sample: np.ndarray) -> "ReinhardNormalizer":
+        self._source = _lab_stats(sample)
         return self
 
     def transform(self, image: np.ndarray) -> np.ndarray:
-        """Transfer reference colour statistics onto image."""
-        if self._target_mean is None:
-            raise RuntimeError("Call fit() before transform().")
-        lab = rgb2lab(image)
-        src_mean = lab.mean(axis=(0, 1))
-        src_std = lab.std(axis=(0, 1))
-
-        lab_norm = (lab - src_mean) / (src_std + 1e-6) * self._target_std + self._target_mean
-
-        # Clamp to valid LAB range
-        lab_norm[:, :, 0] = np.clip(lab_norm[:, :, 0], 0, 100)
-        lab_norm[:, :, 1:] = np.clip(lab_norm[:, :, 1:], -128, 127)
-
-        rgb = lab2rgb(lab_norm)
-        return (rgb * 255).clip(0, 255).astype(np.uint8)
+        if self._target is None or self._source is None:
+            raise RuntimeError("Call fit() and fit_source() before transform().")
+        (mu_s, sd_s), (mu_t, sd_t) = self._source, self._target
+        lab = (rgb2lab(image) - mu_s) * (sd_t / sd_s) + mu_t
+        lab[..., 0] = lab[..., 0].clip(0, 100)
+        out = (lab2rgb(lab).clip(0, 1) * 255).astype(np.uint8)
+        # Keep near-white background exactly to avoid a tinted canvas.
+        background = image.mean(axis=-1) >= 245
+        out[background] = image[background]
+        return out
 
 
 # ---------------------------------------------------------------------------
-# Macenko (2009)
+# Macenko (2009) and Vahadane (2016): stain separation in optical density space
 # ---------------------------------------------------------------------------
 
-class MacenkoNormalizer:
+def _rgb2od(image: np.ndarray) -> np.ndarray:
+    return -np.log((image.astype(np.float64) + 1) / 256.0)
+
+
+class _StainNormalizer:
+    """Shared fit/transform for stain-matrix methods; subclasses define _get_stain_matrix."""
+
+    def __init__(self, beta: float = 0.15) -> None:
+        self.beta = beta
+        self._target = None
+        self._source = None
+
+    def _tissue_od(self, image: np.ndarray) -> np.ndarray:
+        """OD of tissue pixels: above beta (not background) and below 3.0 (not pure-black masks)."""
+        OD_flat = _rgb2od(image).reshape(-1, 3)
+        OD_hat = OD_flat[np.all(OD_flat > self.beta, axis=1) & np.all(OD_flat < 3.0, axis=1)]
+        # Faintly stained samples: relax the threshold before giving up on the mask.
+        if OD_hat.shape[0] < 10:
+            OD_hat = OD_flat[np.any(OD_flat > 0.05, axis=1) & np.all(OD_flat < 3.0, axis=1)]
+        if OD_hat.shape[0] < 10:
+            OD_hat = OD_flat[np.any(OD_flat > 0.05, axis=1)]
+        return OD_hat
+
+    def _get_stain_matrix(self, image: np.ndarray) -> np.ndarray:
+        raise NotImplementedError
+
+    @staticmethod
+    def _get_concentrations(image: np.ndarray, stain_matrix: np.ndarray) -> np.ndarray:
+        OD_flat = np.clip(_rgb2od(image).reshape(-1, 3), 0, 3.0)  # cap masked-black pixels
+        # Solve stain_matrix.T @ c = OD for each pixel
+        conc, _, _, _ = np.linalg.lstsq(stain_matrix.T, OD_flat.T, rcond=None)
+        return conc.T  # (N, 2)
+
+    def _stain_params(self, image: np.ndarray):
+        stain_matrix = self._get_stain_matrix(image)
+        maxC = np.percentile(self._get_concentrations(image, stain_matrix), 99, axis=0)
+        return stain_matrix, maxC
+
+    def fit(self, reference: np.ndarray):
+        self._target = self._stain_params(reference)
+        return self
+
+    def fit_source(self, sample: np.ndarray):
+        self._source = self._stain_params(sample)
+        return self
+
+    def transform(self, image: np.ndarray) -> np.ndarray:
+        if self._target is None or self._source is None:
+            raise RuntimeError("Call fit() and fit_source() before transform().")
+        (stain_src, maxC_src), (stain_tgt, maxC_tgt) = self._source, self._target
+        H, W, _ = image.shape
+        conc = self._get_concentrations(image, stain_src)
+        conc_norm = conc / (maxC_src + 1e-6) * maxC_tgt
+        I_norm = 255.0 * np.exp(-(conc_norm @ stain_tgt))
+        return I_norm.clip(0, 255).astype(np.uint8).reshape(H, W, 3)
+
+
+class MacenkoNormalizer(_StainNormalizer):
     """
     SVD-based stain matrix estimation in optical density space.
 
@@ -73,38 +139,18 @@ class MacenkoNormalizer:
     """
 
     def __init__(self, beta: float = 0.15, alpha: float = 1.0) -> None:
-        self.beta = beta
+        super().__init__(beta)
         self.alpha = alpha
-        self._stain_matrix_target: np.ndarray | None = None
-        self._maxC_target: np.ndarray | None = None
-
-    @staticmethod
-    def _rgb2od(image: np.ndarray) -> np.ndarray:
-        img = image.astype(np.float64)
-        return -np.log((img + 1) / 256.0)
 
     def _get_stain_matrix(self, image: np.ndarray) -> np.ndarray:
-        OD = self._rgb2od(image)
-        OD_flat = OD.reshape(-1, 3)
-
-        # Keep tissue pixels: above beta (not bright background) and below 3.0
-        # (not pure-black mask pixels, which have OD ≈ 5.5)
-        mask = np.all(OD_flat > self.beta, axis=1) & np.all(OD_flat < 3.0, axis=1)
-        OD_hat = OD_flat[mask]
-        if OD_hat.shape[0] < 10:
-            OD_hat = OD_flat[np.any(OD_flat > 0.05, axis=1) & np.all(OD_flat < 3.0, axis=1)]
-        if OD_hat.shape[0] < 10:
-            OD_hat = OD_flat[np.any(OD_flat > 0.05, axis=1)]
+        OD_hat = self._tissue_od(image)
 
         # PCA: two largest eigenvectors of the covariance matrix
-        cov = OD_hat.T @ OD_hat
-        _, V = np.linalg.eigh(cov)
+        _, V = np.linalg.eigh(OD_hat.T @ OD_hat)
         V = V[:, -2:]  # 3 x 2  (columns = eigenvectors)
 
-        # Project pixels onto the plane spanned by V
-        That = OD_hat @ V  # N x 2
-
-        # Find the angular extremes (alpha-percentile)
+        # Project pixels onto the plane spanned by V and find the angular extremes
+        That = OD_hat @ V
         phi = np.arctan2(That[:, 1], That[:, 0])
         min_phi = np.percentile(phi, self.alpha)
         max_phi = np.percentile(phi, 100.0 - self.alpha)
@@ -113,44 +159,10 @@ class MacenkoNormalizer:
         v2 = V @ np.array([np.cos(max_phi), np.sin(max_phi)])
 
         # H stain absorbs more red light → higher OD in channel 0
-        stain_matrix = np.array([v1, v2]) if v1[0] >= v2[0] else np.array([v2, v1])
-        return stain_matrix  # (2, 3)
-
-    def _get_concentrations(
-        self, image: np.ndarray, stain_matrix: np.ndarray
-    ) -> np.ndarray:
-        OD = self._rgb2od(image)
-        OD_flat = np.clip(OD.reshape(-1, 3), 0, 3.0)  # cap masked-black pixels
-        # Solve stain_matrix.T @ c = OD for each pixel
-        conc, _, _, _ = np.linalg.lstsq(stain_matrix.T, OD_flat.T, rcond=None)
-        return conc.T  # (N, 2)
-
-    def fit(self, reference: np.ndarray) -> "MacenkoNormalizer":
-        self._stain_matrix_target = self._get_stain_matrix(reference)
-        conc = self._get_concentrations(reference, self._stain_matrix_target)
-        self._maxC_target = np.percentile(conc, 99, axis=0)
-        return self
-
-    def transform(self, image: np.ndarray) -> np.ndarray:
-        if self._stain_matrix_target is None:
-            raise RuntimeError("Call fit() before transform().")
-        H, W, _ = image.shape
-        stain_src = self._get_stain_matrix(image)
-        conc_src = self._get_concentrations(image, stain_src)
-
-        maxC_src = np.percentile(conc_src, 99, axis=0)
-        conc_norm = conc_src / (maxC_src + 1e-6) * self._maxC_target
-
-        OD_norm = conc_norm @ self._stain_matrix_target
-        I_norm = 255.0 * np.exp(-OD_norm)
-        return I_norm.clip(0, 255).astype(np.uint8).reshape(H, W, 3)
+        return np.array([v1, v2]) if v1[0] >= v2[0] else np.array([v2, v1])
 
 
-# ---------------------------------------------------------------------------
-# Vahadane (2016)
-# ---------------------------------------------------------------------------
-
-class VahadaneNormalizer:
+class VahadaneNormalizer(_StainNormalizer):
     """
     Structure-preserving stain normalisation via sparse NMF.
 
@@ -161,69 +173,16 @@ class VahadaneNormalizer:
     Uses scikit-learn NMF as a widely-available substitute for SPAMS.
     """
 
-    def __init__(self, beta: float = 0.15) -> None:
-        self.beta = beta
-        self._stain_matrix_target: np.ndarray | None = None
-        self._maxC_target: np.ndarray | None = None
-
-    @staticmethod
-    def _rgb2od(image: np.ndarray) -> np.ndarray:
-        return -np.log((image.astype(np.float64) + 1) / 256.0)
-
     def _get_stain_matrix(self, image: np.ndarray) -> np.ndarray:
         from sklearn.decomposition import NMF
 
-        OD = self._rgb2od(image)
-        OD_flat = OD.reshape(-1, 3)
-
-        mask = np.all(OD_flat > self.beta, axis=1) & np.all(OD_flat < 3.0, axis=1)
-        OD_hat = OD_flat[mask]
-        if OD_hat.shape[0] < 10:
-            OD_hat = OD_flat[np.any(OD_flat > 0.05, axis=1) & np.all(OD_flat < 3.0, axis=1)]
-        if OD_hat.shape[0] < 10:
-            OD_hat = OD_flat[np.any(OD_flat > 0.05, axis=1)]
-
         model = NMF(n_components=2, init="nndsvd", max_iter=500, random_state=42)
-        model.fit(OD_hat)
+        model.fit(self._tissue_od(image))
         W = model.components_  # (2, 3)
-
-        # Unit-normalise stain vectors
-        norms = np.linalg.norm(W, axis=1, keepdims=True)
-        W = W / (norms + 1e-6)
+        W = W / (np.linalg.norm(W, axis=1, keepdims=True) + 1e-6)
 
         # H stain first (highest OD in the red channel)
-        if W[0, 0] < W[1, 0]:
-            W = W[[1, 0]]
-
-        return W  # (2, 3)
-
-    def _get_concentrations(
-        self, image: np.ndarray, stain_matrix: np.ndarray
-    ) -> np.ndarray:
-        OD = self._rgb2od(image)
-        OD_flat = np.clip(OD.reshape(-1, 3), 0, 3.0)  # cap masked-black pixels
-        conc, _, _, _ = np.linalg.lstsq(stain_matrix.T, OD_flat.T, rcond=None)
-        return conc.T  # (N, 2)
-
-    def fit(self, reference: np.ndarray) -> "VahadaneNormalizer":
-        self._stain_matrix_target = self._get_stain_matrix(reference)
-        conc = self._get_concentrations(reference, self._stain_matrix_target)
-        self._maxC_target = np.percentile(conc, 99, axis=0)
-        return self
-
-    def transform(self, image: np.ndarray) -> np.ndarray:
-        if self._stain_matrix_target is None:
-            raise RuntimeError("Call fit() before transform().")
-        H, W, _ = image.shape
-        stain_src = self._get_stain_matrix(image)
-        conc_src = self._get_concentrations(image, stain_src)
-
-        maxC_src = np.percentile(conc_src, 99, axis=0)
-        conc_norm = conc_src / (maxC_src + 1e-6) * self._maxC_target
-
-        OD_norm = conc_norm @ self._stain_matrix_target
-        I_norm = 255.0 * np.exp(-OD_norm)
-        return I_norm.clip(0, 255).astype(np.uint8).reshape(H, W, 3)
+        return W[[1, 0]] if W[0, 0] < W[1, 0] else W
 
 
 # ---------------------------------------------------------------------------
@@ -250,7 +209,7 @@ def get_normalizer(method: str, device: str = "auto"):
     Args:
         method: Normalisation algorithm. CPU options: 'reinhard', 'macenko',
                 'vahadane'. GPU options (requires torchstain + PyTorch):
-                'macenko_gpu', 'vahadane_gpu', 'reinhard_gpu', 'stainnet'.
+                'macenko_gpu', 'vahadane_gpu', 'reinhard_gpu'.
         device: PyTorch device for GPU methods — 'auto' (default, uses CUDA if
                 available), 'cpu', 'cuda', 'cuda:0', etc.
                 Ignored for CPU numpy methods.
