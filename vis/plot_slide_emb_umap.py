@@ -1824,284 +1824,110 @@ def make_joint_group_umap_pdf(
     return joint
 
 
-def plot_categorical_by_group(
-    ax,
-    legend_ax,
-    embedding,
-    values,
-    groups,
-    group1_label,
-    group2_label,
-    title,
-):
+GROUP_MARKERS = ["o", "x", "^", "s", "D", "v"]
+
+
+def plot_categorical_by_groups(ax, legend_ax, embedding, values, groups, group_labels, title, point_size=None):
     """
-    Color = metadata category
-    Shape = group
-
-    ax        = UMAP axes
-    legend_ax = dedicated axes for legends
+    UMAP scatter: colour = metadata category, marker shape = group (o, x, ^, s, D, v in group order).
+    Legends go to ``legend_ax``: categories (top) and groups (bottom).
+    point_size: size of filled markers; default 35 for two groups, 38 otherwise ("x" is always 45).
     """
+    group_labels = list(group_labels)
+    if len(group_labels) > len(GROUP_MARKERS):
+        raise ValueError(f"at most {len(GROUP_MARKERS)} groups are supported, got {len(group_labels)}")
+    if point_size is None:
+        point_size = 35 if len(group_labels) == 2 else 38
 
-    vals = (
-        pd.Series(values)
-        .astype("string")
-        .fillna("NA")
-        .reset_index(drop=True)
-    )
-
-    groups = (
-        pd.Series(groups)
-        .astype("string")
-        .fillna("NA")
-        .reset_index(drop=True)
-    )
-
+    vals = pd.Series(values).astype("string").fillna("NA").reset_index(drop=True)
+    groups = pd.Series(groups).astype("string").fillna("NA").reset_index(drop=True)
     cats = pd.unique(vals)
     n = len(cats)
+    cmap = mpl.colormaps.get_cmap("tab20" if n <= 20 else "hsv")
+    color_map = dict(zip(cats, [cmap(i / max(1, n - 1)) for i in range(n)]))
+    markers = dict(zip(group_labels, GROUP_MARKERS))
 
-    # -----------------------
-    # Colors
-    # -----------------------
-    cmap_name = "tab20" if n <= 20 else "hsv"
-    cmap = mpl.colormaps.get_cmap(cmap_name)
-
-    colors = [
-        cmap(i / max(1, n - 1))
-        for i in range(n)
-    ]
-
-    color_map = dict(zip(cats, colors))
-
-    # -----------------------
-    # Group markers
-    # -----------------------
-    markers = {
-        group1_label: "o",
-        group2_label: "x",
-    }
-
-    # -----------------------
-    # Plot UMAP
-    # -----------------------
     for cat in cats:
-
         for group, marker in markers.items():
-
-            mask = (
-                vals.eq(cat)
-                & groups.eq(group)
-            ).fillna(False).to_numpy(dtype=bool)
-
+            mask = (vals.eq(cat) & groups.eq(group)).fillna(False).to_numpy(dtype=bool)
             if not mask.any():
                 continue
-
-            if marker == "o":
-                ax.scatter(
-                    embedding[mask, 0],
-                    embedding[mask, 1],
-                    s=35,
-                    alpha=0.85,
-                    color=color_map[cat],
-                    marker="o",
-                    edgecolors="none",
-                )
-
+            if marker == "x":
+                ax.scatter(embedding[mask, 0], embedding[mask, 1], s=45, alpha=0.9,
+                           color=color_map[cat], marker=marker, linewidths=1.5)
             else:
-                ax.scatter(
-                    embedding[mask, 0],
-                    embedding[mask, 1],
-                    s=45,
-                    alpha=0.9,
-                    color=color_map[cat],
-                    marker="x",
-                    linewidths=1.5,
-                )
+                ax.scatter(embedding[mask, 0], embedding[mask, 1], s=point_size, alpha=0.85,
+                           color=color_map[cat], marker=marker, edgecolors="none")
 
     ax.set_title(title)
     ax.set_xlabel("UMAP1")
     ax.set_ylabel("UMAP2")
 
-    # ========================================================
-    # Legend panel
-    # ========================================================
     legend_ax.axis("off")
-
-    # -----------------------
-    # Color legend
-    # -----------------------
-    color_handles = [
-        plt.Line2D(
-            [0], [0],
-            marker="o",
-            linestyle="None",
-            markerfacecolor=color_map[cat],
-            markeredgecolor="none",
-            markersize=6,
-            label=str(cat),
-        )
-        for cat in cats
-    ]
-
-    legend_title = title.replace(
-        "UMAP colored by ",
-        ""
-    )
-
-    color_legend = legend_ax.legend(
-        handles=color_handles,
-        title=legend_title,
-        fontsize=7,
-        title_fontsize=9,
-        frameon=False,
-
-        # IMPORTANT:
-        # keep legend vertical so it cannot run off right side
-        ncol=1,
-
-        loc="upper left",
-        bbox_to_anchor=(0, 1),
-        borderaxespad=0,
-
-        handletextpad=0.5,
-        labelspacing=0.5,
-    )
-
+    color_handles = [plt.Line2D([0], [0], marker="o", linestyle="None", markerfacecolor=color_map[cat],
+                                markeredgecolor="none", markersize=6, label=str(cat)) for cat in cats]
+    color_legend = legend_ax.legend(handles=color_handles, title=title.replace("UMAP colored by ", ""),
+                                    fontsize=7, title_fontsize=9, frameon=False, ncol=1,  # vertical: cannot run off the right side
+                                    loc="upper left", bbox_to_anchor=(0, 1), borderaxespad=0,
+                                    handletextpad=0.5, labelspacing=0.5)
     legend_ax.add_artist(color_legend)
 
-    # -----------------------
-    # Group legend
-    # -----------------------
     shape_handles = [
-        plt.Line2D(
-            [0], [0],
-            marker="o",
-            linestyle="None",
-            markerfacecolor="black",
-            markeredgecolor="none",
-            markersize=7,
-            label=group1_label,
-        ),
-        plt.Line2D(
-            [0], [0],
-            marker="x",
-            linestyle="None",
-            color="black",
-            markersize=7,
-            markeredgewidth=1.5,
-            label=group2_label,
-        ),
+        plt.Line2D([0], [0], marker=m, linestyle="None", color="black", markersize=7, markeredgewidth=1.5, label=g)
+        if m == "x" else
+        plt.Line2D([0], [0], marker=m, linestyle="None", markerfacecolor="black", markeredgecolor="none",
+                   markersize=7, label=g)
+        for g, m in markers.items()
     ]
+    legend_ax.legend(handles=shape_handles, title="Group", fontsize=7, title_fontsize=9, frameon=False,
+                     loc="lower left", bbox_to_anchor=(0, 0), borderaxespad=0)
 
-    legend_ax.legend(
-        handles=shape_handles,
-        title="Group",
-        fontsize=7,
-        title_fontsize=9,
-        frameon=False,
-        loc="lower left",
-        bbox_to_anchor=(0, 0),
-        borderaxespad=0,
-    )
 
-def plot_numeric_by_group(
-    ax,
-    embedding,
-    values,
-    groups,
-    group1_label,
-    group2_label,
-    title,
-):
-    vals = pd.to_numeric(
-        pd.Series(values),
-        errors="coerce",
-    )
+def plot_numeric_by_groups(ax, embedding, values, groups, group_labels, title, point_size=None):
+    """
+    UMAP scatter: colour = numeric value (viridis, shared colourbar), marker shape = group.
+    point_size: default 30 for two groups, 38 otherwise. All-NaN values: only the title is set.
+    """
+    group_labels = list(group_labels)
+    if len(group_labels) > len(GROUP_MARKERS):
+        raise ValueError(f"at most {len(GROUP_MARKERS)} groups are supported, got {len(group_labels)}")
+    if point_size is None:
+        point_size = 30 if len(group_labels) == 2 else 38
 
-    groups = (
-        pd.Series(groups)
-        .astype("string")
-    )
-
+    vals = pd.to_numeric(pd.Series(values), errors="coerce").reset_index(drop=True)
+    groups = pd.Series(groups).astype("string").reset_index(drop=True)
     valid = vals.notna()
-
     if not valid.any():
         ax.set_title(title)
         return
 
-    norm = mpl.colors.Normalize(
-        vmin=vals[valid].min(),
-        vmax=vals[valid].max(),
-    )
-
+    norm = mpl.colors.Normalize(vmin=vals[valid].min(), vmax=vals[valid].max())
     cmap = mpl.colormaps["viridis"]
-
-    markers = {
-        group1_label: "o",
-        group2_label: "x",
-    }
-
+    markers = dict(zip(group_labels, GROUP_MARKERS))
     for group, marker in markers.items():
-
-        mask = (
-            valid
-            & groups.eq(group)
-        ).to_numpy(dtype=bool)
-
+        mask = (valid & groups.eq(group)).to_numpy(dtype=bool)
         if not mask.any():
             continue
-
-        ax.scatter(
-            embedding[mask, 0],
-            embedding[mask, 1],
-            c=vals[mask],
-            cmap=cmap,
-            norm=norm,
-            s=30,
-            alpha=0.9,
-            marker=marker,
-            edgecolors="none"
-            if marker == "o"
-            else None,
-        )
+        extra = {} if marker == "x" else {"edgecolors": "none"}
+        ax.scatter(embedding[mask, 0], embedding[mask, 1], c=vals[mask], cmap=cmap, norm=norm,
+                   s=point_size, alpha=0.9, marker=marker, **extra)
 
     ax.set_title(title)
     ax.set_xlabel("UMAP1")
     ax.set_ylabel("UMAP2")
+    sm = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
+    plt.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
+    ax.legend(handles=[plt.Line2D([0], [0], marker=m, linestyle="None", color="black", label=g)
+                       for g, m in markers.items()], title="Group", frameon=False)
 
-    sm = mpl.cm.ScalarMappable(
-        norm=norm,
-        cmap=cmap,
-    )
 
-    plt.colorbar(
-        sm,
-        ax=ax,
-        fraction=0.046,
-        pad=0.04,
-    )
+def plot_categorical_by_group(ax, legend_ax, embedding, values, groups, group1_label, group2_label, title):
+    """Two-group form of plot_categorical_by_groups (group1: o, group2: x)."""
+    plot_categorical_by_groups(ax, legend_ax, embedding, values, groups, [group1_label, group2_label], title)
 
-    shape_handles = [
-        plt.Line2D(
-            [0], [0],
-            marker="o",
-            linestyle="None",
-            color="black",
-            label=group1_label,
-        ),
-        plt.Line2D(
-            [0], [0],
-            marker="x",
-            linestyle="None",
-            color="black",
-            label=group2_label,
-        ),
-    ]
-
-    ax.legend(
-        handles=shape_handles,
-        title="Group",
-        frameon=False,
-    )
+def plot_numeric_by_group(ax, embedding, values, groups, group1_label, group2_label, title):
+    """Two-group form of plot_numeric_by_groups (group1: o, group2: x)."""
+    plot_numeric_by_groups(ax, embedding, values, groups, [group1_label, group2_label], title)
 
 def plot_matched_groups(
     ax,
@@ -2410,287 +2236,13 @@ def plot_matched_groups_connected(
     )
 
 ## three groups
-def plot_categorical_by_three_groups(
-    ax,
-    legend_ax,
-    embedding,
-    values,
-    groups,
-    group_labels,
-    title,
-):
-    """
-    Color = metadata category
-    Shape = group
+def plot_categorical_by_three_groups(ax, legend_ax, embedding, values, groups, group_labels, title):
+    """Three-group form of plot_categorical_by_groups (o, x, ^)."""
+    plot_categorical_by_groups(ax, legend_ax, embedding, values, groups, group_labels, title)
 
-    Expected group_labels:
-        [group1, group2, group3]
-    """
-
-    vals = (
-        pd.Series(values)
-        .astype("string")
-        .fillna("NA")
-        .reset_index(drop=True)
-    )
-
-    groups = (
-        pd.Series(groups)
-        .astype("string")
-        .fillna("NA")
-        .reset_index(drop=True)
-    )
-
-    cats = pd.unique(vals)
-    n = len(cats)
-
-    # -----------------------
-    # Colors
-    # -----------------------
-    cmap_name = "tab20" if n <= 20 else "hsv"
-    cmap = mpl.colormaps.get_cmap(cmap_name)
-
-    colors = [
-        cmap(i / max(1, n - 1))
-        for i in range(n)
-    ]
-
-    color_map = dict(zip(cats, colors))
-
-    # -----------------------
-    # Group markers
-    # -----------------------
-    marker_list = ["o", "x", "^"]
-
-    markers = dict(
-        zip(group_labels, marker_list)
-    )
-
-    # -----------------------
-    # Plot
-    # -----------------------
-    for cat in cats:
-
-        for group, marker in markers.items():
-
-            mask = (
-                vals.eq(cat)
-                & groups.eq(group)
-            ).fillna(False).to_numpy(dtype=bool)
-
-            if not mask.any():
-                continue
-
-            if marker == "x":
-                ax.scatter(
-                    embedding[mask, 0],
-                    embedding[mask, 1],
-                    s=45,
-                    alpha=0.9,
-                    color=color_map[cat],
-                    marker=marker,
-                    linewidths=1.5,
-                )
-
-            else:
-                ax.scatter(
-                    embedding[mask, 0],
-                    embedding[mask, 1],
-                    s=38,
-                    alpha=0.85,
-                    color=color_map[cat],
-                    marker=marker,
-                    edgecolors="none",
-                )
-
-    ax.set_title(title)
-    ax.set_xlabel("UMAP1")
-    ax.set_ylabel("UMAP2")
-
-    # ========================================================
-    # Legend panel
-    # ========================================================
-
-    legend_ax.axis("off")
-
-    # -----------------------
-    # Color legend
-    # -----------------------
-    color_handles = [
-        plt.Line2D(
-            [0], [0],
-            marker="o",
-            linestyle="None",
-            markerfacecolor=color_map[cat],
-            markeredgecolor="none",
-            markersize=6,
-            label=str(cat),
-        )
-        for cat in cats
-    ]
-
-    legend_title = title.replace(
-        "UMAP colored by ",
-        ""
-    )
-
-    color_legend = legend_ax.legend(
-        handles=color_handles,
-        title=legend_title,
-        fontsize=7,
-        title_fontsize=9,
-        frameon=False,
-        ncol=1,
-        loc="upper left",
-        bbox_to_anchor=(0, 1),
-        borderaxespad=0,
-        handletextpad=0.5,
-        labelspacing=0.5,
-    )
-
-    legend_ax.add_artist(color_legend)
-
-    # -----------------------
-    # Group / shape legend
-    # -----------------------
-    shape_handles = []
-
-    for group, marker in markers.items():
-
-        if marker == "x":
-            handle = plt.Line2D(
-                [0], [0],
-                marker=marker,
-                linestyle="None",
-                color="black",
-                markersize=7,
-                markeredgewidth=1.5,
-                label=group,
-            )
-
-        else:
-            handle = plt.Line2D(
-                [0], [0],
-                marker=marker,
-                linestyle="None",
-                markerfacecolor="black",
-                markeredgecolor="none",
-                color="black",
-                markersize=7,
-                label=group,
-            )
-
-        shape_handles.append(handle)
-
-    legend_ax.legend(
-        handles=shape_handles,
-        title="Group",
-        fontsize=7,
-        title_fontsize=9,
-        frameon=False,
-        loc="lower left",
-        bbox_to_anchor=(0, 0),
-        borderaxespad=0,
-    )
-
-def plot_numeric_by_three_groups(
-    ax,
-    embedding,
-    values,
-    groups,
-    group_labels,
-    title,
-):
-    vals = pd.to_numeric(
-        pd.Series(values),
-        errors="coerce",
-    ).reset_index(drop=True)
-
-    groups = (
-        pd.Series(groups)
-        .astype("string")
-        .reset_index(drop=True)
-    )
-
-    valid = vals.notna()
-
-    if not valid.any():
-        ax.set_title(title)
-        return
-
-    norm = mpl.colors.Normalize(
-        vmin=vals[valid].min(),
-        vmax=vals[valid].max(),
-    )
-
-    cmap = mpl.colormaps["viridis"]
-
-    markers = dict(
-        zip(
-            group_labels,
-            ["o", "x", "^"],
-        )
-    )
-
-    for group, marker in markers.items():
-
-        mask = (
-            valid
-            & groups.eq(group)
-        ).to_numpy(dtype=bool)
-
-        if not mask.any():
-            continue
-
-        kwargs = {}
-
-        if marker != "x":
-            kwargs["edgecolors"] = "none"
-
-        ax.scatter(
-            embedding[mask, 0],
-            embedding[mask, 1],
-            c=vals[mask],
-            cmap=cmap,
-            norm=norm,
-            s=38,
-            alpha=0.9,
-            marker=marker,
-            **kwargs,
-        )
-
-    ax.set_title(title)
-    ax.set_xlabel("UMAP1")
-    ax.set_ylabel("UMAP2")
-
-    sm = mpl.cm.ScalarMappable(
-        norm=norm,
-        cmap=cmap,
-    )
-
-    plt.colorbar(
-        sm,
-        ax=ax,
-        fraction=0.046,
-        pad=0.04,
-    )
-
-    shape_handles = [
-        plt.Line2D(
-            [0], [0],
-            marker=marker,
-            linestyle="None",
-            color="black",
-            label=group,
-        )
-        for group, marker in markers.items()
-    ]
-
-    ax.legend(
-        handles=shape_handles,
-        title="Group",
-        frameon=False,
-    )
+def plot_numeric_by_three_groups(ax, embedding, values, groups, group_labels, title):
+    """Three-group form of plot_numeric_by_groups (o, x, ^)."""
+    plot_numeric_by_groups(ax, embedding, values, groups, group_labels, title)
 
 def make_joint_three_group_umap_pdf(
     group1_h5_root: Path,

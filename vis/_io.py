@@ -580,3 +580,50 @@ def sample_corr_stats_for_run(run: str, samples, runs_root: str = DEFAULT_RUNS_R
     stats["dataset"] = dataset_name
     stats["gene_list"] = run_gene_list_name(Path(runs_root) / run)
     return stats
+
+
+# ----------------------------------------------------------------------------- presentation loaders
+
+DEFAULT_MODEL_META_XLSX = (
+    "/project/gutdecoder/kxu/hest/metadata/foundation_model/pathology_foundation_models_plotting.xlsx"
+)
+
+
+def load_pred_adata(run: str, sample: str, runs_root: str = DEFAULT_RUNS_ROOT):
+    """Read <runs_root>/<run>/pred/<sample>.h5ad (predictions added by add_inference_to_adata_and_plot)."""
+    import scanpy as sc
+
+    path = Path(runs_root) / run / "pred" / f"{sample}.h5ad"
+    if not path.is_file():
+        raise FileNotFoundError(f"prediction AnnData not found: {path}")
+    return sc.read_h5ad(path)
+
+
+def stack_gene_corrs(frames: dict) -> pd.DataFrame:
+    """
+    Stack per-gene correlation tables of several runs for one plot.
+
+    frames: {dataset label: DataFrame}, in the order the datasets should appear.
+    Adds ``dataset`` (the label) and ``dataset_label`` ("<label>\n(<n> genes)").
+    """
+    if not frames:
+        raise ValueError("frames is empty")
+    df = pd.concat([f.assign(dataset=label) for label, f in frames.items()], ignore_index=True)
+    counts = df.groupby("dataset").size()
+    df["dataset_label"] = df["dataset"].map({k: f"{k}\n({v} genes)" for k, v in counts.items()})
+    return df
+
+
+def load_run_with_model_meta(run: str, model_meta_xlsx: str = DEFAULT_MODEL_META_XLSX,
+                             runs_root: str = DEFAULT_RUNS_ROOT) -> pd.DataFrame:
+    """
+    Encoder results of a run (load_run) left-joined with the foundation-model metadata sheet
+    on encoder_name == name. Encoders without a metadata row are kept and logged.
+    """
+    _dataset, results_df, _best = load_run(Path(runs_root) / run)
+    meta = pd.read_excel(model_meta_xlsx)
+    merged = results_df.merge(meta, left_on="encoder_name", right_on="name", how="left")
+    unmatched = sorted(set(results_df["encoder_name"]) - set(meta["name"]))
+    if unmatched:
+        logger.warning(f"load_run_with_model_meta: no metadata in {model_meta_xlsx} for encoders {unmatched}")
+    return merged
