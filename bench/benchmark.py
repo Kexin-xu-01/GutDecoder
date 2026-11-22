@@ -40,7 +40,7 @@ from hest.bench.utils.utils import merge_dict, get_current_time
 def _parse_args():
     parser = argparse.ArgumentParser(description='Configurations for linear probing')
     parser.add_argument('--seed', type=int)
-    parser.add_argument('--overwrite', action='store_true')
+    parser.add_argument('--overwrite', action='store_true', default=None)
     parser.add_argument('--bench_data_root', type=str)
     parser.add_argument('--embed_dataroot', type=str)
     parser.add_argument('--weights_root', type=str)
@@ -52,8 +52,8 @@ def _parse_args():
     parser.add_argument('--gene_list', type=str)
     parser.add_argument('--method', type=str)
     parser.add_argument('--alpha', type=float)
-    parser.add_argument('--kfold', action='store_true')
-    parser.add_argument('--benchmark_encoders', action='store_true')
+    parser.add_argument('--kfold', action='store_true', default=None)
+    parser.add_argument('--benchmark_encoders', action='store_true', default=None)
     parser.add_argument('--normalize', type=bool)
     parser.add_argument('--library_size_normalize', type=bool)
     parser.add_argument('--dimreduce', type=str)
@@ -584,8 +584,8 @@ def predict_single_split(
     # -------------------------
     logger.info(f"Embedding tiles for {dataset_name} using {model_name} encoder")
 
-    if model_name == "custom_encoder":
-        args.overwrite = True
+    # A custom encoder can't be identified by name, so cached embeddings may be stale.
+    overwrite = args.overwrite or model_name == "custom_encoder"
     encoder = None
     for split in (train_df, test_df):
         for row in split.itertuples(index=False):
@@ -594,7 +594,7 @@ def predict_single_split(
             embed_path = os.path.join(embedding_dir, f"{row.sample_id}.h5")
             if not extract_tiles:
                 continue
-            if os.path.isfile(embed_path) and not args.overwrite:
+            if os.path.isfile(embed_path) and not overwrite:
                 logger.info(f"Skipping {row.sample_id} as it already exists")
                 continue
             if encoder is None:
@@ -733,6 +733,37 @@ def set_seed(seed):
     random.seed(seed)
 
 
+def _resolve_args(cli_args, kwargs):
+    """Merge settings in order, each overriding the previous: defaults < CLI args < kwargs < config file."""
+    args = Namespace(**asdict(BenchmarkConfig()))
+
+    explicit = {}
+    sources = [("CLI", vars(cli_args) if cli_args is not None else {}), ("kwargs", kwargs)]
+    for source, values in sources:
+        for k, v in values.items():
+            if v is None:
+                continue
+            logger.info(f"Updating {k} with {v} ({source})")
+            setattr(args, k, v)
+            explicit[k] = (v, source)
+
+    if args.config is not None:
+        with open(args.config) as stream:
+            config = yaml.safe_load(stream)
+        for key, value in config.items():
+            if key not in args:
+                logger.warning(f"Ignoring unknown key {key!r} in config file {args.config}")
+                continue
+            if key in explicit and explicit[key][0] != value:
+                given, source = explicit[key]
+                logger.warning(
+                    f"{key}={given!r} was passed via {source}, but config file {args.config} "
+                    f"sets {key}={value!r}. Following the config file."
+                )
+            setattr(args, key, value)
+    return args
+
+
 def benchmark(encoder: torch.nn.Module, enc_transf: Callable, precision: torch.dtype, cli_args: dict=None, **kwargs) -> Tuple[list, dict]:
     """ Benchmark a patch encoder on HEST-bench
 
@@ -745,31 +776,7 @@ def benchmark(encoder: torch.nn.Module, enc_transf: Callable, precision: torch.d
 
     """  
 
-    # get default args - overwritten if using CLI, kwargs, or config file
-    args = Namespace(**asdict(BenchmarkConfig()))
-    
-    # Prio 1 - overwrite with CLI args
-    if cli_args is not None:
-        for k, v in vars(cli_args).items():
-            if v is not None:
-                print(f"Updating {k} with {v}")
-                setattr(args, k, v)
-    
-    
-    # Prio 2 - overwrite with kwargs if provided
-    for k, v in kwargs.items():
-        if v is not None:
-            print(f"Updating {k} with {v}")
-            setattr(args, k, v)
-    
-    # Prio 3 - overwrite defaults with config if provided
-    if args.config is not None: 
-        with open(args.config) as stream:
-            config = yaml.safe_load(stream)
-        for key in config:
-            if key in args: 
-                setattr(args, key, config[key])
-        
+    args = _resolve_args(cli_args, kwargs)
     set_seed(args.seed)
 
     logger.info(f'Saving models to {args.weights_root}...')
