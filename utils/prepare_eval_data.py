@@ -142,13 +142,11 @@ def _transfer(src: Optional[Path], dst: Path, label: str, symlink: bool, missing
         missing_list.append((dst.stem, label, str(src) if src is not None else "<none>"))
         return
     dst.parent.mkdir(parents=True, exist_ok=True)
-    if dst.exists():
+    # is_symlink() also catches broken links, which exists() reports as absent.
+    if dst.is_symlink() or dst.exists():
         dst.unlink()
     if symlink:
-        try:
-            os.symlink(src, dst)
-        except FileExistsError:
-            pass
+        os.symlink(src, dst)
     else:
         shutil.copy(src, dst)
 
@@ -199,21 +197,30 @@ def _discover_samples_from_eval_dirs(
     return sorted_ids, sample_sources
 
 
-def _load_patient_map(metadata_csv: str) -> Tuple[Dict[str, str], Optional[pd.DataFrame]]:
-    """Load sample_id -> patient_id map from CSV. Returns (patient_map, meta_df_csv)."""
-    patient_map: Dict[str, str] = {}
-    meta_df_csv = None
-    if Path(metadata_csv).exists():
-        meta_df_csv = pd.read_csv(metadata_csv, dtype=str)
-        if {"sample_id", "patient_id"}.issubset(meta_df_csv.columns):
-            meta_df_csv["sample_id"] = meta_df_csv["sample_id"].astype(str).str.strip()
-            meta_df_csv["patient_id"] = meta_df_csv["patient_id"].astype(str).str.strip()
-            patient_map = dict(zip(meta_df_csv["sample_id"], meta_df_csv["patient_id"]))
-            logger.info(f"Loaded {len(patient_map)} entries from {metadata_csv}")
-        else:
-            logger.warning("metadata_csv missing columns 'sample_id'/'patient_id'; will fallback to automatic patient inference")
-    else:
-        logger.warning(f"metadata_csv not found: {metadata_csv}; will fallback to automatic patient inference")
+def _load_patient_map(metadata_csv: Optional[str]) -> Tuple[Dict[str, str], Optional[pd.DataFrame]]:
+    """
+    Load the sample_id -> patient_id map from CSV. Returns (patient_map, meta_df_csv).
+
+    Patient ids decide which samples share a split, so a missing or malformed CSV raises
+    rather than quietly switching to inference. Pass metadata_csv=None to infer patients
+    from sample names on purpose.
+    """
+    if metadata_csv is None:
+        logger.info("No metadata_csv given; inferring patient ids from sample names")
+        return {}, None
+    if not Path(metadata_csv).exists():
+        raise FileNotFoundError(
+            f"metadata_csv not found: {metadata_csv}. Pass metadata_csv=None to infer patient ids from sample names."
+        )
+    meta_df_csv = pd.read_csv(metadata_csv, dtype=str)
+    if not {"sample_id", "patient_id"}.issubset(meta_df_csv.columns):
+        raise ValueError(
+            f"metadata_csv {metadata_csv} needs 'sample_id' and 'patient_id' columns; got {list(meta_df_csv.columns)}"
+        )
+    meta_df_csv["sample_id"] = meta_df_csv["sample_id"].astype(str).str.strip()
+    meta_df_csv["patient_id"] = meta_df_csv["patient_id"].astype(str).str.strip()
+    patient_map = dict(zip(meta_df_csv["sample_id"], meta_df_csv["patient_id"]))
+    logger.info(f"Loaded {len(patient_map)} entries from {metadata_csv}")
     return patient_map, meta_df_csv
 
 
@@ -253,11 +260,11 @@ def _plan_and_transfer_assets(
             planned.append(("vis", vs, dst))
 
     logger.info(f"Planned actions: {len(planned)} file operations; {len(missing)} missing types.")
+    lost = []
     for act, src, dst in planned:
-        try:
-            _transfer(src, dst, act, symlink, [])
-        except Exception as e:
-            logger.error(f"transferring {src} -> {dst}: {e}")
+        _transfer(src, dst, act, symlink, lost)
+    # Sources that vanished between discovery and transfer.
+    missing.extend((stem, label) for stem, label, _ in lost)
 
     return missing
 
@@ -305,8 +312,6 @@ def write_var_k_genes_from_paths(
     """
     if exclude_keywords is None:
         exclude_keywords = ["NegControl", "Codeword", "Intergenic_Region", "Control", "BLANK","Intergenic"]
-
-    warnings.filterwarnings("ignore", category=FutureWarning, module="anndata")
 
     # ---- Load all adatas
     adata_list = []
@@ -415,7 +420,7 @@ def create_benchmark_data_multislide(
     gene_k: Union[int, str] = 50,
     gene_criteria: str = "var",
     min_cells_pct: float = 0.10,
-    metadata_csv: str = _DEFAULT_METADATA_CSV,
+    metadata_csv: Optional[str] = _DEFAULT_METADATA_CSV,
     symlink: bool = False,
     seed: int = 0,
     exclude_ids: Optional[List[str]] = None
@@ -467,60 +472,11 @@ def create_benchmark_data_multislide(
     discovered_ids = sorted(discovered_ids)
     logger.info(f"Final sample list ({len(discovered_ids)}): {discovered_ids}")
 
-    # 2) Load metadata CSV mapping sample_id -> patient_id (if available); otherwise fallback to inference
-    patient_map = {}
-    meta_df_csv = None
-    metadata_csv_path = Path(metadata_csv)
-    if metadata_csv_path.exists():
-        try:
-            meta_df_csv = pd.read_csv(metadata_csv_path, dtype=str)
-        except Exception as e:
-            logger.warning(f"Failed to read metadata_csv {metadata_csv_path}: {e}; will fallback to inference")
-            meta_df_csv = None
+    # 2) Map samples to patients from metadata_csv
+    patient_map, meta_df_csv = _load_patient_map(metadata_csv)
+    patients_for_ids, unresolved = _resolve_patient_ids(discovered_ids, patient_map, meta_df_csv)
 
-        if meta_df_csv is not None and {"sample_id", "patient_id"}.issubset(meta_df_csv.columns):
-            # create patient_map from CSV (strip whitespace)
-            meta_df_csv["sample_id"] = meta_df_csv["sample_id"].astype(str).str.strip()
-            meta_df_csv["patient_id"] = meta_df_csv["patient_id"].astype(str).str.strip()
-            patient_map = dict(zip(meta_df_csv["sample_id"], meta_df_csv["patient_id"]))
-            logger.info(f"Loaded {len(patient_map)} entries from {metadata_csv_path}")
-        else:
-            if meta_df_csv is not None:
-                logger.warning(f"metadata_csv found but missing 'sample_id'/'patient_id' columns; will fallback to automatic patient inference")
-            else:
-                logger.warning(f"metadata_csv not readable; will fallback to automatic patient inference")
-    else:
-        logger.warning(f"metadata_csv not found: {metadata_csv_path}; will fallback to automatic patient inference")
-
-    # Helper: infer patient from sample id if no mapping exists
-    def _infer_patient_from_sample(sid: str) -> str:
-        return sid.split("_")[0] if "_" in sid else sid
-
-    # Build meta DataFrame for exactly discovered_ids
     dataset_title = base_root.name or "xenium"
-    patients_for_ids = []
-    unresolved = []
-    for sid in discovered_ids:
-        if sid in patient_map:
-            patients_for_ids.append(patient_map[sid])
-        else:
-            # try suffix / contains match in CSV if provided
-            matched = None
-            if meta_df_csv is not None:
-                # find any csv sample_id that endswith sid
-                candidates = [s for s in meta_df_csv["sample_id"].values if str(s).endswith(str(sid))]
-                if candidates:
-                    matched = candidates[0]
-                    patients_for_ids.append(patient_map.get(matched))
-                else:
-                    inferred = _infer_patient_from_sample(sid)
-                    patients_for_ids.append(inferred)
-                    unresolved.append(sid)
-            else:
-                inferred = _infer_patient_from_sample(sid)
-                patients_for_ids.append(inferred)
-                unresolved.append(sid)
-
     meta = pd.DataFrame({
         "id": discovered_ids,
         "patient": patients_for_ids,
@@ -607,7 +563,7 @@ def create_benchmark_data_multirun(
     min_cells_pct: float = 0.10,
     symlink: bool = False,
     seed: int = 0,
-    metadata_csv: str = _DEFAULT_METADATA_CSV,
+    metadata_csv: Optional[str] = _DEFAULT_METADATA_CSV,
     exclude_ids: Optional[List[str]] = None
 ):
     """
@@ -675,7 +631,7 @@ def create_benchmark_data_multirun_ex_val(
     min_cells_pct: float = 0.10,
     symlink: bool = False,
     seed: int = 0,
-    metadata_csv: str = _DEFAULT_METADATA_CSV,
+    metadata_csv: Optional[str] = _DEFAULT_METADATA_CSV,
     exclude_ids: Optional[List[str]] = None,
     condition_map: Optional[Dict[str, List[int]]] = None,
     drop_unassigned_from_splits: bool = True
