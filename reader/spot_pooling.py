@@ -37,7 +37,6 @@ from __future__ import annotations
 
 from pathlib import Path
 import argparse
-import ast
 import json
 import re
 from typing import Any
@@ -56,6 +55,7 @@ import dask.dataframe as dd
 from hest import HESTData, XeniumReader
 from hest.readers import pool_transcripts_xenium
 from gutdecoder.reader.h5ad_reader import *  # noqa: F401,F403
+from gutdecoder.reader.rules import parse_crop_rules
 
 # Optional dependencies
 try:
@@ -77,46 +77,12 @@ BASE_RENAME_MAP = {
 
 
 def _parse_rules(rule_col: Any) -> list[dict]:
-    """Normalize crop/exclusion rules stored in the spreadsheet cell."""
-    if rule_col is None or (isinstance(rule_col, float) and pd.isna(rule_col)):
-        return []
+    """Crop/exclusion rules from a spreadsheet cell, which pandas may already have parsed."""
     if isinstance(rule_col, dict):
         return [rule_col]
     if isinstance(rule_col, list):
         return rule_col
-    if isinstance(rule_col, str):
-        s = rule_col.strip()
-        if not s:
-            return []
-
-        try:
-            parsed = json.loads(s)
-            return parsed if isinstance(parsed, list) else [parsed]
-        except Exception:
-            pass
-
-        dict_blocks = re.findall(r"\{.*?\}", s, flags=re.S)
-        if not dict_blocks:
-            parsed = ast.literal_eval(s)
-            return parsed if isinstance(parsed, list) else [parsed]
-
-        rules: list[dict] = []
-        for blk in dict_blocks:
-            blk_clean = re.sub(r",\s*$", "", blk.strip(), flags=re.S)
-            try:
-                obj = json.loads(blk_clean)
-            except Exception:
-                obj = ast.literal_eval(blk_clean)
-
-            if isinstance(obj, dict):
-                rules.append(obj)
-            elif isinstance(obj, list):
-                rules.extend(obj)
-            else:
-                rules.append(obj)
-        return rules
-
-    raise ValueError(f"Unsupported crop/exclusion rule format: {type(rule_col)}")
+    return parse_crop_rules(rule_col)
 
 
 def _build_rename_map(annotation_source_col: str, feature_col: str) -> dict[str, str]:
@@ -553,11 +519,7 @@ def main() -> None:
         stats = refresh_meta_counts(st)
         print("Before/After:", stats)
 
-        # save_all differs a little between script variants; keep this flexible.
-        try:
-            overlay_path = save_all(st, save_dir, pyramidal=True, cell_label_key=args.feature_col)
-        except TypeError:
-            overlay_path = save_all(st, save_dir, pyramidal=True)
+        overlay_path = save_all(st, save_dir, pyramidal=True, cell_label_key=args.feature_col)
 
         print("✔ Saved results to", overlay_path)
 

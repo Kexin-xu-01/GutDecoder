@@ -709,12 +709,11 @@ def rule_based_spot_exclusion(
     sx = xy[:, 0].astype(float)
     sy = xy[:, 1].astype(float)
 
-    # determine bounding box
-    try:
+    # determine bounding box: the WSI if loaded, else the spot coordinates
+    if st.wsi is not None:
         xmin, ymin = 0.0, 0.0
         xmax, ymax = float(st.wsi.width), float(st.wsi.height)
-    except Exception:
-        # fallback: use min/max of coords (adds small padding)
+    else:
         xmin, xmax = float(sx.min()), float(sx.max())
         ymin, ymax = float(sy.min()), float(sy.max())
         # add a tiny padding so strips that reference fractions behave sensibly
@@ -736,23 +735,15 @@ def rule_based_spot_exclusion(
 
     fig = None
     if plot:
-        # prepare a subsetted AnnData view for plotting
-        try:
-            ad_subset = st.adata[final_keep]
-            fig=sc.pl.spatial(
-                st.adata[final_keep],
-                img_key="downscaled_fullres",
-                color="total_counts",
-                title="In-tissue spots (after rule exclusions)",
-                return_fig=True
-            )
-
-            if save_path is not None:
-                fig.savefig(str(save_path), bbox_inches="tight")
-        except Exception as e:
-            if verbose:
-                print("Plotting failed:", e)
-            fig = None
+        fig = sc.pl.spatial(
+            st.adata[final_keep],
+            img_key="downscaled_fullres",
+            color="total_counts",
+            title="In-tissue spots (after rule exclusions)",
+            return_fig=True
+        )
+        if save_path is not None:
+            fig.savefig(str(save_path), bbox_inches="tight")
 
     return final_keep, fig
 

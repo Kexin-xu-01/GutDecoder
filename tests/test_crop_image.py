@@ -31,3 +31,13 @@ def test_empty_cell_means_no_rules(cell):
 def test_malformed_rule_raises_instead_of_leaving_slide_unmasked(cell):
     with pytest.raises(ValueError):
         parse_crop_rules(cell)
+
+
+def test_spot_pooling_uses_the_same_rule_parser():
+    from gutdecoder.reader.spot_pooling import _parse_rules
+
+    assert _parse_rules("{'type': 'strip', 'side': 'left', 'value': 0.1}") == [RULE]
+    assert _parse_rules(RULE) == [RULE]
+    assert _parse_rules(float("nan")) == []
+    with pytest.raises(ValueError):
+        _parse_rules("left 10%")
