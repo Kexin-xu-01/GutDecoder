@@ -8,8 +8,9 @@ import glob
 import json
 import os
 from pathlib import Path
-from typing import Tuple
+from typing import Optional, Tuple
 import re
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -21,6 +22,8 @@ from gutdecoder.config import (
     HEST_METADATA_CSV as DEFAULT_EXTRA_METADATA,
     BROAD_METADATA_CSV as DEFAULT_BROAD_METADATA,
 )
+
+from loguru import logger
 
 from ._helpers import _safe_read_json, _find_col_ci
 
@@ -82,8 +85,8 @@ def count_dataset_patches(meta: pd.DataFrame, dataset: str) -> float:
 
 def add_num_training_patches_mean(
     df_summary: pd.DataFrame,
-    xenium_csv: str = "/project/gutdecoder/kxu/hest/metadata/hest_directory.csv",
-    broad_csv: str = "/project/gutdecoder/kxu/hest/metadata/broad_directory.csv",
+    xenium_csv: str = DEFAULT_EXTRA_METADATA,
+    broad_csv: str = DEFAULT_BROAD_METADATA,
 ) -> pd.DataFrame:
     """
     Add a column 'num_training_patches_mean' to df_summary based on dataset rules,
@@ -91,16 +94,8 @@ def add_num_training_patches_mean(
     """
     out = df_summary.copy()
 
-    # Load metadata (once)
-    try:
-        xen = pd.read_csv(xenium_csv)
-    except Exception:
-        xen = pd.DataFrame()
-
-    try:
-        brd = pd.read_csv(broad_csv)
-    except Exception:
-        brd = pd.DataFrame()
+    xen = pd.read_csv(xenium_csv)
+    brd = pd.read_csv(broad_csv)
 
     def _safe_mean_ci(df: pd.DataFrame, col_candidates: list[str]) -> float:
         col = _find_col_ci(df, col_candidates)
@@ -181,15 +176,11 @@ def summarize_runs(root_dir):
 
                    # --- try to locate and count genes in <gene_list>.json ---
         def _try_count_genes(path):
-            try:
-                with open(path, "r") as gf:
-                    payload = json.load(gf)
-                if isinstance(payload, dict) and isinstance(payload.get("genes"), list):
-                    return len(payload["genes"])
-                if isinstance(payload, list):
-                    return len(payload)
-            except Exception:
-                pass
+            payload = _safe_read_json(path)
+            if isinstance(payload, dict) and isinstance(payload.get("genes"), list):
+                return len(payload["genes"])
+            if isinstance(payload, list):
+                return len(payload)
             return None
 
         if gene_list:
@@ -228,25 +219,15 @@ def summarize_runs(root_dir):
         for dirpath, dirnames, filenames in os.walk(run_path):
             # only consider enc_results.json files (case-sensitive as provided)
             if "enc_results.json" in filenames:
-                enc_results_path = os.path.join(dirpath, "enc_results.json")
-                try:
-                    with open(enc_results_path, "r") as ef:
-                        payload = json.load(ef)
-                    # payload expected to have top-level "results": [ { "encoder_name": ... }, ... ]
-                    if isinstance(payload, dict):
-                        results = payload.get("results", [])
-                        if isinstance(results, list):
-                            for entry in results:
-                                if isinstance(entry, dict):
-                                    enc_name = entry.get("encoder_name") or entry.get("name")
-                                    if enc_name:
-                                        encoders_set.add(str(enc_name))
-                                # if the entry is a plain string, include it directly
-                                elif isinstance(entry, str):
-                                    encoders_set.add(entry)
-                except Exception:
-                    # ignore malformed enc_results.json and continue
-                    pass
+                payload = _safe_read_json(os.path.join(dirpath, "enc_results.json"))
+                # expected: {"results": [{"encoder_name": ...}, ...]}; entries may also be plain names
+                for entry in payload.get("results", []):
+                    if isinstance(entry, dict):
+                        enc_name = entry.get("encoder_name") or entry.get("name")
+                        if enc_name:
+                            encoders_set.add(str(enc_name))
+                    elif isinstance(entry, str):
+                        encoders_set.add(entry)
 
         encoders_list = sorted(encoders_set) if encoders_set else None
         encoders_str = ", ".join(encoders_list) if encoders_list else None
@@ -511,7 +492,7 @@ def merge_kfold_gene_corrs_with_test_metadata(df_genes: pd.DataFrame,
                                               df_test_splits: pd.DataFrame) -> pd.DataFrame:
     """Explode corr_per_split and merge with test splits."""
     if "gene" not in df_genes or "corr_per_split" not in df_genes:
-        return pd.DataFrame()
+        raise KeyError(f"Gene correlations need 'gene' and 'corr_per_split' columns; got {list(df_genes.columns)}")
 
     df_long = df_genes.explode("corr_per_split").rename(columns={"corr_per_split": "corr"})
     df_long["split"] = df_long.groupby("gene").cumcount()
@@ -539,3 +520,95 @@ def best_results_by_gene_and_dataset(df):
     )
 
     return df.loc[idx].reset_index(drop=True)
+
+
+_SAMPLE_COLS = ["test_sample", "sample_id", "SampleID"]
+
+
+def run_gene_list_name(run_path: Path) -> str:
+    """File name of the gene list in the first config.json under run_path, or ''."""
+    for dirpath, _, filenames in os.walk(run_path):
+        if "config.json" in filenames:
+            cfg = _safe_read_json(Path(dirpath) / "config.json")
+            name = cfg.get("gene_list") or cfg.get("genes") or ""
+            return Path(name).name if isinstance(name, str) else ""
+    return ""
+
+
+def sample_corr_stats_for_run(run: str, samples, runs_root: str = DEFAULT_RUNS_ROOT,
+                              splits_root: str = DEFAULT_SPLITS_ROOT) -> Optional[pd.DataFrame]:
+    """
+    Per-sample Pearson mean/std over genes for a run's best model, restricted to `samples`.
+
+    Returns columns sample, run, dataset, gene_list, mean_pearson, std_pearson, n_genes,
+    or None (with a warning) when the run has no results or splits yet.
+    """
+    try:
+        dataset_name, _, _ = load_run(run, runs_root=runs_root)
+        df_splits = get_test_splits(run, runs_root=runs_root, splits_root=splits_root)
+        _, _, df_genes = extract_best_model_gene_corrs(run, runs_root=runs_root, verbose=False)
+    except FileNotFoundError as e:
+        warnings.warn(f"Skipping {run}: {e}")
+        return None
+
+    df_long = merge_kfold_gene_corrs_with_test_metadata(df_genes, df_splits)
+    sample_col = _find_col_ci(df_long, _SAMPLE_COLS)
+    if sample_col is None:
+        raise KeyError(f"No sample id column in merged results for {run}; columns: {list(df_long.columns)}")
+    df_long = df_long[df_long[sample_col].astype(str).isin([str(x) for x in samples])]
+
+    corr = pd.to_numeric(df_long["corr"], errors="coerce")
+    stats = corr.groupby(df_long[sample_col].astype(str).rename("sample")).agg(
+        mean_pearson="mean", std_pearson="std", n_genes="size"
+    ).reset_index()
+    stats["run"] = run
+    stats["dataset"] = dataset_name
+    stats["gene_list"] = run_gene_list_name(Path(runs_root) / run)
+    return stats
+
+
+# ----------------------------------------------------------------------------- presentation loaders
+
+DEFAULT_MODEL_META_XLSX = (
+    "/project/gutdecoder/kxu/hest/metadata/foundation_model/pathology_foundation_models_plotting.xlsx"
+)
+
+
+def load_pred_adata(run: str, sample: str, runs_root: str = DEFAULT_RUNS_ROOT):
+    """Read <runs_root>/<run>/pred/<sample>.h5ad (predictions added by add_inference_to_adata_and_plot)."""
+    import scanpy as sc
+
+    path = Path(runs_root) / run / "pred" / f"{sample}.h5ad"
+    if not path.is_file():
+        raise FileNotFoundError(f"prediction AnnData not found: {path}")
+    return sc.read_h5ad(path)
+
+
+def stack_gene_corrs(frames: dict) -> pd.DataFrame:
+    """
+    Stack per-gene correlation tables of several runs for one plot.
+
+    frames: {dataset label: DataFrame}, in the order the datasets should appear.
+    Adds ``dataset`` (the label) and ``dataset_label`` ("<label>\n(<n> genes)").
+    """
+    if not frames:
+        raise ValueError("frames is empty")
+    df = pd.concat([f.assign(dataset=label) for label, f in frames.items()], ignore_index=True)
+    counts = df.groupby("dataset").size()
+    df["dataset_label"] = df["dataset"].map({k: f"{k}\n({v} genes)" for k, v in counts.items()})
+    return df
+
+
+def load_run_with_model_meta(run: str, model_meta_xlsx: str = DEFAULT_MODEL_META_XLSX,
+                             runs_root: str = DEFAULT_RUNS_ROOT) -> pd.DataFrame:
+    """
+    Encoder results of a run (load_run) left-joined with the foundation-model metadata sheet
+    on encoder_name == name. Encoders without a metadata row are kept and logged.
+    """
+    _dataset, results_df, _best = load_run(Path(runs_root) / run)
+    meta = pd.read_excel(model_meta_xlsx)
+    merged = results_df.merge(meta, left_on="encoder_name", right_on="name", how="left")
+    unmatched = sorted(set(results_df["encoder_name"]) - set(meta["name"]))
+    if unmatched:
+        logger.warning(f"load_run_with_model_meta: no metadata in {model_meta_xlsx} for encoders {unmatched}")
+    return merged

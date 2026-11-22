@@ -4,9 +4,6 @@ _per_sample.py — per-sample plots.
 
 from __future__ import annotations
 
-import json
-import math
-import os
 from pathlib import Path
 from typing import Dict
 
@@ -27,7 +24,7 @@ from gutdecoder.config import (
 )
 
 from ._helpers import _find_col_ci, _sample_cmap, _assemble_color_map, _safe_filename, _format_title
-from ._io import get_test_splits, extract_best_model_gene_corrs, merge_kfold_gene_corrs_with_test_metadata
+from ._io import get_test_splits, extract_best_model_gene_corrs, merge_kfold_gene_corrs_with_test_metadata, sample_corr_stats_for_run
 
 
 def plot_corrs_by_sample(
@@ -211,16 +208,9 @@ def plot_pearson_vs_sample_metadata(
         for _, r in df_plot.iterrows():
             texts.append(ax.text(r[meta_col], r["mean_pearson"], str(r[sample_col]), fontsize=8))
 
-        try:
-            adjust_text(
-                texts,
-                ax=ax,
-                expand_points=(1.2, 1.6),
-                expand_text=(1.2, 1.6),
-                arrowprops=dict(arrowstyle="-", color="gray", lw=0.5),
-            )
-        except Exception:
-            pass
+        # expand_points/expand_text were removed in adjustText 1.0, which made this call fail
+        # silently; ax and arrowprops work in every version.
+        adjust_text(texts, ax=ax, arrowprops=dict(arrowstyle="-", color="gray", lw=0.5))
 
         fig.tight_layout()
         fname = f"pearson_vs_{meta_col}.png"
@@ -269,84 +259,17 @@ def plot_sample_across_runs(
     else:
         candidate_runs = list(runs)
 
-    summary_rows = []
-    sample_col_candidates = ["test_sample", "sample_id", "SampleID"]
+    frames = [sample_corr_stats_for_run(run_name, [sample_id], str(runs_root), str(splits_root))
+              for run_name in candidate_runs]
+    frames = [f for f in frames if f is not None and not f.empty]
 
-    for run_name in candidate_runs:
-        try:
-            # get test splits for this run
-            try:
-                df_splits = get_test_splits(run_name, runs_root=str(runs_root), splits_root=splits_root)
-            except Exception:
-                continue
-
-            # check if sample present in splits
-            sample_col = _find_col_ci(df_splits, sample_col_candidates)
-            present = False
-            if sample_col is not None:
-                present = df_splits[sample_col].astype(str).isin([sample_id]).any()
-
-            if not present:
-                continue
-
-            # extract best model gene corrs
-            best_info, dataset_name, df_genes = extract_best_model_gene_corrs(run_name, runs_root=str(runs_root), verbose=False)
-
-            # attempt to discover gene_list from config.json under the run dir
-            gene_list_name = ""
-            run_path = Path(runs_root) / run_name
-            for dirpath, _, filenames in os.walk(run_path):
-                if "config.json" in filenames:
-                    try:
-                        with open(Path(dirpath) / "config.json", "r") as cf:
-                            cfg = json.load(cf)
-                        gene_list_name = cfg.get("gene_list") or cfg.get("genes") or ""
-                        # if it's a path, keep only the filename portion
-                        if isinstance(gene_list_name, str) and gene_list_name:
-                            gene_list_name = Path(str(gene_list_name)).name
-                    except Exception:
-                        gene_list_name = ""
-                    break
-            if not gene_list_name:
-                # fallback to using run name so label isn't empty
-                gene_list_name = run_name
-
-            # produce long df merged with test metadata (so it has 'test_sample')
-            df_long = merge_kfold_gene_corrs_with_test_metadata(df_genes, df_splits)
-
-            # locate sample column in the long DF
-            sample_col_long = _find_col_ci(df_long, sample_col_candidates)
-            if sample_col_long is None:
-                continue
-
-            # filter to this sample
-            df_sample = df_long[df_long[sample_col_long].astype(str) == sample_id]
-            if df_sample.empty:
-                continue
-
-            # compute mean and std across genes for that sample
-            mean_pearson = pd.to_numeric(df_sample["corr"], errors="coerce").dropna().mean()
-            std_pearson = pd.to_numeric(df_sample["corr"], errors="coerce").dropna().std()
-            n_genes = df_sample.shape[0]
-
-            summary_rows.append({
-                "run": run_name,
-                "dataset": dataset_name,
-                "gene_list": gene_list_name,
-                "sample_id": sample_id,
-                "mean_pearson": float(mean_pearson) if not math.isnan(mean_pearson) else pd.NA,
-                "std_pearson": float(std_pearson) if not math.isnan(std_pearson) else pd.NA,
-                "n_genes": int(n_genes),
-            })
-
-        except Exception as e:
-            print(f"[plot_sample_across_runs] Skipping run {run_name}: {e}")
-            continue
-
-    if not summary_rows:
+    if not frames:
         raise ValueError(f"Sample {sample_id!r} not found in any examined runs under {runs_root} (or provided runs).")
 
-    df_summary = pd.DataFrame(summary_rows).convert_dtypes()
+    df_summary = pd.concat(frames, ignore_index=True).rename(columns={"sample": "sample_id"})
+    # label runs without a gene list by their run name
+    df_summary["gene_list"] = df_summary["gene_list"].where(df_summary["gene_list"] != "", df_summary["run"])
+    df_summary = df_summary.convert_dtypes()
     df_summary = df_summary.sort_values("mean_pearson", ascending=False).reset_index(drop=True)
 
     # Prepare labels using gene_list | dataset

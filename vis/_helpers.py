@@ -75,11 +75,15 @@ def _format_title(prefix, dataset_name, encoder_name):
 
 
 def _safe_read_json(path: Path) -> dict:
+    """Read a JSON file; errors name the file, which json.load alone does not."""
     import json
     if not Path(path).is_file():
         raise FileNotFoundError(f"Missing JSON: {path}")
     with open(path, "r") as f:
-        return json.load(f)
+        try:
+            return json.load(f)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Malformed JSON in {path}: {e}") from e
 
 
 def _find_col(df, candidates, required=True, what="column"):

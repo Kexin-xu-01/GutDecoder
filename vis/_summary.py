@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 from IPython.display import display
 from adjustText import adjust_text
+from loguru import logger
 from matplotlib.backends.backend_pdf import PdfPages
 
 from gutdecoder.config import (
@@ -765,6 +766,10 @@ def compare_models(
     run: str,
     runs_root: str = DEFAULT_RUNS_ROOT,
     show: bool = False,
+    figsize=(12, 6),
+    ylabel: str = "Pearson correlation",
+    title: bool = True,
+    save_path=None,
 ):
     """
     Visualize encoder-level dataset results for a given run as a point plot with error bars.
@@ -775,6 +780,9 @@ def compare_models(
         run (str): Run folder name.
         runs_root (str): Root directory containing run folders.
         show (bool): If True, display the figure inline.
+        figsize, ylabel: figure size and y-axis label.
+        title (bool): If True, title with dataset, gene list and gene count.
+        save_path: If given, the figure is saved there (dpi=300, tight bbox).
 
     Returns:
         matplotlib.figure.Figure | None
@@ -826,20 +834,24 @@ def compare_models(
             break
 
     # Build the plot
-    fig, ax = plt.subplots(figsize=(12, 6))
+    fig, ax = plt.subplots(figsize=figsize)
     x = np.arange(len(encoders))
     ax.errorbar(x, means, yerr=stds, fmt="o", capsize=5, markersize=8, linestyle="")
 
     ax.set_xticks(x)
     ax.set_xticklabels(encoders, rotation=45, ha="right")
-    ax.set_ylabel("Pearson correlation")
+    ax.set_ylabel(ylabel)
 
-    title = f"Dataset: {dataset_name}"
-    if gene_list_name:
-        title += f" | Gene List: {gene_list_name}"
-    if gene_count is not None:
-        title += f" ({gene_count} genes)"
-    ax.set_title(title)
+    if title:
+        title_text = f"Dataset: {dataset_name}"
+        if gene_list_name:
+            title_text += f" | Gene List: {gene_list_name}"
+        if gene_count is not None:
+            title_text += f" ({gene_count} genes)"
+        ax.set_title(title_text)
+
+    if save_path is not None:
+        fig.savefig(save_path, dpi=300, bbox_inches="tight")
 
     if show:
         display(fig)
@@ -1213,3 +1225,169 @@ def grid_plot_for_datasets(
             plt.close(fig)
 
     return pdf_path, df_combined
+
+
+# ----------------------------------------------------------------------------- scaling relationships
+
+def _boxes_overlap(box1, box2, padding=2):
+    """True when two rendered text boxes (display coordinates) overlap."""
+    return not (box1.x1 + padding < box2.x0 or box1.x0 - padding > box2.x1
+                or box1.y1 + padding < box2.y0 or box1.y0 - padding > box2.y1)
+
+
+def _label_points(ax, x, y, labels, mode, fontsize=8.5, offset_points=3):
+    """
+    Label scatter points. mode: "drop_overlapping" keeps a label only if it does not overlap
+    an earlier one (pass points in priority order); "adjust" repositions all labels with
+    adjustText; "all" draws every label in place.
+    """
+    if mode == "adjust":
+        texts = [ax.text(xv, yv, str(lab), fontsize=fontsize, ha="center", va="bottom", zorder=3)
+                 for xv, yv, lab in zip(x, y, labels)]
+        adjust_text(texts, ax=ax, expand_points=(1.05, 1.1), expand_text=(1.05, 1.1),
+                    force_points=0.1, force_text=0.1)
+        return
+    if mode not in ("drop_overlapping", "all"):
+        raise ValueError(f"labels must be 'drop_overlapping', 'adjust' or 'all', got {mode!r}")
+
+    ax.figure.canvas.draw()
+    renderer = ax.figure.canvas.get_renderer()
+    accepted = []
+    for xv, yv, lab in zip(x, y, labels):
+        text = ax.annotate(str(lab), xy=(xv, yv), xytext=(0, offset_points), textcoords="offset points",
+                           ha="center", va="bottom", fontsize=fontsize)
+        box = text.get_window_extent(renderer=renderer)
+        if mode == "drop_overlapping" and any(_boxes_overlap(box, b) for b in accepted):
+            text.remove()
+        else:
+            accepted.append(box)
+
+
+def _scaling_panel(ax, df, x_col, xlabel, labels):
+    """Scatter of performance vs x (log scale) with a least-squares fit on log10(x)."""
+    x = df[x_col].to_numpy(dtype=float)
+    y = df["performance"].to_numpy(dtype=float)
+    ax.scatter(x, y, s=28, alpha=0.8, edgecolors="none", zorder=2)
+
+    slope, intercept = np.polyfit(np.log10(x), y, 1)
+    x_line = np.geomspace(x.min(), x.max(), 100)
+    ax.plot(x_line, slope * np.log10(x_line) + intercept, linewidth=1.2, zorder=1)
+    ax.set_xscale("log")
+
+    # highest-performing encoders get label priority
+    label_df = df.sort_values("performance", ascending=False).drop_duplicates("encoder_name")
+    _label_points(ax, label_df[x_col].to_numpy(dtype=float), label_df["performance"].to_numpy(dtype=float),
+                  label_df["encoder_name"].to_numpy(), labels)
+
+    ax.set_xlabel(xlabel, fontsize=11)
+    ax.tick_params(axis="both", labelsize=9, length=3, width=0.8)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_linewidth(0.8)
+    ax.spines["bottom"].set_linewidth(0.8)
+    ax.grid(False)
+
+
+def plot_scaling_relationships(
+    merged_df: pd.DataFrame,
+    labels: str = "drop_overlapping",
+    figsize=(9, 3.8),
+    ylabel: str = "Prediction correlation",
+    panel_titles=None,
+    save_path=None,
+    show: bool = True,
+):
+    """
+    Two panels: encoder performance (``pearson_mean``) vs number of parameters and vs number
+    of training patches, each on a log x axis with a least-squares fit on log10(x).
+
+    merged_df needs columns encoder_name, pearson_mean, number_of_parameters, number_of_patches
+    (e.g. from load_run_with_model_meta). Rows with missing or non-positive values are dropped
+    and the count is logged.
+    labels: "drop_overlapping" | "adjust" | "all" (see _label_points).
+    panel_titles: optional pair of titles, e.g. ("a.", "b.").
+    save_path: if given, saved at dpi=300. Returns the Figure.
+    """
+    df = merged_df.copy()
+    df["params"] = pd.to_numeric(df["number_of_parameters"], errors="coerce")
+    df["patches"] = pd.to_numeric(df["number_of_patches"], errors="coerce")
+    df["performance"] = pd.to_numeric(df["pearson_mean"], errors="coerce")
+
+    valid = (df[["params", "patches", "performance", "encoder_name"]].notna().all(axis=1)
+             & (df["params"] > 0) & (df["patches"] > 0))
+    if (~valid).any():
+        logger.warning(f"plot_scaling_relationships: dropped {(~valid).sum()} row(s) with missing/non-positive "
+                       f"parameters, patches or performance: {df.loc[~valid, 'encoder_name'].tolist()}")
+    df = df[valid]
+
+    fig, axes = plt.subplots(1, 2, figsize=figsize)
+    _scaling_panel(axes[0], df, "params", "Number of parameters", labels)
+    _scaling_panel(axes[1], df, "patches", "Number of training patches", labels)
+    axes[0].set_ylabel(ylabel, fontsize=11)
+    if panel_titles is not None:
+        for ax, t in zip(axes, panel_titles):
+            ax.set_title(t)
+    fig.subplots_adjust(wspace=0.25, left=0.10, right=0.98, bottom=0.16, top=0.97)
+
+    if save_path is not None:
+        Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(save_path, bbox_inches="tight", dpi=300)
+        print(f"Saved: {save_path}")
+    if show:
+        plt.show()
+    return fig
+
+
+# ----------------------------------------------------------------------------- dataset violin
+
+def plot_dataset_violin(
+    plot_df: pd.DataFrame,
+    x: str = "dataset_label",
+    y: str = "mean_corr",
+    n_labels=None,
+    shaded_ranges=None,
+    color: str = "#8ecae6",
+    ylabel: str = "Prediction correlation",
+    figsize=(5, 3),
+    dpi: int = 600,
+    fontsize: int = 12,
+    save_path=None,
+    show: bool = True,
+):
+    """
+    Violin of per-gene correlations per dataset (e.g. the output of stack_gene_corrs).
+
+    n_labels: texts written above each violin in x-axis order, e.g. ["n = 34", "n = 33", "n = 29"].
+    shaded_ranges: literature ranges as (ymin, ymax, xmin_frac, xmax_frac, alpha) tuples,
+        drawn as brown horizontal bands behind the violins.
+    Returns the Axes.
+    """
+    import seaborn as sns
+
+    fig = plt.figure(figsize=figsize, dpi=dpi)
+    sns.violinplot(data=plot_df, x=x, y=y, cut=0, linewidth=1.2, color=color)
+    ax = plt.gca()
+    ax.set_xlabel("")
+    ax.set_ylabel(ylabel, fontsize=fontsize)
+    ax.tick_params(axis="both", labelsize=fontsize)
+
+    for ymin, ymax, xmin, xmax, alpha in (shaded_ranges or []):
+        ax.axhspan(ymin, ymax, xmin=xmin, xmax=xmax, color="brown", linestyle="dashed", alpha=alpha, zorder=0)
+
+    if n_labels is not None:
+        n_cats = len(ax.get_xticks())
+        if len(n_labels) != n_cats:
+            raise ValueError(f"n_labels has {len(n_labels)} entries but the plot has {n_cats} categories")
+        y_max = plot_df[y].max()
+        y_offset = (y_max - plot_df[y].min()) * 0.05
+        for i, lab in enumerate(n_labels):
+            ax.text(i, y_max + y_offset, lab, ha="center", va="bottom", fontsize=fontsize)
+        ax.set_ylim(top=y_max + 2 * y_offset)
+
+    sns.despine()
+    plt.tight_layout()
+    if save_path is not None:
+        fig.savefig(save_path, bbox_inches="tight", dpi=dpi)
+    if show:
+        plt.show()
+    return ax

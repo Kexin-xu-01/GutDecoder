@@ -5,8 +5,6 @@ _grid.py — grid layout plots.
 from __future__ import annotations
 
 import itertools
-import json
-import math
 import os
 import warnings
 from pathlib import Path
@@ -26,9 +24,7 @@ from gutdecoder.config import (
 from ._helpers import _find_col_ci, _assemble_color_map, _safe_filename
 from ._io import (
     get_test_splits,
-    extract_best_model_gene_corrs,
-    merge_kfold_gene_corrs_with_test_metadata,
-    load_run,
+    sample_corr_stats_for_run,
 )
 
 
@@ -80,14 +76,11 @@ def plot_all_samples_grid_for_dataset(
     samples = []
     # If it's a run folder (starts with run_) prefer reading that run's splits
     if str(dataset_or_run).startswith("run_"):
-        try:
-            df_splits = get_test_splits(dataset_or_run, runs_root=str(runs_root), splits_root=str(splits_root))
-            sample_col = _find_col_ci(df_splits, ["test_sample", "sample_id", "SampleID"])
-            if sample_col is None:
-                raise KeyError("No sample id column found in splits for run.")
-            samples = sorted(df_splits[sample_col].dropna().astype(str).unique().tolist())
-        except Exception as e:
-            raise RuntimeError(f"Failed to read splits for run {dataset_or_run}: {e}")
+        df_splits = get_test_splits(dataset_or_run, runs_root=str(runs_root), splits_root=str(splits_root))
+        sample_col = _find_col_ci(df_splits, ["test_sample", "sample_id", "SampleID"])
+        if sample_col is None:
+            raise KeyError(f"No sample id column in splits for run {dataset_or_run}")
+        samples = sorted(df_splits[sample_col].dropna().astype(str).unique().tolist())
         label_name = dataset_or_run
     else:
         # treat as dataset name and look under splits_root/<dataset>/splits/test_*.csv
@@ -99,15 +92,11 @@ def plot_all_samples_grid_for_dataset(
             raise FileNotFoundError(f"No test_*.csv files found for dataset '{dataset_or_run}' in {ds_dir}")
         sample_set = set()
         for tf in test_files:
-            try:
-                df_t = pd.read_csv(tf)
-                # find sample col
-                sc = _find_col_ci(df_t, ["test_sample", "sample_id", "SampleID"])
-                if sc is None:
-                    continue
-                sample_set.update(df_t[sc].dropna().astype(str).tolist())
-            except Exception:
-                continue
+            df_t = pd.read_csv(tf)
+            sc = _find_col_ci(df_t, ["test_sample", "sample_id", "SampleID"])
+            if sc is None:
+                raise KeyError(f"No sample id column in {tf}; columns: {list(df_t.columns)}")
+            sample_set.update(df_t[sc].dropna().astype(str).tolist())
         samples = sorted(sample_set)
         label_name = dataset_or_run
 
@@ -126,94 +115,15 @@ def plot_all_samples_grid_for_dataset(
     # allow user to pass absolute run names if they included a path: normalize to names
     candidate_runs = [str(r).split("/")[-1] for r in candidate_runs]
 
-    # Precompute datasets and gene_list for each candidate run (to reuse)
-    run_meta = {}
-    for run_name in candidate_runs:
-        run_path = runs_root / run_name
-        # read dataset_results.json safely to infer dataset_name quickly (best-effort)
-        try:
-            ds_name, _, _ = load_run(str(run_path))  # load_run expects run path or Path; it handles conversion
-        except Exception:
-            ds_name = "Unknown"
-        # try to find gene_list from config.json (best-effort)
-        gene_list_name = ""
-        try:
-            for dirpath, _, filenames in os.walk(run_path):
-                if "config.json" in filenames:
-                    with open(Path(dirpath) / "config.json", "r") as cf:
-                        cfg = json.load(cf)
-                    gene_list_name = cfg.get("gene_list") or cfg.get("genes") or ""
-                    if isinstance(gene_list_name, str):
-                        gene_list_name = Path(gene_list_name).name
-                    break
-        except Exception:
-            gene_list_name = ""
-        run_meta[run_name] = {"dataset": ds_name, "gene_list": gene_list_name}
+    # 3) Per-sample stats from each run's best model; each run is loaded once
+    frames = [sample_corr_stats_for_run(run_name, samples, str(runs_root), str(splits_root))
+              for run_name in candidate_runs]
+    frames = [f for f in frames if f is not None and not f.empty]
 
-    # 3) For each sample, collect per-run stats (mean/std/n_genes)
-    rows = []
-    sample_col_candidates = ["test_sample", "sample_id", "SampleID"]
-    for sample in samples:
-        for run_name in candidate_runs:
-            try:
-                # get splits for this run to check membership and to enable merge later
-                try:
-                    df_splits = get_test_splits(run_name, runs_root=str(runs_root), splits_root=str(splits_root))
-                except Exception:
-                    # no splits for this run -> skip
-                    continue
-
-                sample_col = _find_col_ci(df_splits, sample_col_candidates)
-                if sample_col is None:
-                    continue
-                if not df_splits[sample_col].astype(str).isin([sample]).any():
-                    # sample not present in this run's test splits
-                    continue
-
-                # extract gene-level correlations for best model of this run
-                try:
-                    best_info, ds_name, df_genes = extract_best_model_gene_corrs(run_name, runs_root=str(runs_root), verbose=False)
-                except FileNotFoundError:
-                    # missing kfold file etc -> skip
-                    continue
-
-                # merge to get per-sample per-split entries
-                try:
-                    df_long = merge_kfold_gene_corrs_with_test_metadata(df_genes, df_splits)
-                except Exception:
-                    continue
-
-                sample_col_long = _find_col_ci(df_long, sample_col_candidates)
-                if sample_col_long is None:
-                    continue
-
-                df_sample = df_long[df_long[sample_col_long].astype(str) == sample]
-                if df_sample.empty:
-                    continue
-
-                mean_pearson = pd.to_numeric(df_sample["corr"], errors="coerce").dropna().mean()
-                std_pearson = pd.to_numeric(df_sample["corr"], errors="coerce").dropna().std()
-                n_genes = int(df_sample.shape[0])
-
-                rows.append({
-                    "dataset_or_run": label_name,
-                    "sample": sample,
-                    "run": run_name,
-                    "dataset": run_meta.get(run_name, {}).get("dataset", ds_name if 'ds_name' in locals() else "Unknown"),
-                    "gene_list": run_meta.get(run_name, {}).get("gene_list", ""),
-                    "mean_pearson": float(mean_pearson) if not math.isnan(mean_pearson) else pd.NA,
-                    "std_pearson": float(std_pearson) if not math.isnan(std_pearson) else pd.NA,
-                    "n_genes": n_genes,
-                })
-            except Exception as e:
-                # skip this run/sample pair on error but continue
-                warnings.warn(f"[plot_all_samples_grid_for_dataset] skipping {sample} in {run_name}: {e}")
-                continue
-
-    if not rows:
+    if not frames:
         raise ValueError("No sample/run pairs found to plot. Check candidate runs and splits.")
 
-    df_all = pd.DataFrame(rows).convert_dtypes()
+    df_all = pd.concat(frames, ignore_index=True).assign(dataset_or_run=label_name).convert_dtypes()
 
     samples_order = sorted(df_all["sample"].unique().tolist())
     plots_per_page = 6
