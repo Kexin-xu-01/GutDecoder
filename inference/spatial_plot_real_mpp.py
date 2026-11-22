@@ -15,76 +15,30 @@ from hest.utils import load_wsi, register_downscale_img
 from loguru import logger
 
 
-def _safe_min_value(x):
-    """Return a scalar min for dense/sparse/lazy arrays when possible."""
-    try:
-        v = x.min()
-        if hasattr(v, "compute"):
-            v = v.compute()
-        if hasattr(v, "item"):
-            v = v.item()
-        return v
-    except Exception as e:
-        logger.warning(f"Could not compute min value for adata.X: {e}")
-        return None
-
-
-
 def clip_negative_values_to_zero(adata, sample_name: str = ""):
     """
     Convert negative values in adata.X to 0 in-place before QC metrics.
 
-    This is useful when adata.X contains model predictions / transformed values
-    with small negative values, because scanpy QC uses log1p internally and
-    negative values can trigger invalid-value warnings.
+    Model predictions can be slightly negative, and scanpy QC uses log1p internally,
+    which gives invalid values for them.
     """
-    try:
-        from scipy import sparse
-    except Exception:
-        sparse = None
+    from scipy import sparse
 
     x = adata.X
-
-    if sparse is not None and sparse.issparse(x):
-        neg_mask = x.data < 0
-        n_negative = int(np.sum(neg_mask))
-        if n_negative > 0:
-            min_before = float(np.min(x.data))
-            x = x.copy()
-            x.data[neg_mask] = 0
-            x.eliminate_zeros()
-            adata.X = x
-            logger.warning(
-                f"Converted {n_negative} negative sparse values to 0 in adata.X "
-                f"for {sample_name}; min_before={min_before}"
-            )
-        else:
-            logger.info(f"No negative sparse values found in adata.X for {sample_name}")
+    values = x.data if sparse.issparse(x) else x
+    neg_mask = values < 0
+    n_negative = int(neg_mask.sum())
+    if n_negative == 0:
         return
-
-    try:
-        arr = np.asarray(x)
-        neg_mask = arr < 0
-        n_negative = int(np.sum(neg_mask))
-        if n_negative > 0:
-            min_before = float(np.nanmin(arr))
-            # Preserve ndarray assignment when possible.
-            if isinstance(x, np.ndarray):
-                x[neg_mask] = 0
-                adata.X = x
-            else:
-                arr = arr.copy()
-                arr[neg_mask] = 0
-                adata.X = arr
-            logger.warning(
-                f"Converted {n_negative} negative dense values to 0 in adata.X "
-                f"for {sample_name}; min_before={min_before}"
-            )
-        else:
-            logger.info(f"No negative dense values found in adata.X for {sample_name}")
-    except Exception as e:
-        logger.warning(f"Could not clip negative values in adata.X for {sample_name}: {e}")
-
+    min_before = float(values.min())
+    if sparse.issparse(x):
+        x = x.copy()
+        x.data[x.data < 0] = 0
+        x.eliminate_zeros()
+    else:
+        x = np.where(neg_mask, 0, x)
+    adata.X = x
+    logger.warning(f"Converted {n_negative} negative values to 0 in adata.X for {sample_name}; min_before={min_before}")
 
 
 def _as_float(value):
@@ -206,73 +160,13 @@ def get_real_mpp_from_wsi(wsi_path: str, fallback_pixel_size: float = 0.221):
     )
     return float(fallback_pixel_size)
 
-def get_wsi_size(wsi):
-    """
-    Best-effort extraction of WSI width/height for hestcore.wsi.NumpyWSI and other WSI wrappers.
-    Returns (width, height) or (None, None).
-    """
-    # Common OpenSlide/PIL-style attributes
-    for attr in ["dimensions", "level_dimensions"]:
-        if hasattr(wsi, attr):
-            try:
-                val = getattr(wsi, attr)
-                if attr == "level_dimensions" and len(val) > 0:
-                    return tuple(val[0])
-                if attr == "dimensions" and len(val) == 2:
-                    return tuple(val)
-            except Exception:
-                pass
-
-    # Common image-array attributes on wrappers
-    for attr in ["img", "image", "array", "np_img", "numpy_img", "slide", "data"]:
-        if hasattr(wsi, attr):
-            try:
-                arr = getattr(wsi, attr)
-                if hasattr(arr, "shape") and len(arr.shape) >= 2:
-                    h, w = arr.shape[:2]
-                    return int(w), int(h)
-                if hasattr(arr, "size") and len(arr.size) == 2:
-                    return tuple(arr.size)
-            except Exception:
-                pass
-
-    # Methods that may return an image or array
-    for method in ["get_img", "get_image", "get_thumbnail", "get_numpy", "numpy"]:
-        if hasattr(wsi, method):
-            try:
-                fn = getattr(wsi, method)
-                obj = fn() if method not in ["get_thumbnail"] else fn()
-                if hasattr(obj, "shape") and len(obj.shape) >= 2:
-                    h, w = obj.shape[:2]
-                    return int(w), int(h)
-                if hasattr(obj, "size") and len(obj.size) == 2:
-                    return tuple(obj.size)
-            except Exception:
-                pass
-
-    return None, None
-
-
-def debug_wsi_object(wsi):
-    """Log useful public attributes/methods of an unknown WSI wrapper."""
-    try:
-        public_attrs = [a for a in dir(wsi) if not a.startswith("_")]
-        logger.info(f"WSI public attrs/methods: {public_attrs[:80]}")
-    except Exception as e:
-        logger.warning(f"Could not inspect WSI object: {e}")
-
-
 def debug_spatial_alignment(adata, wsi, sample_name: str = ""):
     logger.info(f"--- Debug spatial alignment: {sample_name} ---")
     logger.info(f"adata shape: {adata.shape}")
     logger.info(f"WSI type: {type(wsi)}")
 
-    wsi_width, wsi_height = get_wsi_size(wsi)
-    if wsi_width is not None and wsi_height is not None:
-        logger.info(f"WSI size inferred: width={wsi_width}, height={wsi_height}")
-    else:
-        logger.warning("Could not infer WSI size from this WSI object")
-        debug_wsi_object(wsi)
+    wsi_width, wsi_height = wsi.width, wsi.height
+    logger.info(f"WSI size: width={wsi_width}, height={wsi_height}")
 
     coords = None
     if "spatial" in adata.obsm:
@@ -285,17 +179,16 @@ def debug_spatial_alignment(adata, wsi, sample_name: str = ""):
         )
         logger.info(f"obsm['spatial'] first 5 rows:\n{coords[:5]}")
 
-        if wsi_width is not None and wsi_height is not None:
-            x_min, x_max = np.nanmin(coords[:, 0]), np.nanmax(coords[:, 0])
-            y_min, y_max = np.nanmin(coords[:, 1]), np.nanmax(coords[:, 1])
-            if x_min < 0 or y_min < 0 or x_max >= wsi_width or y_max >= wsi_height:
-                logger.error(
-                    "Spatial coordinates are outside WSI bounds: "
-                    f"x=[{x_min}, {x_max}] vs width={wsi_width}; "
-                    f"y=[{y_min}, {y_max}] vs height={wsi_height}"
-                )
-            else:
-                logger.info("Spatial coordinates are within inferred WSI bounds")
+        x_min, x_max = np.nanmin(coords[:, 0]), np.nanmax(coords[:, 0])
+        y_min, y_max = np.nanmin(coords[:, 1]), np.nanmax(coords[:, 1])
+        if x_min < 0 or y_min < 0 or x_max >= wsi_width or y_max >= wsi_height:
+            logger.error(
+                "Spatial coordinates are outside WSI bounds: "
+                f"x=[{x_min}, {x_max}] vs width={wsi_width}; "
+                f"y=[{y_min}, {y_max}] vs height={wsi_height}"
+            )
+        else:
+            logger.info("Spatial coordinates are within WSI bounds")
     else:
         logger.warning("No adata.obsm['spatial'] found")
 
@@ -312,48 +205,19 @@ def debug_spatial_alignment(adata, wsi, sample_name: str = ""):
     if "pxl_col_in_fullres" in adata.obs.columns and "pxl_row_in_fullres" in adata.obs.columns:
         x = pd.to_numeric(adata.obs["pxl_col_in_fullres"], errors="coerce")
         y = pd.to_numeric(adata.obs["pxl_row_in_fullres"], errors="coerce")
-        if wsi_width is not None and wsi_height is not None:
-            bad = (x < 0) | (y < 0) | (x >= wsi_width) | (y >= wsi_height)
-            logger.info(f"spots outside inferred WSI bounds using obs pxl_* columns: {int(bad.sum())} / {adata.n_obs}")
+        bad = (x < 0) | (y < 0) | (x >= wsi_width) | (y >= wsi_height)
+        logger.info(f"spots outside WSI bounds using obs pxl_* columns: {int(bad.sum())} / {adata.n_obs}")
 
     logger.info(f"uns keys: {list(adata.uns.keys())}")
 
 
 
-def _get_wsi_thumbnail_array(wsi, width: int, height: int, max_side: int = 2000):
-    """Return a downscaled RGB numpy image from a WSI-like object."""
-    scale = max(width, height) / float(max_side)
-    if scale < 1:
-        scale = 1.0
-    thumb_w = max(1, int(round(width / scale)))
-    thumb_h = max(1, int(round(height / scale)))
-
-    # Prefer WSI thumbnail APIs when present.
-    for method_name in ["get_thumbnail", "thumbnail"]:
-        method = getattr(wsi, method_name, None)
-        if callable(method):
-            try:
-                thumb = method((thumb_w, thumb_h))
-                return np.asarray(thumb.convert("RGB") if hasattr(thumb, "convert") else thumb), scale
-            except Exception as e:
-                logger.warning(f"Could not use wsi.{method_name}() for thumbnail: {e}")
-
-    # Fallback for NumpyWSI-like objects that expose the image array.
-    for attr in ["img", "image", "arr", "array", "data"]:
-        if hasattr(wsi, attr):
-            try:
-                arr = np.asarray(getattr(wsi, attr))
-                if arr.ndim == 2:
-                    arr = np.stack([arr, arr, arr], axis=-1)
-                if arr.shape[-1] > 3:
-                    arr = arr[..., :3]
-                im = Image.fromarray(arr.astype(np.uint8)).convert("RGB")
-                im = im.resize((thumb_w, thumb_h), Image.LANCZOS)
-                return np.asarray(im), scale
-            except Exception as e:
-                logger.warning(f"Could not build thumbnail from wsi.{attr}: {e}")
-
-    raise RuntimeError("Could not create thumbnail from WSI object")
+def _get_wsi_thumbnail_array(wsi, max_side: int = 2000):
+    """Return a downscaled RGB thumbnail of the WSI and its downscale factor."""
+    scale = max(1.0, max(wsi.width, wsi.height) / float(max_side))
+    thumb_w = max(1, int(round(wsi.width / scale)))
+    thumb_h = max(1, int(round(wsi.height / scale)))
+    return np.asarray(wsi.get_thumbnail(thumb_w, thumb_h))[..., :3], scale
 
 
 def _estimate_spot_diameter_fullres(adata, default: float = 224.0) -> float:
@@ -381,10 +245,7 @@ def manual_register_downscale_img(adata, wsi, sample_name: str = "manual", max_s
     This does not change coordinates. It only attaches a downscaled full-resolution image
     in the format expected by scanpy.pl.spatial.
     """
-    width, height = get_wsi_size(wsi)
-    if width is None or height is None:
-        raise RuntimeError("Cannot manually register image because WSI size could not be inferred")
-    thumb, downscale_factor = _get_wsi_thumbnail_array(wsi, width, height, max_side=max_side)
+    thumb, downscale_factor = _get_wsi_thumbnail_array(wsi, max_side=max_side)
     hires_scalef = 1.0 / float(downscale_factor)
     spot_diameter_fullres = _estimate_spot_diameter_fullres(adata)
 
@@ -480,17 +341,9 @@ def add_image(adata_path: str, wsi_path: str, pixel_size: float = 0.221):
     # total_counts belongs in adata.obs, not adata.var_names.
     # Clip negative values to zero before QC so scanpy log1p does not produce invalid values.
     if 'total_counts' not in adata.obs.columns and adata.n_obs > 0:
-        x_min = _safe_min_value(adata.X)
-        if x_min is None:
-            logger.warning(f"Could not determine min(adata.X) for {sample_name_local}; trying QC metrics anyway")
-        elif x_min < 0:
-            clip_negative_values_to_zero(adata, sample_name=sample_name_local)
-
-        try:
-            sc.pp.calculate_qc_metrics(adata, inplace=True)
-            logger.info(f"Calculated QC metrics for {sample_name_local}")
-        except Exception as e:
-            logger.warning(f"Could not calculate QC metrics for {sample_name_local}: {e}")
+        clip_negative_values_to_zero(adata, sample_name=sample_name_local)
+        sc.pp.calculate_qc_metrics(adata, inplace=True)
+        logger.info(f"Calculated QC metrics for {sample_name_local}")
 
     logger.info(
         f"Added image / QC for {os.path.basename(adata_path)} "
@@ -640,7 +493,7 @@ def combine_run_plots_to_pdf(
         draw = ImageDraw.Draw(row)
         try:
             font = ImageFont.truetype("DejaVuSans-Bold.ttf", label_h // 2)
-        except Exception:
+        except OSError:  # font not installed
             font = ImageFont.load_default()
 
         bbox = font.getbbox(sample)
@@ -688,6 +541,7 @@ def process_run(
 
     saved_adata_paths = []
     spatial_plot_dirs = []
+    failures = []
 
     processed_adata_dir = os.path.join(run_dir, 'adata_processed')
     processed_spatial_dir_root = os.path.join(run_dir, 'spatial_plots')
@@ -720,7 +574,7 @@ def process_run(
 
         wsi_path = _find_matching_wsi(sample_name, wsi_root)
         if wsi_path is None:
-            logger.warning(f"No unambiguous matching WSI for {sample_name} in {wsi_root}. Skipping.")
+            failures.append(f"{sample_name}: no unambiguous matching WSI in {wsi_root}")
             saved_adata_paths.append(None)
             spatial_plot_dirs.append(None)
             continue
@@ -736,16 +590,16 @@ def process_run(
             spatial_plot_dirs.append(plot_dir)
             logger.info(f"Done: adata={saved_adata}, plots={plot_dir}")
         except Exception as e:
-            logger.exception(f"Error processing {sample_name if 'sample_name' in locals() else h5ad}: {e}")
+            logger.exception(f"Error processing {sample_name}")
+            failures.append(f"{sample_name}: {type(e).__name__}: {e}")
             saved_adata_paths.append(None)
             spatial_plot_dirs.append(None)
 
-    out_pdf = os.path.join(run_dir, "combined_plots.pdf")
-    try:
-        combine_run_plots_to_pdf(run_dir, out_pdf=out_pdf, rows_per_page=4)
-        logger.info(f"Combined PDF saved to {out_pdf}")
-    except Exception as e:
-        logger.error(f"Error creating combined PDF: {e}")
+    if any(spatial_plot_dirs):
+        combine_run_plots_to_pdf(run_dir, out_pdf=os.path.join(run_dir, "combined_plots.pdf"), rows_per_page=4)
+
+    if failures:
+        raise RuntimeError(f"{len(failures)} of {len(h5ad_paths)} samples failed:\n" + "\n".join(failures))
 
     return saved_adata_paths, spatial_plot_dirs
 
