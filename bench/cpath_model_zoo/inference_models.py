@@ -72,6 +72,43 @@ class InferenceEncoder(torch.nn.Module):
         pass
         
 
+_TRIDENT_NEW_MODELS = {
+    'kaiko-vitb16', 'kaiko-vits8', 'kaiko-vits16', 'kaiko-vitl14',
+    'lunit-vits8', 'musk', 'midnight12k', 'openmidnight', 'genbio-pathfm',
+    'keep',
+}
+
+def _make_trident_encoder_class(trident_name: str, precision=None):
+    """
+    Return an InferenceEncoder subclass that delegates to TRIDENT's encoder_factory.
+    `precision` overrides the precision TRIDENT reports for the encoder.
+    """
+    class _Adapter(InferenceEncoder):
+        def _build(self, weights_path=None):
+            from trident.patch_encoder_models import encoder_factory
+            enc = encoder_factory(trident_name)
+            eval_transform = (
+                getattr(enc, 'eval_transform', None) or
+                getattr(enc, 'eval_transforms', None) or
+                _get_eval_transforms(_IMAGENET_MEAN, _IMAGENET_STD)
+            )
+            return enc, eval_transform, precision or getattr(enc, 'precision', torch.float32)
+    _Adapter.__name__ = f'TridentEncoder_{trident_name.replace("-", "_")}'
+    _Adapter.__qualname__ = _Adapter.__name__
+    return _Adapter
+
+
+def _cls_or_cls_mean_patch(tokens, return_cls: bool, n_prefix_tokens: int):
+    """
+    CLS token, or CLS concatenated with the mean of the patch tokens.
+    `n_prefix_tokens` is the number of CLS + register tokens before the patch tokens.
+    """
+    cls_token = tokens[:, 0]
+    if return_cls:
+        return cls_token
+    return torch.cat([cls_token, tokens[:, n_prefix_tokens:].mean(1)], dim=-1)
+
+
 class ConchInferenceEncoder(InferenceEncoder):
   
     def _build(self, _):
@@ -136,19 +173,10 @@ class Conchv15InferenceEncoder(BasePatchEncoder):
 
 
     
-class CTransPathInferenceEncoder(InferenceEncoder):
-    def _build(self, weights_path=None):
-        from trident.patch_encoder_models import encoder_factory
-        enc = encoder_factory('ctranspath')
-        eval_transform = (
-            getattr(enc, 'eval_transform', None) or
-            getattr(enc, 'eval_transforms', None) or
-            _get_eval_transforms(_IMAGENET_MEAN, _IMAGENET_STD)
-        )
-        precision = torch.float32
-        return enc, eval_transform, precision
+CTransPathInferenceEncoder = _make_trident_encoder_class('ctranspath', precision=torch.float32)
+RemedisInferenceEncoder = _make_trident_encoder_class('remedis', precision=torch.float32)
 
-    
+
 class CustomInferenceEncoder(InferenceEncoder):
     def __init__(self, weights_path, name, model, transforms, precision):
         super().__init__(weights_path)
@@ -175,14 +203,7 @@ class PhikonInferenceEncoder(InferenceEncoder):
         return model, eval_transform, precision
     
     def forward(self, x):
-        out = self.forward_features(x)
-        if self.return_cls:
-            out = out.last_hidden_state[:, 0, :]
-        else:
-            class_token = out.last_hidden_state[:, 0, :]
-            patch_tokens = out.last_hidden_state[:, 1:, :]
-            out = torch.cat([class_token, patch_tokens.mean(1)], dim=-1)
-        return out
+        return _cls_or_cls_mean_patch(self.forward_features(x).last_hidden_state, self.return_cls, n_prefix_tokens=1)
     
     def forward_features(self, x):
         out = self.model(pixel_values=x)
@@ -218,29 +239,9 @@ class H0MiniInferenceEncoder(InferenceEncoder):
         return model, eval_transform, precision
 
     def forward(self, x):
-        output = self.model(x)
-    
-        class_token = output[:, 0]
-        if self.return_cls:
-            return class_token
-        
-        patch_tokens = output[:, 5:]
-        embedding = torch.cat([class_token, patch_tokens.mean(1)], dim=-1)
-        return embedding
+        return _cls_or_cls_mean_patch(self.model(x), self.return_cls, n_prefix_tokens=5)
 
 
-class RemedisInferenceEncoder(InferenceEncoder):
-    def _build(self, weights_path=None):
-        from trident.patch_encoder_models import encoder_factory
-        enc = encoder_factory('remedis')
-        eval_transform = getattr(enc, 'eval_transform', None) or getattr(enc, 'eval_transforms', None)
-        precision = torch.float32
-        return enc, eval_transform, precision
-
-    def forward(self, x):
-        return self.model(x)
-    
-    
 class ResNet50InferenceEncoder(InferenceEncoder):
     def _build(
         self, 
@@ -296,7 +297,7 @@ class UNIInferenceEncoder(InferenceEncoder):
 
 
 class UNI2InferenceEncoder(InferenceEncoder):
-    def _build(self, weights_path=None, return_cls=True):
+    def _build(self, weights_path=None):
         """Load MahmoodLab/UNI2-h (ViT-h/14-reg8); needs a Hugging Face token with access to the gated model."""
         from timm.data import resolve_data_config
         from timm.data.transforms_factory import create_transform
@@ -326,22 +327,8 @@ class UNI2InferenceEncoder(InferenceEncoder):
                 "the model terms at https://huggingface.co/MahmoodLab/UNI2-h."
             ) from e
         eval_transform = create_transform(**resolve_data_config(model.pretrained_cfg, model=model))
-        self.return_cls = return_cls
         return model, eval_transform, torch.float16
 
-    def forward(self, x):
-        out = self.model(x)
-        if isinstance(out, tuple):
-            out = out[0]
-        if out.ndim == 3:
-            cls_tok = out[:, 0]
-            if self.return_cls:
-                return cls_tok
-            patch_toks = out[:, 1:, :]
-            return torch.cat([cls_tok, patch_toks.mean(1)], dim=-1)
-        if out.ndim == 4:
-            return out.mean(dim=[2, 3])
-        return out
 
 
 class GigaPathInferenceEncoder(InferenceEncoder):
@@ -392,15 +379,7 @@ class VirchowInferenceEncoder(InferenceEncoder):
         return model, eval_transform, precision
         
     def forward(self, x):
-        output = self.model(x)
-        class_token = output[:, 0]
-
-        if self.return_cls:
-            return class_token
-        else:
-            patch_tokens = output[:, 1:]
-            embeddings = torch.cat([class_token, patch_tokens.mean(1)], dim=-1)
-            return embeddings
+        return _cls_or_cls_mean_patch(self.model(x), self.return_cls, n_prefix_tokens=1)
         
 
 class Virchow2InferenceEncoder(InferenceEncoder):
@@ -426,15 +405,7 @@ class Virchow2InferenceEncoder(InferenceEncoder):
         return model, eval_transform, precision
 
     def forward(self, x):
-        output = self.model(x)
-    
-        class_token = output[:, 0]
-        if self.return_cls:
-            return class_token
-        
-        patch_tokens = output[:, 5:]
-        embedding = torch.cat([class_token, patch_tokens.mean(1)], dim=-1)
-        return embedding
+        return _cls_or_cls_mean_patch(self.model(x), self.return_cls, n_prefix_tokens=5)
 
 _HOPTIMUS_MEAN = (0.707223, 0.578729, 0.703617)
 _HOPTIMUS_STD  = (0.211883, 0.230117, 0.177517)
@@ -522,15 +493,7 @@ class HibouLargeInferenceEncoder(InferenceEncoder):
         return model, eval_transform, precision
 
     def forward(self, x):
-        output = self.model(x).last_hidden_state
-    
-        class_token = output[:, 0]
-        if self.return_cls:
-            return class_token
-        
-        patch_tokens = output[:, 5:]
-        embedding = torch.cat([class_token, patch_tokens.mean(1)], dim=-1)
-        return embedding
+        return _cls_or_cls_mean_patch(self.model(x).last_hidden_state, self.return_cls, n_prefix_tokens=5)
 
 class KaikoBase8InferenceEncoder(InferenceEncoder):
     
@@ -560,15 +523,7 @@ class KaikoBase8InferenceEncoder(InferenceEncoder):
         return model, eval_transform, precision
 
     def forward(self, x):
-        output = self.model.forward_features(x)
-    
-        class_token = output[:, 0]
-        if self.return_cls:
-            return class_token
-        
-        patch_tokens = output[:, 1:]
-        embedding = torch.cat([class_token, patch_tokens.mean(1)], dim=-1)
-        return embedding
+        return _cls_or_cls_mean_patch(self.model.forward_features(x), self.return_cls, n_prefix_tokens=1)
 
 
 
@@ -734,76 +689,36 @@ class Gemma426BInferenceEncoder(_Gemma4InferenceEncoder):
     HF_REPO = "google/gemma-4-26B-A4B"
 
 
-_TRIDENT_NEW_MODELS = {
-    'kaiko-vitb16', 'kaiko-vits8', 'kaiko-vits16', 'kaiko-vitl14',
-    'lunit-vits8', 'musk', 'midnight12k', 'openmidnight', 'genbio-pathfm',
-    'keep',
+_ENCODERS = {
+    'conch_v1': ConchInferenceEncoder,
+    'conch_v1_5': Conchv15InferenceEncoder,
+    'uni_v1': UNIInferenceEncoder,
+    'uni_v2': UNI2InferenceEncoder,
+    'ctranspath': CTransPathInferenceEncoder,
+    'phikon': PhikonInferenceEncoder,
+    'phikon_v2': PhikonV2InferenceEncoder,
+    'h0_mini': H0MiniInferenceEncoder,
+    'hibou_large': HibouLargeInferenceEncoder,
+    'hibou_l': HibouLargeInferenceEncoder,
+    'hibou-l': HibouLargeInferenceEncoder,
+    'kaiko_base_8': KaikoBase8InferenceEncoder,
+    'kaiko-vitb8': KaikoBase8InferenceEncoder,
+    'remedis': RemedisInferenceEncoder,
+    'resnet50': ResNet50InferenceEncoder,
+    'gigapath': GigaPathInferenceEncoder,
+    'virchow': VirchowInferenceEncoder,
+    'virchow2': Virchow2InferenceEncoder,
+    'hoptimus0': HOptimus0InferenceEncoder,
+    'hoptimus1': HOptimus1InferenceEncoder,
+    'gpfm': GpfmInferenceEncoder,
+    'gemma4-e4b': Gemma4E4BInferenceEncoder,
+    'gemma4-26b': Gemma426BInferenceEncoder,
 }
-
-def _make_trident_encoder_class(trident_name: str):
-    """Return an InferenceEncoder subclass that delegates to TRIDENT's encoder_factory."""
-    class _Adapter(InferenceEncoder):
-        def _build(self, weights_path=None):
-            from trident.patch_encoder_models import encoder_factory
-            enc = encoder_factory(trident_name)
-            eval_transform = (
-                getattr(enc, 'eval_transform', None) or
-                getattr(enc, 'eval_transforms', None) or
-                _get_eval_transforms(_IMAGENET_MEAN, _IMAGENET_STD)
-            )
-            precision = getattr(enc, 'precision', torch.float32)
-            return enc, eval_transform, precision
-    _Adapter.__name__ = f'TridentEncoder_{trident_name.replace("-", "_")}'
-    _Adapter.__qualname__ = _Adapter.__name__
-    return _Adapter
 
 
 def inf_encoder_factory(enc_name):
-    if enc_name == 'conch_v1':
-        return ConchInferenceEncoder
-    elif enc_name == 'conch_v1_5':
-        return Conchv15InferenceEncoder   
-    elif enc_name == 'uni_v1':
-        return UNIInferenceEncoder
-    elif enc_name == 'uni_v2':
-        return UNI2InferenceEncoder
-    elif enc_name == 'ctranspath':
-        return CTransPathInferenceEncoder
-    elif enc_name == 'phikon':
-        return PhikonInferenceEncoder
-    elif enc_name == 'phikon_v2':
-        return PhikonV2InferenceEncoder 
-    elif enc_name == "h0_mini":
-        return H0MiniInferenceEncoder
-    elif enc_name == "hibou_large":
-        return HibouLargeInferenceEncoder
-    elif enc_name == "kaiko_base_8":
-        return KaikoBase8InferenceEncoder
-    elif enc_name == 'remedis':
-        return RemedisInferenceEncoder
-    elif enc_name == 'resnet50':
-        return ResNet50InferenceEncoder
-    elif enc_name == 'gigapath':
-        return GigaPathInferenceEncoder
-    elif enc_name == 'virchow':
-        return VirchowInferenceEncoder
-    elif enc_name == 'virchow2':
-        return Virchow2InferenceEncoder
-    elif enc_name == 'hoptimus0':
-        return HOptimus0InferenceEncoder
-    elif enc_name == 'hoptimus1':
-        return HOptimus1InferenceEncoder
-    elif enc_name in ('hibou_l', 'hibou-l'):
-        return HibouLargeInferenceEncoder
-    elif enc_name == 'kaiko-vitb8':
-        return KaikoBase8InferenceEncoder
-    elif enc_name == 'gpfm':
-        return GpfmInferenceEncoder
-    elif enc_name == 'gemma4-e4b':
-        return Gemma4E4BInferenceEncoder
-    elif enc_name == 'gemma4-26b':
-        return Gemma426BInferenceEncoder
-    elif enc_name in _TRIDENT_NEW_MODELS:
+    if enc_name in _ENCODERS:
+        return _ENCODERS[enc_name]
+    if enc_name in _TRIDENT_NEW_MODELS:
         return _make_trident_encoder_class(enc_name)
-    else:
-        raise ValueError(f"Unknown encoder name {enc_name}")
+    raise ValueError(f"Unknown encoder name {enc_name}. Known: {sorted(_ENCODERS) + sorted(_TRIDENT_NEW_MODELS)}")
