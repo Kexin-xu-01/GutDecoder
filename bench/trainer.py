@@ -161,16 +161,17 @@ def _train_mlp_torch(X_train, X_test, y_train):
     criterion = nn.MSELoss()
     loader = DataLoader(
         TensorDataset(torch.tensor(X_tr), torch.tensor(y_tr)),
-        batch_size=128, shuffle=True,
+        batch_size=128, shuffle=True, drop_last=True,
     )
     reg.train()
     for epoch in range(40):
-        total_loss = sum(
-            (optimizer.zero_grad() or True) and
-            (loss := criterion(reg(xb.to(device)), yb.to(device))) and
-            loss.backward() or loss.item()
-            for xb, yb in loader
-        )
+        total_loss = 0.0
+        for xb, yb in loader:
+            optimizer.zero_grad()
+            loss = criterion(reg(xb.to(device)), yb.to(device))
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
         logger.debug(f"Epoch {epoch+1}, Loss {total_loss:.4f}")
 
     reg.eval()

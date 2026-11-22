@@ -509,6 +509,7 @@ def _fit_split(X_train, X_test, y_train, y_test, args, genes):
         y_test,
         random_state=args.seed,
         genes=genes,
+        alpha=args.alpha,
         method=args.method,
     )
 
