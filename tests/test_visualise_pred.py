@@ -1,8 +1,9 @@
 import anndata as ad
 import numpy as np
 import pandas as pd
+import pytest
 
-from gutdecoder.vis.visualise_pred import save_adata_from_list
+from gutdecoder.vis.visualise_pred import _clean_barcode_raw, add_formatted_inference_to_adata, save_adata_from_list
 
 
 def _adata(sample):
@@ -24,3 +25,32 @@ def test_save_skips_existing_without_force(tmp_path):
                                  existing_pred_samples={"s1"}, force_overwrite=False)
 
     assert [p.rsplit("/", 1)[-1] for p in paths] == ["s2.h5ad"]
+
+
+@pytest.mark.parametrize("raw", [b"007x211", "007x211", ["007x211"], "b'007x211'", np.array([[b"007x211"]])])
+def test_clean_barcode_raw(raw):
+    assert _clean_barcode_raw(raw) == "007x211"
+
+
+def _sample_adata(n_spots=3):
+    obs = pd.DataFrame({"sample_id": ["S1"] * n_spots}, index=[f"bc{i}" for i in range(n_spots)])
+    return ad.AnnData(np.zeros((n_spots, 2)), obs=obs, var=pd.DataFrame(index=["g1", "g2"]))
+
+
+def _inference(barcodes):
+    preds = pd.DataFrame({"g1": np.arange(len(barcodes), dtype=float), "g2": 1.0}, index=barcodes)
+    return {"S1": {"preds": preds, "targets": preds * 2}}
+
+
+def test_predictions_are_placed_by_barcode():
+    adata = _sample_adata()
+
+    summary = add_formatted_inference_to_adata([adata], _inference(["bc2", "bc0"]), verbose=False)
+
+    assert summary["S1"]["method"] == "match_by_obs_names"
+    np.testing.assert_array_equal(adata.layers["pred"][:, 0], [1.0, np.nan, 0.0])
+
+
+def test_unmatchable_predictions_raise_instead_of_pairing_by_position():
+    with pytest.raises(ValueError, match="by position"):
+        add_formatted_inference_to_adata([_sample_adata(3)], _inference(["x", "y"]), verbose=False)

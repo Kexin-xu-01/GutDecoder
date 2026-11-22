@@ -270,18 +270,10 @@ def plot_split_distributions(formatted_inference, plot_type="box", colors=None, 
 def _clean_barcode_raw(x):
     """Turn raw stored barcode entry into a clean string."""
     if isinstance(x, (bytes, np.bytes_)):
-        try:
-            return x.decode()
-        except Exception:
-            return str(x)
+        return x.decode("utf-8", errors="replace")
     if isinstance(x, (list, tuple, np.ndarray)):
-        try:
-            flat = np.array(x).flatten()
-            if flat.size > 0:
-                return _clean_barcode_raw(flat[0])
-        except Exception:
-            pass
-        return str(x)
+        flat = np.array(x).flatten()
+        return _clean_barcode_raw(flat[0]) if flat.size > 0 else str(x)
     s = str(x).strip()
     if s.startswith('[') and s.endswith(']'):
         s = s[1:-1].strip()
@@ -369,64 +361,24 @@ def add_formatted_inference_to_adata(
     # ---------------- sanitiser (in-place) ----------------
     def _sanitize_anndata_for_h5ad_inplace(adata, verbose_local=False):
         """
-        Convert pandas StringDtype / StringArray and categorical categories
-        in adata.obs and adata.var to plain Python strings (object dtype).
+        Convert pandas string extension dtypes and categorical categories in adata.obs and
+        adata.var to plain Python strings (object dtype) so the AnnData writes to .h5ad.
         Mutates adata in-place.
         """
-        def _sanitize_df_inplace(df, df_name):
+        for df in (adata.obs, adata.var):
             for col in list(df.columns):
-                try:
-                    ser = df[col]
-                except Exception:
-                    continue
-                try:
-                    dtype = ser.dtype
-                except Exception:
-                    dtype = None
-
-                # pandas string dtype (StringDtype / StringArray) -> object
-                if pd.api.types.is_string_dtype(dtype):
-                    df[col] = ser.astype(object)
-
-                # categorical -> ensure categories are plain Python strings or convert to object
-                elif pd.api.types.is_categorical_dtype(dtype):
+                ser = df[col]
+                if isinstance(ser.dtype, pd.CategoricalDtype):
                     try:
-                        cats = ser.cat.categories
-                        # Coerce categories to plain strings
-                        new_cats = [str(x) for x in cats]
-                        df[col] = pd.Categorical(ser.astype(str), categories=new_cats, ordered=ser.cat.ordered)
-                    except Exception:
-                        # fallback: cast entire series to object strings
-                        df[col] = ser.astype(object)
-
-            # sanitize index if StringDtype-like
-            try:
-                if pd.api.types.is_string_dtype(df.index.dtype):
-                    df.index = df.index.astype(object)
-            except Exception:
-                try:
-                    df.index = df.index.astype(str)
-                except Exception:
-                    pass
-
-        # sanitize obs and var in-place
-        if hasattr(adata, 'obs') and isinstance(adata.obs, pd.DataFrame):
-            _sanitize_df_inplace(adata.obs, 'obs')
-        if hasattr(adata, 'var') and isinstance(adata.var, pd.DataFrame):
-            _sanitize_df_inplace(adata.var, 'var')
-
-        # ensure obs.index and var.index are plain str (not pandas extension dtypes)
-        try:
-            if pd.api.types.is_string_dtype(adata.obs.index.dtype):
-                adata.obs.index = adata.obs.index.astype(object)
-        except Exception:
-            adata.obs.index = adata.obs.index.astype(str)
-        try:
-            if pd.api.types.is_string_dtype(adata.var.index.dtype):
-                adata.var.index = adata.var.index.astype(object)
-        except Exception:
-            adata.var.index = adata.var.index.astype(str)
-
+                        df[col] = pd.Categorical(ser.astype(str), categories=[str(x) for x in ser.cat.categories],
+                                                 ordered=ser.cat.ordered)
+                    except ValueError:
+                        # mixed-type categories such as 1 and "1" collide as strings
+                        df[col] = ser.astype(str).astype(object)
+                elif pd.api.types.is_string_dtype(ser.dtype):
+                    df[col] = ser.astype(object)
+            if pd.api.types.is_string_dtype(df.index.dtype):
+                df.index = df.index.astype(object)
         return adata
 
     # ---------------- build sample lookup ----------------
@@ -569,18 +521,17 @@ def add_formatted_inference_to_adata(
                 n_matched_barcodes = len(matched_by_col)
                 method = f"match_by_obs['{barcode_col}']"
             else:
-                if preds_df.shape[0] == ad.n_obs:
-                    preds_on_ad.loc[ad_obs_names, common_genes] = preds_df.loc[:, common_genes].values
-                    targets_on_ad.loc[ad_obs_names, common_genes] = targets_df.loc[:, common_genes].values
-                    n_matched_barcodes = ad.n_obs
-                    method = 'assign_by_order'
-                else:
-                    nplace = min(preds_df.shape[0], ad.n_obs)
-                    obs_slice = ad_obs_names[:nplace]
-                    preds_on_ad.loc[obs_slice, common_genes] = preds_df.iloc[:nplace][common_genes].values
-                    targets_on_ad.loc[obs_slice, common_genes] = targets_df.iloc[:nplace][common_genes].values
-                    n_matched_barcodes = nplace
-                    method = 'best_effort_slice'
+                if preds_df.shape[0] != ad.n_obs:
+                    raise ValueError(
+                        f"Cannot match predictions for '{sample_key}' to adata[{ad_idx}]: no shared barcodes, "
+                        f"no barcode column in obs, and {preds_df.shape[0]} predictions vs {ad.n_obs} spots. "
+                        "Pairing them by position would attach predictions to the wrong spots."
+                    )
+                print(f"[WARN] '{sample_key}': no shared barcodes; assigning {ad.n_obs} predictions to spots by row order")
+                preds_on_ad.loc[ad_obs_names, common_genes] = preds_df.loc[:, common_genes].values
+                targets_on_ad.loc[ad_obs_names, common_genes] = targets_df.loc[:, common_genes].values
+                n_matched_barcodes = ad.n_obs
+                method = 'assign_by_order'
 
         # convert to numpy float32 arrays and assign as layers
         pred_arr = preds_on_ad.values.astype(np.float32)
@@ -588,13 +539,8 @@ def add_formatted_inference_to_adata(
 
         # compute per-adata spot counts & fraction with predictions
         n_spots = ad.n_obs
-        try:
-            spots_with_pred_mask = np.any(np.isfinite(pred_arr), axis=1)
-            n_spots_with_pred = int(np.sum(spots_with_pred_mask))
-            frac_spots_with_pred = float(n_spots_with_pred) / float(n_spots) if n_spots > 0 else 0.0
-        except Exception:
-            n_spots_with_pred = 0
-            frac_spots_with_pred = 0.0
+        n_spots_with_pred = int(np.isfinite(pred_arr).any(axis=1).sum())
+        frac_spots_with_pred = n_spots_with_pred / n_spots if n_spots > 0 else 0.0
 
         # ensure layers exist
         if not hasattr(ad, 'layers') or ad.layers is None:
@@ -744,16 +690,6 @@ def _safe_sample_name(adata, idx):
 
 
 
-# pearsonr fallback
-try:
-    from scipy.stats import pearsonr
-except Exception:
-    def pearsonr(a, b):
-        mask = np.isfinite(a) & np.isfinite(b)
-        if mask.sum() < 2:
-            return (np.nan, np.nan)
-        r = np.corrcoef(a[mask], b[mask])[0,1]
-        return (float(r), np.nan)
 
 def save_spatial_pred_target_pdfs_for_adata_list(
     adata_list,
@@ -784,6 +720,7 @@ def save_spatial_pred_target_pdfs_for_adata_list(
 
     genes_list = list(genes)
     results = {}
+    failures = []
 
     for i, ad in enumerate(adata_list):
         # sample name helper (same as earlier _safe_sample_name)
@@ -905,81 +842,11 @@ def save_spatial_pred_target_pdfs_for_adata_list(
                         else:
                             r_val = np.nan
 
-                        # plot pred
                         with warnings.catch_warnings():
                             warnings.simplefilter("ignore", category=FutureWarning)
-                            try:
-                                sc.pl.spatial(
-                                    ad,
-                                    img_key=img_key,
-                                    color=[pred_col],
-                                    ax=ax_pred,
-                                    show=False,
-                                    cmap=cmap,
-                                    size=size
-                                )
-                            except Exception:
-                                # fallback copy-fig approach
-                                sc.pl.spatial(ad, img_key=img_key, color=[pred_col], show=False,
-                                              cmap=cmap, size=size)
-                                fig_src = plt.gcf()
-                                ax_src = fig_src.axes[0]
-                                for artist in ax_src.get_children():
-                                    try:
-                                        ax_pred.add_artist(artist)
-                                    except Exception:
-                                        pass
-                                plt.close(fig_src)
-
-                        # plot target
-                        with warnings.catch_warnings():
-                            warnings.simplefilter("ignore", category=FutureWarning)
-                            try:
-                                sc.pl.spatial(
-                                    ad,
-                                    img_key=img_key,
-                                    color=[target_col],
-                                    ax=ax_target,
-                                    show=False,
-                                    cmap=cmap,
-                                    size=size,
-                                )
-                            except Exception:
-                                sc.pl.spatial(ad, img_key=img_key, color=[target_col], show=False,
-                                              cmap=cmap, size=size)
-                                fig_src = plt.gcf()
-                                ax_src = fig_src.axes[0]
-                                for artist in ax_src.get_children():
-                                    try:
-                                        ax_target.add_artist(artist)
-                                    except Exception:
-                                        pass
-                                plt.close(fig_src)
-
-                        # plot raw
-                        with warnings.catch_warnings():
-                            warnings.simplefilter("ignore", category=FutureWarning)
-                            try:
-                                sc.pl.spatial(
-                                    ad,
-                                    img_key=img_key,
-                                    color=[raw_col],
-                                    ax=ax_raw,
-                                    show=False,
-                                    cmap=cmap,
-                                    size=size,
-                                )
-                            except Exception:
-                                sc.pl.spatial(ad, img_key=img_key, color=[raw_col], show=False,
-                                              cmap=cmap, size=size)
-                                fig_src = plt.gcf()
-                                ax_src = fig_src.axes[0]
-                                for artist in ax_src.get_children():
-                                    try:
-                                        ax_raw.add_artist(artist)
-                                    except Exception:
-                                        pass
-                                plt.close(fig_src)
+                            for col, ax_panel in ((pred_col, ax_pred), (target_col, ax_target), (raw_col, ax_raw)):
+                                sc.pl.spatial(ad, img_key=img_key, color=[col], ax=ax_panel,
+                                              show=False, cmap=cmap, size=size)
 
                         # annotate pred only
                         ann = f"r={r_val:.3f}  n={n_valid}" if np.isfinite(r_val) else f"r=NaN  n={n_valid}"
@@ -1019,18 +886,15 @@ def save_spatial_pred_target_pdfs_for_adata_list(
             results[sample_name] = {"pdf_path": out_pdf, "summary": summary, "reason": None}
 
         except Exception as e:
-            # fail-safe: if anything goes wrong clean up partial file and continue
-            try:
-                if os.path.exists(out_pdf):
-                    os.remove(out_pdf)
-            except Exception:
-                pass
-            if verbose:
-                print(f"[ERROR] Failed to create PDF for {sample_name}: {e}")
+            # remove the partial PDF, then carry on with the other samples
+            Path(out_pdf).unlink(missing_ok=True)
             results[sample_name] = {"pdf_path": None, "summary": None, "reason": str(e)}
+            failures.append(f"{sample_name}: {type(e).__name__}: {e}")
 
     if verbose:
         print(f"[DONE] saved PDFs to {outdir}")
+    if failures:
+        raise RuntimeError(f"PDF creation failed for {len(failures)} sample(s):\n" + "\n".join(failures))
     return results
 
 def format_inference_with_genes(inference_dumps, gene_list):
