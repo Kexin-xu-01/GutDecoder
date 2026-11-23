@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -84,3 +85,33 @@ def test_get_format(name, fmt):
 def test_get_format_rejects_unknown_extension():
     with pytest.raises(ValueError, match="Unsupported slide format '.png'"):
         _get_format(Path("a.png"))
+
+
+def _tiled_rgb_tiff(path, mpp=0.25, planar=False):
+    img = np.random.default_rng(0).integers(0, 255, (300, 400, 3), dtype=np.uint8)
+    kwargs = dict(photometric="rgb", resolution=(1e4 / mpp, 1e4 / mpp), resolutionunit="CENTIMETER")
+    if planar:
+        tifffile.imwrite(path, np.moveaxis(img, -1, 0), planarconfig="separate", **kwargs)
+    else:
+        tifffile.imwrite(path, img, tile=(64, 64), **kwargs)
+    return path
+
+
+def test_slide_source_pyramid_reader_geometry(tmp_path):
+    pytest.importorskip("tiffslide")
+    with SlideSource(_tiled_rgb_tiff(tmp_path / "s.tif"), target_mpp=0.5) as slide:
+        assert (slide.kind, slide.level, slide.downsample) == ("wsi", 0, 1.0)
+        assert slide.native_mpp == pytest.approx(0.25) and slide.scale == pytest.approx(2.0)
+        assert (slide.width, slide.height) == (400, 300) and slide.mpp == pytest.approx(0.25)
+        assert slide.read(10, 20, 30, 40).shape == (40, 30, 3)
+
+
+@pytest.mark.parametrize("planar", [False, True])
+def test_slide_source_flat_reader_geometry(tmp_path, monkeypatch, planar):
+    monkeypatch.setitem(sys.modules, "tiffslide", None)  # forces the memmap / decode path
+
+    with SlideSource(_tiled_rgb_tiff(tmp_path / "s.tif", planar=planar), target_mpp=0.5) as slide:
+        assert slide.kind == "flat" and slide.arr.shape[-1] == 3
+        assert slide.downsample == pytest.approx(2.0)
+        assert (slide.width, slide.height) == (200, 150) and slide.mpp == pytest.approx(0.5)
+        assert slide.read(0, 0, 50, 40).shape == (40, 50, 3)
