@@ -56,6 +56,7 @@ from hest import HESTData, XeniumReader
 from hest.readers import pool_transcripts_xenium
 from gutdecoder.reader.h5ad_reader import *  # noqa: F401,F403
 from gutdecoder.reader.rules import parse_crop_rules
+from gutdecoder.config import XENIUM_DATA_ROOT, XENIUM_DIRECTORY_XLSX
 
 # Optional dependencies
 try:
@@ -65,7 +66,7 @@ except ImportError:
     logger.info("cuCIM not available — falling back to CPU ops")
 
 
-EXCEL_PATH_DEFAULT = "/project/simmons_hts/kxu/hest/xenium_directory.xlsx"
+EXCEL_PATH_DEFAULT = XENIUM_DIRECTORY_XLSX
 
 # Always keep these structural columns normalized.
 BASE_RENAME_MAP = {
@@ -275,12 +276,12 @@ def main() -> None:
     )
     parser.add_argument(
         "--output-root",
-        default="/project/simmons_hts/kxu/hest/xenium_data",
+        default=XENIUM_DATA_ROOT,
         help="Root folder for processed outputs",
     )
     parser.add_argument(
         "--processed-root",
-        default="/project/simmons_hts/kxu/hest/xenium_data",
+        default=XENIUM_DATA_ROOT,
         help="Root folder containing processed HEST inputs (aligned_adata.h5ad, aligned_fullres_HE.tif, metrics.json)",
     )
     parser.add_argument(

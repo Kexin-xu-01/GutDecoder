@@ -6,12 +6,9 @@ from pathlib import Path
 
 import yaml
 
-from gutdecoder.config import RESULTS_ROOT
+from gutdecoder.config import RESULTS_ROOT, RUNS_YAML
 
 __all__ = ["RUNS_YAML", "load_runs"]
-
-RUNS_YAML = os.environ.get("GUTDECODER_RUNS_YAML", "/project/gutdecoder/kxu/hest/metadata/runs.yaml")
-
 
 def load_runs(path: str | Path = RUNS_YAML, check_exists: bool = True) -> dict[str, str]:
     """

@@ -70,6 +70,8 @@ import pandas as pd
 import textwrap
 import re
 
+from gutdecoder.config import XENIUM_DIRECTORY_XLSX
+
 
 def make_title_page_bytes(title: str, width_pt: float, height_pt: float, font_size: int = 36) -> bytes:
     """Create a one-page PDF (bytes) with `title` centered using ReportLab."""
@@ -136,7 +138,7 @@ def generate_plot_per_run(
     cols: int = 4,
     max_show: int | None = None,
     thumb_size: tuple = (800, 800),
-    metadata_path: Path | None = Path("/project/gutdecoder/kxu/hest/metadata/xenium_directory.xlsx"),
+    metadata_path: Path | None = Path(XENIUM_DIRECTORY_XLSX),
     match: str = "spatial_plots",    # "spatial_plots", "patch_vis", or any glob pattern
     out_filename: str | None = None, # if None, will be inferred from `match`
     overwrite: bool = False,

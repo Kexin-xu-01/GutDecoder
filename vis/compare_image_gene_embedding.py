@@ -7,6 +7,11 @@ import matplotlib.pyplot as plt
 import glob
 from matplotlib.backends.backend_pdf import PdfPages
 
+from gutdecoder.config import DATA_ROOT, EMBEDDING_ROOT
+
+_DEFAULT_IMAGE_ROOT = os.path.join(EMBEDDING_ROOT, "XeniumPR1", "hoptimus1")
+_DEFAULT_GENE_ROOT = os.path.join(DATA_ROOT, "XeniumPR1", "adata")
+
 
 
 
@@ -16,8 +21,8 @@ from matplotlib.backends.backend_pdf import PdfPages
 
 def load_and_match_sample(
     sample,
-    image_root="/project/gutdecoder/kxu/hest/eval/ST_data_emb/XeniumPR1/hoptimus1",
-    gene_root="/project/gutdecoder/kxu/hest/eval/data/XeniumPR1/adata",
+    image_root=_DEFAULT_IMAGE_ROOT,
+    gene_root=_DEFAULT_GENE_ROOT,
 ):
     """
     Load image embeddings and gene expression for one sample,
@@ -803,14 +808,8 @@ def plot_matched_umaps(
 def plot_embedding(
     sample,
     output_dir="plot",
-    image_root=(
-        "/project/gutdecoder/kxu/hest/eval/"
-        "ST_data_emb/XeniumPR1/hoptimus1"
-    ),
-    gene_root=(
-        "/project/gutdecoder/kxu/hest/eval/"
-        "data/XeniumPR1/adata"
-    ),
+    image_root=_DEFAULT_IMAGE_ROOT,
+    gene_root=_DEFAULT_GENE_ROOT,
     threshold=0.30,
     n_neighbors=15,
     image_resolution=0.5,

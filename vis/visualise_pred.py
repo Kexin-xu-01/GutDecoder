@@ -1021,7 +1021,7 @@ def add_inference_to_adata_and_plot(
     RUN_ROOT,
     dataset_name=None,
     gene_lists_to_plot=None,        # dict name-> (dataset, gene_list_name) or list of gene lists
-    base_data_dir="/project/gutdecoder/kxu/hest/eval/data",
+    base_data_dir=DATA_ROOT,
     patches_subdir="patches",
     adata_subdir_template="{}" ,    # for data dir if you build differently; default expects base_dir/dataset_name/adata
     plot_folder_root='plots/pred',

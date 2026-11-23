@@ -4,6 +4,7 @@ from pathlib import Path
 import json
 import tempfile
 from gutdecoder.utils.artifacts import patch_is_complete
+from gutdecoder.config import XENIUM_DATA_ROOT
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 from PIL import Image
@@ -22,7 +23,7 @@ from gutdecoder.wrappers._common import load_hest_sample, show_images  # noqa: F
 
 
 def patch_hest_samples(
-    root: Path = Path("/project/gutdecoder/kxu/hest/xenium_data/broad/"),
+    root: Path = Path(XENIUM_DATA_ROOT) / "broad",
     ids=None,
     target_patch_size: int = 224,
     target_pixel_size: float = 0.5,

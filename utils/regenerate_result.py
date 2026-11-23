@@ -60,9 +60,7 @@ the original HEST evaluation methodology.
 # ---------------------------------------------------------------------
 
 # how to run
-# regenerate_all_results(
-#     "/project/simmons_hts/kxu/hest/eval/ST_pred_results/run_25-12-16-17-30-07"
-# )
+# regenerate_all_results(os.path.join(RESULTS_ROOT, "run_25-12-16-17-30-07"))
 
 
 import os
@@ -299,7 +297,7 @@ def regenerate_all_results(run_dir):
 
     Args:
         run_dir (str or Path): Path to a single HEST run directory, e.g.
-            /project/simmons_hts/kxu/hest/eval/ST_pred_results/run_25-12-16-17-30-07
+            <RESULTS_ROOT>/run_25-12-16-17-30-07
     """
     run_dir = Path(run_dir)
 

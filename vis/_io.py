@@ -21,6 +21,7 @@ from gutdecoder.config import (
     CURATED_XLSX as DEFAULT_CURATED_XLSX,
     HEST_METADATA_CSV as DEFAULT_EXTRA_METADATA,
     BROAD_METADATA_CSV as DEFAULT_BROAD_METADATA,
+    MODEL_META_XLSX,
 )
 
 from loguru import logger
@@ -342,7 +343,7 @@ def extract_best_model_gene_corrs(run: str,
     return best_model_info, dataset_name, df_genes
 
 
-def annotate_genes_with_curated(df_genes: pd.DataFrame, path_meta = "/project/gutdecoder/kxu/hest/metadata/curated_gene_list.xlsx", case_insensitive: bool = True) -> pd.DataFrame:
+def annotate_genes_with_curated(df_genes: pd.DataFrame, path_meta = DEFAULT_CURATED_XLSX, case_insensitive: bool = True) -> pd.DataFrame:
     """
     Minimal annotation:
       - panel: '480' if gene in '480 panel full list', else <NA>
@@ -584,9 +585,7 @@ def sample_corr_stats_for_run(run: str, samples, runs_root: str = DEFAULT_RUNS_R
 
 # ----------------------------------------------------------------------------- presentation loaders
 
-DEFAULT_MODEL_META_XLSX = (
-    "/project/gutdecoder/kxu/hest/metadata/foundation_model/pathology_foundation_models_plotting.xlsx"
-)
+DEFAULT_MODEL_META_XLSX = MODEL_META_XLSX
 
 
 def load_pred_adata(run: str, sample: str, runs_root: str = DEFAULT_RUNS_ROOT):
