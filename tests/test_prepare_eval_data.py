@@ -52,3 +52,48 @@ def test_plan_reports_sources_that_vanished(tmp_path):
 
     assert missing == [("A", "patch")]
     assert (tmp_path / "out" / "adata" / "A.h5ad").exists()
+
+
+def test_assign_conditions_by_run_number_then_name():
+    from gutdecoder.utils.prepare_eval_data import _DEFAULT_CONDITION_MAP, _assign_conditions
+
+    ids = ["XeniumPR2S1ROI1", "XeniumPR10S1ROI2", "NEC_extra", "other"]
+
+    assert _assign_conditions(ids, _DEFAULT_CONDITION_MAP) == ["IBD", "NEC", "NEC", None]
+
+
+def test_condition_splits_hold_out_one_condition_each(tmp_path):
+    import pandas as pd
+    from gutdecoder.utils.prepare_eval_data import _write_condition_splits
+
+    meta = pd.DataFrame({"id": ["a", "b", "c", "d"], "condition": ["IBD", "IBD", "NEC", None]})
+
+    _write_condition_splits(meta, tmp_path, drop_unassigned_from_splits=True)
+
+    assert pd.read_csv(tmp_path / "test_0.csv")["sample_id"].tolist() == ["a", "b"]
+    assert pd.read_csv(tmp_path / "train_0.csv")["sample_id"].tolist() == ["c"]
+    assert pd.read_csv(tmp_path / "train_1.csv")["patches_path"].tolist() == ["patches/a.h5", "patches/b.h5"]
+    assert pd.read_csv(tmp_path / "condition_to_split.csv")["condition"].tolist() == ["IBD", "NEC"]
+
+
+def test_ex_val_alias_uses_default_condition_groups(monkeypatch):
+    from gutdecoder.utils import prepare_eval_data as ped
+
+    calls = {}
+    monkeypatch.setattr(ped, "create_benchmark_data_multirun", lambda *a, **kw: calls.update(kw))
+
+    ped.create_benchmark_data_multirun_ex_val("out", 5, ["eval"])
+
+    assert calls["condition_map"] == ped._DEFAULT_CONDITION_MAP
+
+
+def test_patient_kfold_loocv_makes_one_fold_per_patient(tmp_path):
+    import pandas as pd
+    from gutdecoder.utils.prepare_eval_data import _write_patient_kfold_splits
+
+    meta = pd.DataFrame({"id": ["a", "b", "c", "d"], "patient": ["P1", "P1", "P2", "P3"],
+                         "dataset_title": "XeniumPR"})
+
+    _write_patient_kfold_splits(meta, "loocv", seed=0, splits_dir=tmp_path)
+
+    assert sorted(p.name for p in tmp_path.glob("test_*.csv")) == ["test_0.csv", "test_1.csv", "test_2.csv"]

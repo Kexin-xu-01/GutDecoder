@@ -554,75 +554,60 @@ def create_benchmark_data_multislide(
 
 
 # copy directly from other eval folder
-def create_benchmark_data_multirun(
-    save_dir: str | Path,
-    K: int | str,
-    eval_dirs: List[str | Path],
-    gene_k: Union[int, str] = 50,
-    gene_criteria: str = "var",
-    min_cells_pct: float = 0.10,
-    symlink: bool = False,
-    seed: int = 0,
-    metadata_csv: Optional[str] = _DEFAULT_METADATA_CSV,
-    exclude_ids: Optional[List[str]] = None
-):
-    """
-    Build a merged benchmark package by copying (or symlinking) assets from one or more
-    'eval' dataset folders that already contain patches/, patches/vis/, and adata/ subdirs.
+_DEFAULT_CONDITION_MAP = {"IBD": [1, 2, 3], "Coeliac": [4, 5], "NEC": [6, 7, 8, 9, 10]}
 
-    Returns:
-        pd.DataFrame meta (columns: id, patient, dataset_title)
-    """
-    save_dir = Path(save_dir)
-    existing = [Path(x) for x in eval_dirs if Path(x).exists() and Path(x).is_dir()]
-    if not existing:
-        raise ValueError(f"No valid eval_dirs found among: {eval_dirs}")
-    logger.info(f"Using eval dirs: {existing}")
 
-    discovered_ids, sample_sources = _discover_samples_from_eval_dirs(existing, exclude_ids)
-    patient_map, meta_df_csv = _load_patient_map(metadata_csv)
-    missing = _plan_and_transfer_assets(discovered_ids, sample_sources, save_dir, symlink)
-    patient_ids, unresolved = _resolve_patient_ids(discovered_ids, patient_map, meta_df_csv)
+def _assign_conditions(sample_ids: List[str], condition_map: Dict[str, List[int]]) -> List[Optional[str]]:
+    """Condition per sample from its XeniumPR<n> run number, else from a condition name in the id."""
+    pr_to_condition = {int(pr): cond for cond, prs in condition_map.items() for pr in prs}
+    conditions = []
+    for sid in sample_ids:
+        m = re.search(r"XeniumPR(\d+)", sid, re.IGNORECASE)
+        cond = pr_to_condition.get(int(m.group(1))) if m else None
+        if cond is None:
+            cond = next((c for c in condition_map if c.lower() in sid.lower()), None)
+        conditions.append(cond)
+    return conditions
 
-    meta = pd.DataFrame({
-        "id": discovered_ids,
-        "patient": patient_ids,
-        "dataset_title": ["XeniumPR"] * len(discovered_ids),
-    })
-    logger.info(f"Built metadata: {len(meta)} samples, {meta['patient'].nunique()} unique patients.")
-    if unresolved:
-        logger.warning(f"{len(unresolved)} samples used fallback patient ids: {unresolved[:20]}")
-    logger.debug(meta.to_string(index=False))
 
-    adata_paths = [save_dir / "adata" / f"{sid}.h5ad" for sid in discovered_ids]
-    var_json = save_dir / f"var_{gene_k}genes.json"
-    write_var_k_genes_from_paths(adata_paths, gene_k, gene_criteria, min_cells_pct, var_json)
-    logger.info(f"Wrote {var_json}")
-
+def _write_patient_kfold_splits(meta: pd.DataFrame, K: int | str, seed: int, splits_dir: Path) -> None:
     group = meta.groupby(["dataset_title", "patient"])["id"].agg(list).to_dict()
     rng = np.random.RandomState(seed)
     for id_list in group.values():
         rng.shuffle(id_list)
-
     if isinstance(K, str) and K.lower() == "loocv":
-        K = meta.groupby(["dataset_title", "patient"]).ngroups
+        K = len(group)
         logger.info(f"Using leave-one-patient-per-dataset CV: K = {K}")
-
-    splits_dir = save_dir / "splits"
-    splits_dir.mkdir(parents=True, exist_ok=True)
     create_splits(str(splits_dir), group, K=K)
     logger.info(f"Wrote {K}-fold patient-level splits to {splits_dir}")
 
-    if missing:
-        logger.warning("Some samples were missing adata/patch files:")
-        for sid, typ in missing[:50]:
-            logger.warning(f"  {sid}: missing {typ}")
 
-    logger.info(f"✅ Merged benchmark created at {save_dir}")
-    return meta
+def _write_condition_splits(meta: pd.DataFrame, splits_dir: Path, drop_unassigned_from_splits: bool) -> None:
+    """One split per condition: that condition is the test set, the other conditions are the train set."""
+    def _split_df(samples: List[str]) -> pd.DataFrame:
+        df = pd.DataFrame({"sample_id": sorted(samples)})
+        df["patches_path"] = "patches/" + df["sample_id"] + ".h5"
+        df["expr_path"] = "adata/" + df["sample_id"] + ".h5ad"
+        return df
+
+    conditions = meta["condition"].dropna().unique().tolist()
+    unassigned = meta.loc[meta["condition"].isna(), "id"].tolist()
+    logger.info(f"Creating {len(conditions)} external-validation splits for conditions: {conditions}")
+    for i, cond in enumerate(conditions):
+        test = meta.loc[meta["condition"] == cond, "id"].tolist()
+        train = meta.loc[meta["condition"].notna() & (meta["condition"] != cond), "id"].tolist()
+        if not drop_unassigned_from_splits:
+            train += unassigned
+        _split_df(train).to_csv(splits_dir / f"train_{i}.csv", index=False)
+        _split_df(test).to_csv(splits_dir / f"test_{i}.csv", index=False)
+        logger.info(f"Wrote train_{i}.csv ({len(train)} rows) / test_{i}.csv ({len(test)} rows) [held-out: {cond}]")
+
+    cond_map_path = splits_dir / "condition_to_split.csv"
+    pd.DataFrame({"split_index": range(len(conditions)), "condition": conditions}).to_csv(cond_map_path, index=False)
+    logger.info(f"Wrote condition mapping to {cond_map_path}")
 
 
-def create_benchmark_data_multirun_ex_val(
+def create_benchmark_data_multirun(
     save_dir: str | Path,
     K: int | str,
     eval_dirs: List[str | Path],
@@ -634,18 +619,17 @@ def create_benchmark_data_multirun_ex_val(
     metadata_csv: Optional[str] = _DEFAULT_METADATA_CSV,
     exclude_ids: Optional[List[str]] = None,
     condition_map: Optional[Dict[str, List[int]]] = None,
-    drop_unassigned_from_splits: bool = True
+    drop_unassigned_from_splits: bool = True,
 ):
     """
-    Build a merged benchmark package from one or more 'eval' dataset folders.
+    Build a merged benchmark package by copying (or symlinking) assets from one or more
+    'eval' dataset folders that already contain patches/, patches/vis/, and adata/ subdirs.
 
-    If `condition_map` is provided, creates external-validation splits: for each condition,
-    that condition is the test set and all other conditions are the train set.
-    If not provided, defaults to PR1-3 → IBD, PR4-5 → Coeliac, PR6-10 → NEC.
-    If no conditions are detected, falls back to patient-level K-fold splitting.
+    Splits are patient-level K-fold (K may be 'loocv'), or, when `condition_map` is given
+    (condition -> XeniumPR run numbers), external validation with one held-out condition per split.
 
     Returns:
-        pd.DataFrame meta (columns: id, patient, dataset_title, condition)
+        pd.DataFrame meta (columns: id, patient, dataset_title[, condition])
     """
     save_dir = Path(save_dir)
     existing = [Path(x) for x in eval_dirs if Path(x).exists() and Path(x).is_dir()]
@@ -658,38 +642,21 @@ def create_benchmark_data_multirun_ex_val(
     missing = _plan_and_transfer_assets(discovered_ids, sample_sources, save_dir, symlink)
     patient_ids, unresolved = _resolve_patient_ids(discovered_ids, patient_map, meta_df_csv)
 
-    if condition_map is None:
-        condition_map = {"IBD": [1, 2, 3], "Coeliac": [4, 5], "NEC": [6, 7, 8, 9, 10]}
-        logger.info("No condition_map provided; using default PR groups: PR1-3, PR4-5, PR6-10")
-
-    def _infer_pr(sid: str) -> Optional[int]:
-        m = re.search(r"XeniumPR(\d+)", sid, re.IGNORECASE)
-        return int(m.group(1)) if m else None
-
-    pr_to_condition = {int(pr): cond for cond, prs in condition_map.items() for pr in prs}
-
-    conditions_assigned = []
-    unassigned_samples = []
-    for sid in discovered_ids:
-        pr = _infer_pr(sid)
-        cond = pr_to_condition.get(pr) if pr is not None else None
-        if cond is None:
-            cond = next((c for c in condition_map if c.lower() in sid.lower()), None)
-        conditions_assigned.append(cond)
-        if cond is None:
-            unassigned_samples.append(sid)
-
     meta = pd.DataFrame({
         "id": discovered_ids,
         "patient": patient_ids,
         "dataset_title": ["XeniumPR"] * len(discovered_ids),
-        "condition": conditions_assigned,
     })
+    if condition_map is not None:
+        meta["condition"] = _assign_conditions(discovered_ids, condition_map)
+        unassigned = meta.loc[meta["condition"].isna(), "id"].tolist()
+        if len(unassigned) == len(meta):
+            raise ValueError(f"No sample matches any condition in {condition_map}")
+        if unassigned:
+            logger.warning(f"{len(unassigned)} samples could not be assigned to any condition: {unassigned[:20]}")
     logger.info(f"Built metadata: {len(meta)} samples, {meta['patient'].nunique()} unique patients.")
     if unresolved:
         logger.warning(f"{len(unresolved)} samples used fallback patient ids: {unresolved[:20]}")
-    if unassigned_samples:
-        logger.warning(f"{len(unassigned_samples)} samples could not be assigned to any condition: {unassigned_samples[:20]}")
     logger.debug(meta.to_string(index=False))
 
     adata_paths = [save_dir / "adata" / f"{sid}.h5ad" for sid in discovered_ids]
@@ -699,44 +666,21 @@ def create_benchmark_data_multirun_ex_val(
 
     splits_dir = save_dir / "splits"
     splits_dir.mkdir(parents=True, exist_ok=True)
-
-    unique_conditions = [c for c in pd.Series(meta["condition"]).dropna().unique()]
-    if not unique_conditions:
-        logger.info("No conditions detected; falling back to patient-level K-fold splitting.")
-        group = meta.groupby(["dataset_title", "patient"])["id"].agg(list).to_dict()
-        rng = np.random.RandomState(seed)
-        for id_list in group.values():
-            rng.shuffle(id_list)
-        create_splits(str(splits_dir), group, K=K)
-        logger.info(f"Wrote {K}-fold patient-level splits to {splits_dir}")
+    if condition_map is None:
+        _write_patient_kfold_splits(meta, K, seed, splits_dir)
     else:
-        logger.info(f"Creating {len(unique_conditions)} external-validation splits for conditions: {unique_conditions}")
-
-        def _make_split_df(samples: List[str]) -> pd.DataFrame:
-            df = pd.DataFrame({"sample_id": samples})
-            df["patches_path"] = df["sample_id"].apply(lambda x: f"patches/{x}.h5")
-            df["expr_path"] = df["sample_id"].apply(lambda x: f"adata/{x}.h5ad")
-            return df
-
-        for i, cond in enumerate(unique_conditions):
-            test_samples = meta.loc[meta["condition"] == cond, "id"].tolist()
-            train_samples = meta.loc[(meta["condition"].notna()) & (meta["condition"] != cond), "id"].tolist()
-            if not drop_unassigned_from_splits:
-                train_samples += unassigned_samples
-
-            _make_split_df(sorted(train_samples)).to_csv(splits_dir / f"train_{i}.csv", index=False, sep=",")
-            _make_split_df(sorted(test_samples)).to_csv(splits_dir / f"test_{i}.csv", index=False, sep=",")
-            logger.info(f"Wrote train_{i}.csv ({len(train_samples)} rows) / test_{i}.csv ({len(test_samples)} rows) [held-out: {cond}]")
-
-        cond_map_path = splits_dir / "condition_to_split.csv"
-        pd.DataFrame({"split_index": range(len(unique_conditions)), "condition": unique_conditions}).to_csv(cond_map_path, index=False)
-        logger.info(f"Wrote condition mapping to {cond_map_path}")
+        _write_condition_splits(meta, splits_dir, drop_unassigned_from_splits)
 
     if missing:
         logger.warning("Some samples were missing adata/patch files:")
         for sid, typ in missing[:50]:
             logger.warning(f"  {sid}: missing {typ}")
 
-    logger.info(f"✅ Merged benchmark created at {save_dir}")
+    logger.info(f"Merged benchmark created at {save_dir}")
     return meta
+
+
+def create_benchmark_data_multirun_ex_val(*args, condition_map: Optional[Dict[str, List[int]]] = None, **kwargs):
+    """External-validation splits by condition; defaults to PR1-3 IBD, PR4-5 Coeliac, PR6-10 NEC."""
+    return create_benchmark_data_multirun(*args, condition_map=condition_map or _DEFAULT_CONDITION_MAP, **kwargs)
 
