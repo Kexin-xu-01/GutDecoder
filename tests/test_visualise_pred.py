@@ -60,3 +60,40 @@ def test_predictions_are_placed_by_barcode():
 def test_unmatchable_predictions_raise_instead_of_pairing_by_position():
     with pytest.raises(ValueError, match="by position"):
         add_formatted_inference_to_adata([_sample_adata(3)], _inference(["x", "y"]), verbose=False)
+
+
+def test_sample_found_by_normalised_name():
+    adata = _sample_adata()
+    adata.obs["sample_id"] = "S_1"
+
+    summary = add_formatted_inference_to_adata([adata], {"s-1": _inference(["bc0"])["S1"]}, verbose=False)
+
+    assert summary["s-1"]["adata_index"] == 0
+
+
+def test_unknown_sample_matched_by_shared_barcodes():
+    other = _sample_adata()
+    other.obs_names = ["x0", "x1", "x2"]
+
+    summary = add_formatted_inference_to_adata([_sample_adata(), other], {"unknown": _inference(["x2", "x0"])["S1"]},
+                                               verbose=False)
+
+    assert summary["unknown"]["adata_index"] == 1
+
+
+def test_barcode_column_used_when_obs_names_differ():
+    adata = _sample_adata()
+    adata.obs["barcode"] = ["c0", "c1", "c2"]
+
+    summary = add_formatted_inference_to_adata([adata], _inference(["c2", "c0"]), verbose=False)
+
+    assert summary["S1"]["method"] == "match_by_obs['barcode']"
+    np.testing.assert_array_equal(adata.layers["pred"][:, 0], [1.0, np.nan, 0.0])
+
+
+def test_duplicate_barcodes_are_averaged():
+    adata = _sample_adata()
+
+    add_formatted_inference_to_adata([adata], _inference(["bc1", "bc1", "bc1"]), verbose=False)
+
+    assert adata.layers["pred"][1, 0] == 1.0  # mean of 0, 1, 2

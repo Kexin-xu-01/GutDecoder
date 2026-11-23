@@ -321,6 +321,194 @@ def _count_patches_in_tile_h5(tile_h5_path: str, barcode_ds: str = 'barcode') ->
         return int(len(f[barcode_ds]))
 
 
+def _norm_sample_name(s):
+    if s is None:
+        return None
+    return re.sub(r'[-_.\s]', '', str(s)).lower()
+
+
+def _infer_sample_name_from_adata(adata):
+    if 'sample_id' in adata.obs.columns:
+        return str(adata.obs['sample_id'].astype(str).iat[0])
+    if 'sample_id' in getattr(adata, 'uns', {}):
+        return str(adata.uns['sample_id'])
+    spatial = getattr(adata, 'uns', {}).get('spatial', {})
+    if isinstance(spatial, dict):
+        if 'name' in spatial:
+            return str(spatial['name'])
+        if 'images' in spatial and isinstance(spatial['images'], dict):
+            keys = list(spatial['images'].keys())
+            if len(keys) == 1:
+                return str(keys[0])
+    return None
+
+
+def _sanitize_anndata_for_h5ad_inplace(adata, verbose_local=False):
+    """
+    Convert pandas string extension dtypes and categorical categories in adata.obs and
+    adata.var to plain Python strings (object dtype) so the AnnData writes to .h5ad.
+    Mutates adata in-place.
+    """
+    for df in (adata.obs, adata.var):
+        for col in list(df.columns):
+            ser = df[col]
+            if isinstance(ser.dtype, pd.CategoricalDtype):
+                try:
+                    df[col] = pd.Categorical(ser.astype(str), categories=[str(x) for x in ser.cat.categories],
+                                             ordered=ser.cat.ordered)
+                except ValueError:
+                    # mixed-type categories such as 1 and "1" collide as strings
+                    df[col] = ser.astype(str).astype(object)
+            elif pd.api.types.is_string_dtype(ser.dtype):
+                df[col] = ser.astype(object)
+        if pd.api.types.is_string_dtype(df.index.dtype):
+            df.index = df.index.astype(object)
+    return adata
+
+
+def _build_sample_lookup(adata_list):
+    """Sample name (as given and normalised) -> index in adata_list."""
+    sample_to_adata_idx = {}
+    for i, ad in enumerate(adata_list):
+        inferred = _infer_sample_name_from_adata(ad)
+        if inferred is not None:
+            sample_to_adata_idx[inferred] = i
+            sample_to_adata_idx[_norm_sample_name(inferred)] = i
+        # also add sample_id (literal) if present
+        if 'sample_id' in ad.obs.columns:
+            s = str(ad.obs['sample_id'].iat[0])
+            sample_to_adata_idx[s] = i
+            sample_to_adata_idx[_norm_sample_name(s)] = i
+    return sample_to_adata_idx
+
+
+def _with_str_labels(df):
+    """Copy of df with string index and columns."""
+    df = df.copy()
+    df.index = df.index.astype(str)
+    df.columns = df.columns.astype(str)
+    return df
+
+
+def _find_adata_index(sample_key, preds_index, sample_to_adata_idx, adata_list, verbose):
+    """Index of the AnnData for sample_key: by name, normalised name, then most shared barcodes; else None."""
+    if sample_key in sample_to_adata_idx:
+        return sample_to_adata_idx[sample_key]
+    nk = _norm_sample_name(sample_key)
+    if nk in sample_to_adata_idx:
+        return sample_to_adata_idx[nk]
+    for k, idx in sample_to_adata_idx.items():
+        if _norm_sample_name(k) == nk:
+            return idx
+
+    # fuzzy match by barcode intersection
+    best_idx = None
+    best_inter = 0
+    preds_index_set = set(preds_index)
+    for i, ad in enumerate(adata_list):
+        inter = len(preds_index_set.intersection(set(map(str, ad.obs_names))))
+        if inter > best_inter:
+            best_inter = inter
+            best_idx = i
+    if best_idx is not None and best_inter > 0:
+        if verbose:
+            logger.info(f"fuzzy matched sample_key '{sample_key}' -> adata index {best_idx} by barcode intersection ({best_inter} matches)")
+        return best_idx
+    if verbose:
+        logger.warning(f"Could not find matching AnnData for sample_key '{sample_key}'. Skipping.")
+    return None
+
+
+def _place_predictions(ad, ad_idx, sample_key, preds_df, targets_df, common_genes, fill_missing_with, verbose):
+    """
+    preds/targets laid out on ad's spots x genes (fill_missing_with where absent).
+    Returns (preds_on_ad, targets_on_ad, n_matched_barcodes, method).
+    """
+    ad_obs_names = list(map(str, ad.obs_names))
+    ad_var_names = list(map(str, ad.var_names))
+
+    # determine matched barcodes
+    matched_barcodes = sorted(list(set(preds_df.index).intersection(ad_obs_names)))
+    n_matched_barcodes = len(matched_barcodes)
+
+    # build DataFrames aligned to adata obs/var (filled with fill_missing_with)
+    preds_on_ad = pd.DataFrame(fill_missing_with, index=ad_obs_names, columns=ad_var_names, dtype=float)
+    targets_on_ad = pd.DataFrame(fill_missing_with, index=ad_obs_names, columns=ad_var_names, dtype=float)
+
+    logger.debug(f"sample: {sample_key}")
+    logger.info(f"preds_df rows: {len(preds_df)}")
+    logger.info(f"unique preds_df barcodes: {preds_df.index.nunique()}")
+    logger.info(f"adata obs: {len(ad_obs_names)}")
+    logger.info(f"matched barcodes: {len(matched_barcodes)}")
+
+    # collapse duplicates
+    if preds_df.index.has_duplicates:
+        if verbose:
+            logger.info(f"collapsing duplicate barcodes for {sample_key}")
+            logger.info(f"  before: {len(preds_df)} rows, {preds_df.index.nunique()} unique")
+
+        preds_df = preds_df.groupby(preds_df.index).mean()
+        targets_df = targets_df.groupby(targets_df.index).mean()
+
+        if verbose:
+            logger.info(f"  after: {len(preds_df)} rows")
+
+    # recompute matched barcodes AFTER dedup
+    matched_barcodes = sorted(list(set(preds_df.index).intersection(ad_obs_names)))
+
+    # place matched rows / genes
+    if n_matched_barcodes > 0:
+        preds_on_ad.loc[matched_barcodes, common_genes] = preds_df.loc[matched_barcodes, common_genes].values
+        targets_on_ad.loc[matched_barcodes, common_genes] = targets_df.loc[matched_barcodes, common_genes].values
+        method = 'match_by_obs_names'
+    else:
+        # try barcode-like column mapping
+        barcode_col = None
+        for c in ['barcode', 'barcodes', 'cell_barcode', 'cell_id', 'patch_barcode']:
+            if c in ad.obs.columns:
+                barcode_col = c
+                break
+        if barcode_col is not None:
+            mapping = {str(v): obs for v, obs in zip(ad.obs[barcode_col].astype(str).values, ad_obs_names)}
+            matched_by_col = [b for b in preds_df.index if b in mapping]
+            for b in matched_by_col:
+                obsname = mapping[b]
+                preds_on_ad.loc[obsname, common_genes] = preds_df.loc[b, common_genes].values
+                targets_on_ad.loc[obsname, common_genes] = targets_df.loc[b, common_genes].values
+            n_matched_barcodes = len(matched_by_col)
+            method = f"match_by_obs['{barcode_col}']"
+        else:
+            if preds_df.shape[0] != ad.n_obs:
+                raise ValueError(
+                    f"Cannot match predictions for '{sample_key}' to adata[{ad_idx}]: no shared barcodes, "
+                    f"no barcode column in obs, and {preds_df.shape[0]} predictions vs {ad.n_obs} spots. "
+                    "Pairing them by position would attach predictions to the wrong spots."
+                )
+            logger.warning(f"'{sample_key}': no shared barcodes; assigning {ad.n_obs} predictions to spots by row order")
+            preds_on_ad.loc[ad_obs_names, common_genes] = preds_df.loc[:, common_genes].values
+            targets_on_ad.loc[ad_obs_names, common_genes] = targets_df.loc[:, common_genes].values
+            n_matched_barcodes = ad.n_obs
+            method = 'assign_by_order'
+
+    return preds_on_ad, targets_on_ad, n_matched_barcodes, method
+
+
+def _write_layers(ad, ad_idx, pred_arr, target_arr, pred_layer_name, target_layer_name, overwrite_layers, verbose):
+    # ensure layers exist
+    if not hasattr(ad, 'layers') or ad.layers is None:
+        ad.layers = {}
+    if overwrite_layers or pred_layer_name not in ad.layers:
+        ad.layers[pred_layer_name] = pred_arr
+    else:
+        if verbose:
+            logger.info(f"skipping overwrite of existing layer {pred_layer_name} in adata[{ad_idx}]")
+    if overwrite_layers or target_layer_name not in ad.layers:
+        ad.layers[target_layer_name] = target_arr
+    else:
+        if verbose:
+            logger.info(f"skipping overwrite of existing layer {target_layer_name} in adata[{ad_idx}]")
+
+
 def add_formatted_inference_to_adata(
     adata_list,
     formatted_inference,
@@ -332,72 +520,12 @@ def add_formatted_inference_to_adata(
 ):
     """
     Write barcode-indexed formatted_inference DataFrames into adata.layers matched by barcode.
-
-    This version **sanitises each matched AnnData in-place first** so the resulting adata_list
-    is safe to write to .h5ad (no pandas StringDtype / StringArray / weird categorical categories).
     Returns summary dict per sample.
     """
-
-    def _norm_name(s):
-        if s is None:
-            return None
-        return re.sub(r'[-_.\s]', '', str(s)).lower()
-
-    def infer_sample_name_from_adata(adata):
-        if 'sample_id' in adata.obs.columns:
-            return str(adata.obs['sample_id'].astype(str).iat[0])
-        if 'sample_id' in getattr(adata, 'uns', {}):
-            return str(adata.uns['sample_id'])
-        spatial = getattr(adata, 'uns', {}).get('spatial', {})
-        if isinstance(spatial, dict):
-            if 'name' in spatial:
-                return str(spatial['name'])
-            if 'images' in spatial and isinstance(spatial['images'], dict):
-                keys = list(spatial['images'].keys())
-                if len(keys) == 1:
-                    return str(keys[0])
-        return None
-
-    # sanitiser (in-place)
-    def _sanitize_anndata_for_h5ad_inplace(adata, verbose_local=False):
-        """
-        Convert pandas string extension dtypes and categorical categories in adata.obs and
-        adata.var to plain Python strings (object dtype) so the AnnData writes to .h5ad.
-        Mutates adata in-place.
-        """
-        for df in (adata.obs, adata.var):
-            for col in list(df.columns):
-                ser = df[col]
-                if isinstance(ser.dtype, pd.CategoricalDtype):
-                    try:
-                        df[col] = pd.Categorical(ser.astype(str), categories=[str(x) for x in ser.cat.categories],
-                                                 ordered=ser.cat.ordered)
-                    except ValueError:
-                        # mixed-type categories such as 1 and "1" collide as strings
-                        df[col] = ser.astype(str).astype(object)
-                elif pd.api.types.is_string_dtype(ser.dtype):
-                    df[col] = ser.astype(object)
-            if pd.api.types.is_string_dtype(df.index.dtype):
-                df.index = df.index.astype(object)
-        return adata
-
-    # build sample lookup
-    sample_to_adata_idx = {}
-    for i, ad in enumerate(adata_list):
-        inferred = infer_sample_name_from_adata(ad)
-        if inferred is not None:
-            sample_to_adata_idx[inferred] = i
-            sample_to_adata_idx[_norm_name(inferred)] = i
-        # also add sample_id (literal) if present
-        if 'sample_id' in ad.obs.columns:
-            s = str(ad.obs['sample_id'].iat[0])
-            sample_to_adata_idx[s] = i
-            sample_to_adata_idx[_norm_name(s)] = i
-
+    sample_to_adata_idx = _build_sample_lookup(adata_list)
     summary = {}
     used_adata_indices = set()
 
-    # main loop
     for sample_key, entry in formatted_inference.items():
         preds_df = entry.get('preds')
         targets_df = entry.get('targets')
@@ -407,60 +535,19 @@ def add_formatted_inference_to_adata(
             summary[sample_key] = {'matched': False, 'reason': 'missing preds/targets'}
             continue
 
-        # normalize preds/targets frames
-        preds_df = preds_df.copy()
-        targets_df = targets_df.copy()
-        preds_df.index = preds_df.index.astype(str)
-        targets_df.index = targets_df.index.astype(str)
-        preds_df.columns = preds_df.columns.astype(str)
-        targets_df.columns = targets_df.columns.astype(str)
+        preds_df = _with_str_labels(preds_df)
+        targets_df = _with_str_labels(targets_df)
 
-        # try to find matching adata index
-        ad_idx = None
-        if sample_key in sample_to_adata_idx:
-            ad_idx = sample_to_adata_idx[sample_key]
-        else:
-            nk = _norm_name(sample_key)
-            if nk in sample_to_adata_idx:
-                ad_idx = sample_to_adata_idx[nk]
-            else:
-                for k, idx in sample_to_adata_idx.items():
-                    if _norm_name(k) == nk:
-                        ad_idx = idx
-                        break
-
+        ad_idx = _find_adata_index(sample_key, preds_df.index, sample_to_adata_idx, adata_list, verbose)
         if ad_idx is None:
-            # fuzzy match by barcode intersection
-            best_idx = None
-            best_inter = 0
-            preds_index_set = set(preds_df.index)
-            for i, ad in enumerate(adata_list):
-                inter = len(preds_index_set.intersection(set(map(str, ad.obs_names))))
-                if inter > best_inter:
-                    best_inter = inter
-                    best_idx = i
-            if best_idx is not None and best_inter > 0:
-                ad_idx = best_idx
-                if verbose:
-                    logger.info(f"fuzzy matched sample_key '{sample_key}' -> adata index {ad_idx} by barcode intersection ({best_inter} matches)")
-            else:
-                if verbose:
-                    logger.warning(f"Could not find matching AnnData for sample_key '{sample_key}'. Skipping.")
-                summary[sample_key] = {'matched': False, 'reason': 'no matching adata found'}
-                continue
+            summary[sample_key] = {'matched': False, 'reason': 'no matching adata found'}
+            continue
 
         ad = adata_list[ad_idx]
         used_adata_indices.add(ad_idx)
 
-        ad_obs_names = list(map(str, ad.obs_names))
-        ad_var_names = list(map(str, ad.var_names))
-
-        # determine matched barcodes
-        matched_barcodes = sorted(list(set(preds_df.index).intersection(ad_obs_names)))
-        n_matched_barcodes = len(matched_barcodes)
         n_total_barcodes = preds_df.shape[0]
-
-        # genes in common
+        ad_var_names = list(map(str, ad.var_names))
         common_genes = [g for g in preds_df.columns if g in ad_var_names]
         n_common_genes = len(common_genes)
         if n_common_genes == 0:
@@ -469,64 +556,9 @@ def add_formatted_inference_to_adata(
             summary[sample_key] = {'matched': False, 'reason': 'no common genes'}
             continue
 
-        # build DataFrames aligned to adata obs/var (filled with fill_missing_with)
-        preds_on_ad = pd.DataFrame(fill_missing_with, index=ad_obs_names, columns=ad_var_names, dtype=float)
-        targets_on_ad = pd.DataFrame(fill_missing_with, index=ad_obs_names, columns=ad_var_names, dtype=float)
-
-        logger.debug(f"sample: {sample_key}")
-        logger.info(f"preds_df rows: {len(preds_df)}")
-        logger.info(f"unique preds_df barcodes: {preds_df.index.nunique()}")
-        logger.info(f"adata obs: {len(ad_obs_names)}")
-        logger.info(f"matched barcodes: {len(matched_barcodes)}")
-
-        # collapse duplicates
-        if preds_df.index.has_duplicates:
-            if verbose:
-                logger.info(f"collapsing duplicate barcodes for {sample_key}")
-                logger.info(f"  before: {len(preds_df)} rows, {preds_df.index.nunique()} unique")
-
-            preds_df = preds_df.groupby(preds_df.index).mean()
-            targets_df = targets_df.groupby(targets_df.index).mean()
-
-            if verbose:
-                logger.info(f"  after: {len(preds_df)} rows")
-
-        # recompute matched barcodes AFTER dedup
-        matched_barcodes = sorted(list(set(preds_df.index).intersection(ad_obs_names)))
-
-        # place matched rows / genes
-        if n_matched_barcodes > 0:
-            preds_on_ad.loc[matched_barcodes, common_genes] = preds_df.loc[matched_barcodes, common_genes].values
-            targets_on_ad.loc[matched_barcodes, common_genes] = targets_df.loc[matched_barcodes, common_genes].values
-            method = 'match_by_obs_names'
-        else:
-            # try barcode-like column mapping
-            barcode_col = None
-            for c in ['barcode', 'barcodes', 'cell_barcode', 'cell_id', 'patch_barcode']:
-                if c in ad.obs.columns:
-                    barcode_col = c
-                    break
-            if barcode_col is not None:
-                mapping = {str(v): obs for v, obs in zip(ad.obs[barcode_col].astype(str).values, ad_obs_names)}
-                matched_by_col = [b for b in preds_df.index if b in mapping]
-                for b in matched_by_col:
-                    obsname = mapping[b]
-                    preds_on_ad.loc[obsname, common_genes] = preds_df.loc[b, common_genes].values
-                    targets_on_ad.loc[obsname, common_genes] = targets_df.loc[b, common_genes].values
-                n_matched_barcodes = len(matched_by_col)
-                method = f"match_by_obs['{barcode_col}']"
-            else:
-                if preds_df.shape[0] != ad.n_obs:
-                    raise ValueError(
-                        f"Cannot match predictions for '{sample_key}' to adata[{ad_idx}]: no shared barcodes, "
-                        f"no barcode column in obs, and {preds_df.shape[0]} predictions vs {ad.n_obs} spots. "
-                        "Pairing them by position would attach predictions to the wrong spots."
-                    )
-                logger.warning(f"'{sample_key}': no shared barcodes; assigning {ad.n_obs} predictions to spots by row order")
-                preds_on_ad.loc[ad_obs_names, common_genes] = preds_df.loc[:, common_genes].values
-                targets_on_ad.loc[ad_obs_names, common_genes] = targets_df.loc[:, common_genes].values
-                n_matched_barcodes = ad.n_obs
-                method = 'assign_by_order'
+        preds_on_ad, targets_on_ad, n_matched_barcodes, method = _place_predictions(
+            ad, ad_idx, sample_key, preds_df, targets_df, common_genes, fill_missing_with, verbose
+        )
 
         # convert to numpy float32 arrays and assign as layers
         pred_arr = preds_on_ad.values.astype(np.float32)
@@ -537,21 +569,8 @@ def add_formatted_inference_to_adata(
         n_spots_with_pred = int(np.isfinite(pred_arr).any(axis=1).sum())
         frac_spots_with_pred = n_spots_with_pred / n_spots if n_spots > 0 else 0.0
 
-        # ensure layers exist
-        if not hasattr(ad, 'layers') or ad.layers is None:
-            ad.layers = {}
-        if overwrite_layers or pred_layer_name not in ad.layers:
-            ad.layers[pred_layer_name] = pred_arr
-        else:
-            if verbose:
-                logger.info(f"skipping overwrite of existing layer {pred_layer_name} in adata[{ad_idx}]")
-        if overwrite_layers or target_layer_name not in ad.layers:
-            ad.layers[target_layer_name] = target_arr
-        else:
-            if verbose:
-                logger.info(f"skipping overwrite of existing layer {target_layer_name} in adata[{ad_idx}]")
+        _write_layers(ad, ad_idx, pred_arr, target_arr, pred_layer_name, target_layer_name, overwrite_layers, verbose)
 
-        # fill summary
         summary[sample_key] = {
             'matched': True,
             'adata_index': int(ad_idx),
@@ -576,6 +595,7 @@ def add_formatted_inference_to_adata(
         logger.info(f"Done. Samples processed: {len(summary)}; unused adata indices: {unused}")
 
     return summary
+
 
 def remove_nan_spots(adata, target_layer="target", inplace=False):
     """
