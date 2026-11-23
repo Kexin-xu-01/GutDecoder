@@ -9,11 +9,13 @@ description = "Wrapper and extensions around HEST for H&E-to-spatial-transcripto
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "hest @ git+https://github.com/mahmoodlab/HEST.git",
-    "trident[patch-encoders] @ git+https://github.com/mahmoodlab/TRIDENT.git",
-    "torch",
+    # HEST and TRIDENT are pinned to the commits in use; both checkouts also carry local changes,
+    # saved in patches/ (apply with `git -C <checkout> apply patches/<name>.patch`).
+    "hest @ git+https://github.com/mahmoodlab/HEST.git@1ffe6de1217858176cadd739a2244eac6881ad7a",
+    "trident[patch-encoders] @ git+https://github.com/mahmoodlab/TRIDENT.git@e4c98b2280d5b905fe83b00f01afac0f76755880",
+    "torch>=2.8",
     "torchvision",
-    "timm",
+    "timm==1.0.19",
     "transformers",
     "huggingface_hub",
     "safetensors",

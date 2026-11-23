@@ -1,3 +1,0 @@
-HEST @ git+https://github.com/mahmoodlab/HEST.git
-torch
-trident[patch-encoders] @ git+https://github.com/mahmoodlab/TRIDENT.git

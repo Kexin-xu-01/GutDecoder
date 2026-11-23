@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 from scipy import sparse
 
-from gutdecoder.inference import spatial_plot_real_mpp as sp
+from gutdecoder.inference import spatial_plot as sp
 
 
 @pytest.mark.parametrize("to_matrix", [np.asarray, sparse.csr_matrix])
