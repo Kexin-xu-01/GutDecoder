@@ -1,0 +1,239 @@
+Loading python-cbrg/current
+  Loading requirement: python-base/3.11.14
+Processing XeniumPR5S1ROI1...
+XeniumPR5S1ROI1
+Processing sample=XeniumPR5S1ROI1, roi=1, slide=1, run=PR5...
+⚠️ XeniumPR5S1ROI1 (1) already processed at /project/simmons_hts/kxu/hest/xenium_data/XeniumPR5/slide1/ROI1, skipping.
+Processing XeniumPR5S1ROI2...
+/package/python-cbrg/current/3.11.14/lib/python3.11/site-packages/dask/dataframe/__init__.py:31: FutureWarning: The legacy Dask DataFrame implementation is deprecated and will be removed in a future version. Set the configuration option `dataframe.query-planning` to `True` or None to enable the new Dask Dataframe implementation and silence this warning.
+  warnings.warn(
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/h5ad_reader.py:34: FutureWarning: Use obsm (e.g. `k in adata.obsm` or `adata.obsm.keys() | {'u'}`) instead of AnnData.obsm_keys, AnnData.obsm_keys is deprecated and will be removed in the future.
+  if "spatial" in adata.obsm_keys():
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+XeniumPR5S1ROI2
+Processing sample=XeniumPR5S1ROI2, roi=2, slide=1, run=PR5...
+Loading the WSI... (can be slow for large images)
+Loading transcripts...
+Pooling xenium transcripts in pseudo-visium spots...
+Reading cells...
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/xenium_data/XeniumPR5/slide1/ROI2
+Processing XeniumPR5S1ROI3...
+/package/python-cbrg/current/3.11.14/lib/python3.11/site-packages/dask/dataframe/__init__.py:31: FutureWarning: The legacy Dask DataFrame implementation is deprecated and will be removed in a future version. Set the configuration option `dataframe.query-planning` to `True` or None to enable the new Dask Dataframe implementation and silence this warning.
+  warnings.warn(
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/h5ad_reader.py:34: FutureWarning: Use obsm (e.g. `k in adata.obsm` or `adata.obsm.keys() | {'u'}`) instead of AnnData.obsm_keys, AnnData.obsm_keys is deprecated and will be removed in the future.
+  if "spatial" in adata.obsm_keys():
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+XeniumPR5S1ROI3
+Processing sample=XeniumPR5S1ROI3, roi=3, slide=1, run=PR5...
+Loading the WSI... (can be slow for large images)
+Loading transcripts...
+Pooling xenium transcripts in pseudo-visium spots...
+Reading cells...
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/xenium_data/XeniumPR5/slide1/ROI3
+Processing XeniumPR5S1ROI4...
+/package/python-cbrg/current/3.11.14/lib/python3.11/site-packages/dask/dataframe/__init__.py:31: FutureWarning: The legacy Dask DataFrame implementation is deprecated and will be removed in a future version. Set the configuration option `dataframe.query-planning` to `True` or None to enable the new Dask Dataframe implementation and silence this warning.
+  warnings.warn(
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/h5ad_reader.py:34: FutureWarning: Use obsm (e.g. `k in adata.obsm` or `adata.obsm.keys() | {'u'}`) instead of AnnData.obsm_keys, AnnData.obsm_keys is deprecated and will be removed in the future.
+  if "spatial" in adata.obsm_keys():
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+XeniumPR5S1ROI4
+Processing sample=XeniumPR5S1ROI4, roi=4, slide=1, run=PR5...
+Loading the WSI... (can be slow for large images)
+Loading transcripts...
+Pooling xenium transcripts in pseudo-visium spots...
+Reading cells...
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/xenium_data/XeniumPR5/slide1/ROI4
+Processing XeniumPR5S1ROI5...
+/package/python-cbrg/current/3.11.14/lib/python3.11/site-packages/dask/dataframe/__init__.py:31: FutureWarning: The legacy Dask DataFrame implementation is deprecated and will be removed in a future version. Set the configuration option `dataframe.query-planning` to `True` or None to enable the new Dask Dataframe implementation and silence this warning.
+  warnings.warn(
+/home/k/kxu/.local/lib/python3.11/site-packages/hestcore/wsi.py:27: UserWarning: CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.
+  warnings.warn("CuImage is not available. Ensure you have a GPU and cucim installed to use GPU acceleration.")
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/h5ad_reader.py:34: FutureWarning: Use obsm (e.g. `k in adata.obsm` or `adata.obsm.keys() | {'u'}`) instead of AnnData.obsm_keys, AnnData.obsm_keys is deprecated and will be removed in the future.
+  if "spatial" in adata.obsm_keys():
+/home/k/kxu/.local/lib/python3.11/site-packages/hest/HESTData.py:1390: FutureWarning: Use `squidpy.pl.spatial_scatter` instead.
+  fig = sc.pl.spatial(adata, show=False, img_key="downscaled_fullres", color=[key], title=f"in_tissue spots", return_fig=True, **pl_kwargs)
+XeniumPR5S1ROI5
+Processing sample=XeniumPR5S1ROI5, roi=5, slide=1, run=PR5...
+Loading the WSI... (can be slow for large images)
+Loading transcripts...
+Pooling xenium transcripts in pseudo-visium spots...
+Reading cells...
+saving to pyramidal tiff... can be slow
+✔ Saved results to /project/simmons_hts/kxu/hest/xenium_data/XeniumPR5/slide1/ROI5
+Processing XeniumPR5S1ROI6...
+XeniumPR5S1ROI6
+Processing sample=XeniumPR5S1ROI6, roi=6, slide=1, run=PR5...
+Loading the WSI... (can be slow for large images)
+Traceback (most recent call last):
+  File "/project/simmons_hts/kxu/JupyterFolder/hest/01_read_hest/03_read_xenium.py", line 102, in <module>
+    main()
+  File "/project/simmons_hts/kxu/JupyterFolder/hest/01_read_hest/03_read_xenium.py", line 79, in main
+    reader = XeniumReader().read(
+             ^^^^^^^^^^^^^^^^^^^^
+  File "/home/k/kxu/.local/lib/python3.11/site-packages/hest/readers.py", line 962, in read
+    shapes.append(LazyShapes(nucleus_bound_path, 'tenx_nucleus', 'dapi', reader=XeniumParquetCellReader, reader_kwargs={'pixel_size_morph': pixel_size_morph}))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/k/kxu/.local/lib/python3.11/site-packages/hest/LazyShapes.py", line 14, in __init__
+    verify_paths([path])
+  File "/home/k/kxu/.local/lib/python3.11/site-packages/hest/utils.py", line 105, in verify_paths
+    raise FileNotFoundError(f"No such file or directory: {path}" + suffix)
+FileNotFoundError: No such file or directory: /project/Coeliac_Group/shared/xenium_10_2025/20251023__141038__karolina_20251023/output-XETG00283__0060528__Region_6__20251023__141554/nucleus_boundaries.parquet
+Processing XeniumPR5S1ROI8...
+XeniumPR5S1ROI8
+Processing sample=XeniumPR5S1ROI8, roi=8, slide=1, run=PR5...
+Loading the WSI... (can be slow for large images)
+Traceback (most recent call last):
+  File "/project/simmons_hts/kxu/JupyterFolder/hest/01_read_hest/03_read_xenium.py", line 102, in <module>
+    main()
+  File "/project/simmons_hts/kxu/JupyterFolder/hest/01_read_hest/03_read_xenium.py", line 79, in main
+    reader = XeniumReader().read(
+             ^^^^^^^^^^^^^^^^^^^^
+  File "/home/k/kxu/.local/lib/python3.11/site-packages/hest/readers.py", line 962, in read
+    shapes.append(LazyShapes(nucleus_bound_path, 'tenx_nucleus', 'dapi', reader=XeniumParquetCellReader, reader_kwargs={'pixel_size_morph': pixel_size_morph}))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/k/kxu/.local/lib/python3.11/site-packages/hest/LazyShapes.py", line 14, in __init__
+    verify_paths([path])
+  File "/home/k/kxu/.local/lib/python3.11/site-packages/hest/utils.py", line 105, in verify_paths
+    raise FileNotFoundError(f"No such file or directory: {path}" + suffix)
+FileNotFoundError: No such file or directory: /project/Coeliac_Group/shared/xenium_10_2025/20251023__141038__karolina_20251023/output-XETG00283__0060528__Region_6__20251023__141554/nucleus_boundaries.parquet
+CBB Profiling started Mon Nov 17 16:16:54 2025
+SLURM_JOB_ID		4504672
+REQ_CPU_CORES		2
+REQ_MEMORY_GB		50.000000
+Starting profiling...
+
+                                                                                
+                                                                                
+                                    CPU (cores)                                 
+    2 +---------------------------------------------------------------------+   
+      |             +             +             +             +             |   
+      |                                                                     |   
+      |                                                                     |   
+      |                                                                     |   
+      |                                                                     |   
+  1.5 |-+                 ###                           ####              +-|   
+      |                  ## ###                       ###  #####            |   
+      |                ##     ######    ###          #         ######       |   
+      |      ####      #           #   ## ###       #               #       |   
+      |     #   ###   #            #   #    ###    ##               #       |   
+    1 |-+## #     #   #            #  #       #    #                #     +-|   
+      |  ####     #  #             #  #       #    #                ## #####|   
+      |  # #      # ##             ####       #  ##                 ######  |   
+      |# #        ##               ##          ##                   ##  #   |   
+      |# #        #                ##          #                    ##  #   |   
+      | ##        #                ##          #                    ##  #   |   
+  0.5 |-##        #                #           #                    ##    +-|   
+      |  #                                     #                    #       |   
+      |  #                                                          #       |   
+      |  #                                                          #       |   
+      |  #                                                          #       |   
+      |  #          +             +             +             +             |   
+    0 +---------------------------------------------------------------------+   
+      0             50           100           150           200           250  
+                                Job profiling step                              
+                                                                                
+
+                                                                                
+                                                                                
+                                   Memory (GB)                                  
+  50 +----------------------------------------------------------------------+   
+     |             +             +              +             +             |   
+  45 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+  40 |-+                                                                  +-|   
+     |                                                                      |   
+  35 |-+                                                                  +-|   
+     |                                                                      |   
+  30 |-+                                                                  +-|   
+     |                                                                      |   
+  25 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+  20 |-+                                                                  +-|   
+     |                                                                      |   
+  15 |-+                                                                  +-|   
+     |                                                                      |   
+  10 |-+                                                                  +-|   
+     |                                                                      |   
+     |                                                                      |   
+   5 |-+                                              ####                +-|   
+     |     ####### ################  ########## ######## ############ ## ## |   
+   0 +----------------------------------------------------------------------+   
+     0             50           100            150           200           250  
+                               Job profiling step                               
+                                                                                
+
+                                                                                
+                                                                                
+                                    Data read (GB)                              
+   0.0005 +-----------------------------------------------------------------+   
+          |            +            +             +            +     #######|   
+  0.00045 |-+                                                        #    +-|   
+          |                                                          #      |   
+          |                                                          #      |   
+   0.0004 |-+                                                        #    +-|   
+          |                                                          #      |   
+  0.00035 |-+                                                        #    +-|   
+          |                                                ###########      |   
+   0.0003 |-+                                   ############              +-|   
+          |                                     #                           |   
+  0.00025 |-+                                   #                         +-|   
+          |                                     #                           |   
+          |                                     #                           |   
+   0.0002 |-+                        ############                         +-|   
+          |                          #                                      |   
+  0.00015 |-+                        #                                    +-|   
+          |                          #                                      |   
+   0.0001 |-+                        #                                    +-|   
+          |          #################                                      |   
+          |          #                                                      |   
+    5e-05 |-+        #                                                    +-|   
+          |          # +            +             +            +            |   
+        0 +-----------------------------------------------------------------+   
+          0            50          100           150          200          250  
+                                  Job profiling step                            
+                                                                                
+
+                                                                                
+                                                                                
+                                 Data written (GB)                              
+  3.5 +---------------------------------------------------------------------+   
+      |             +             +             +             +             |   
+      |                                                                     |   
+    3 |-+                                                           ########|   
+      |                                                             #       |   
+      |                                                            ##       |   
+      |                                                          ###        |   
+  2.5 |-+                                                       ##        +-|   
+      |                                                       ##            |   
+      |                                                     ##              |   
+    2 |-+                                     ##############              +-|   
+      |                                       #                             |   
+      |                                      ##                             |   
+  1.5 |-+                                  ##                             +-|   
+      |                            #########                                |   
+      |                            #                                        |   
+    1 |-+                         ##                                      +-|   
+      |                         ###                                         |   
+      |                        ##                                           |   
+      |                      ##                                             |   
+  0.5 |-+         ###########                                             +-|   
+      |          #                                                          |   
+      |        ##   +             +             +             +             |   
+    0 +---------------------------------------------------------------------+   
+      0             50           100           150           200           250  
+                                Job profiling step                              
+                                                                                
