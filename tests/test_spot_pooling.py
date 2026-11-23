@@ -49,3 +49,36 @@ def test_pooling_rejects_points_outside_bbox(to_frame, x, y):
 
     with pytest.raises(ValueError, match="outside the pooling bbox"):
         _pool(to_frame(df))
+
+
+def _args(*extra):
+    return spot_pooling._parse_main_args(["S1", "--output-root", "/out", "--processed-root", "/proc", *extra])
+
+
+def test_roi_paths_from_spreadsheet_row():
+    row = pd.Series(dict(Sample_ID="S1", Roi=2.0, Slide="slide3", run=" PR4 ", Directory="/img",
+                         alignment="align.csv", h5ad="/cells.h5ad", directory="/exp"))
+
+    paths = spot_pooling._roi_paths(row, _args(), feature_tag="cell_type")
+
+    assert (paths["roi"], paths["slide_num"], paths["run_name"]) == (2, 3, "PR4")
+    assert str(paths["alignment_file"]) == "/img/align.csv"
+    assert str(paths["hest_dir"]) == "/proc/XeniumPR4/slide3/ROI2"
+    assert str(paths["save_dir"]) == "/out/XeniumPR4_cell_type/slide3/ROI2"
+    assert str(paths["transcript_path"]) == "/exp/transcripts.parquet"
+
+
+@pytest.mark.parametrize("missing", ["Roi", "alignment", "h5ad"])
+def test_roi_paths_skips_incomplete_rows(missing):
+    row = dict(Sample_ID="S1", Roi=1, Slide="slide1", run="PR1", Directory="/img", alignment="a", h5ad="b",
+               directory="/exp")
+    row[missing] = float("nan")
+
+    assert spot_pooling._roi_paths(pd.Series(row), _args(), feature_tag="cell_type") is None
+
+
+def test_config_file_overrides_command_line(tmp_path):
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text("feature_col: niche\n")
+
+    assert _args("--feature-col", "cell_type", "--config", str(cfg)).feature_col == "niche"

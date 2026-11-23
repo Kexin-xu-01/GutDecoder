@@ -237,7 +237,7 @@ def pool_transcripts_xenium_bbox(
     return adata
 
 
-def main() -> None:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Process Xenium imaging data for a given SampleID with configurable feature/output settings",
     )
@@ -350,7 +350,12 @@ def main() -> None:
     type=str,
     help="Path to YAML config file"
     )
-    args = parser.parse_args()
+    return parser
+
+
+def _parse_main_args(argv=None) -> argparse.Namespace:
+    """Command-line arguments, with values from --config (YAML) taking precedence."""
+    args = _build_parser().parse_args(argv)
 
     # Load YAML config if provided
     if args.config:
@@ -361,6 +366,169 @@ def main() -> None:
         for k, v in cfg.items():
             if hasattr(args, k):
                 setattr(args, k, v)
+    return args
+
+
+def _roi_paths(row, args, feature_tag):
+    """Inputs and output folder for one spreadsheet row, or None (with a warning) if the row is incomplete."""
+    sample = row["Sample_ID"]
+    roi = row.get(args.roi_col)
+    if pd.notnull(roi):
+        roi = int(float(roi))
+    else:
+        logger.warning(f"Missing ROI for sample={sample}; skipping row")
+        return None
+
+    slide_str = str(row[args.slide_col])
+    match = re.search(r"\d+", slide_str)
+    slide_num = int(match.group()) if match else None
+    run_name = str(row.get(args.run_col, "")).strip()
+
+    base_img_dir = Path(row[args.img_dir_col])
+    alignment_name = row.get(args.alignment_col)
+    if pd.isna(alignment_name) or alignment_name is None:
+        logger.warning(f"Missing alignment file for sample={sample}, roi={roi}; skipping")
+        return None
+
+    h5ad_value = row.get(args.h5ad_col)
+    if pd.isna(h5ad_value) or h5ad_value is None:
+        logger.warning(f"Missing h5ad path in column '{args.h5ad_col}' for sample={sample}, roi={roi}; skipping")
+        return None
+
+    exp_stem = Path(row[args.input_root_col])
+    h5ad_path = Path(h5ad_value)
+    alignment_file = _resolve_path(base_img_dir, alignment_name)
+    transcript_path = exp_stem / "transcripts.parquet"
+
+    processed_rel = args.processed_pattern.format(run_name=run_name, slide_num=slide_num, roi=roi)
+    hest_dir = Path(args.processed_root) / processed_rel
+
+    output_rel = args.output_pattern.format(
+        run_name=run_name,
+        feature_tag=feature_tag,
+        slide_num=slide_num,
+    )
+    save_dir = Path(args.output_root) / output_rel / f"ROI{roi}"
+
+    return {
+        "sample": sample, "roi": roi, "slide_num": slide_num, "run_name": run_name,
+        "exp_stem": exp_stem, "h5ad_path": h5ad_path, "alignment_file": alignment_file,
+        "transcript_path": transcript_path, "hest_dir": hest_dir, "save_dir": save_dir,
+    }
+
+
+def _already_processed(save_dir: Path) -> bool:
+    required = [
+        save_dir / "aligned_adata.h5ad",
+        save_dir / "aligned_fullres_HE.tif",
+        save_dir / "metrics.json",
+    ]
+    return all(p.exists() for p in required)
+
+
+def _read_labelled_cells(h5ad_path):
+    """Labelled cell AnnData with obsm['spatial'] taken from its centroid columns."""
+    adata_labelled = sc.read_h5ad(h5ad_path)
+
+    # Ensure spatial coordinates are present before update/align.
+    if {"cell_centroid_x", "cell_centroid_y"}.issubset(adata_labelled.obs.columns):
+        adata_labelled.obsm["spatial"] = adata_labelled.obs[["cell_centroid_x", "cell_centroid_y"]].to_numpy()
+    elif {"x", "y"}.issubset(adata_labelled.obs.columns):
+        adata_labelled.obs["cell_centroid_x"] = adata_labelled.obs["x"]
+        adata_labelled.obs["cell_centroid_y"] = adata_labelled.obs["y"]
+        adata_labelled.obsm["spatial"] = adata_labelled.obs[["cell_centroid_x", "cell_centroid_y"]].to_numpy()
+    else:
+        raise KeyError(
+            "Could not find centroid columns. Expected either 'cell_centroid_x/y' or 'x/y' in adata.obs."
+        )
+    return adata_labelled
+
+
+def _pool_cells(cell_df, st, paths, pool_by_transcript_coord):
+    """Pool labelled cells into spots, on the transcript bbox grid if requested."""
+    if pool_by_transcript_coord:
+        # Use transcript bbox to force the same grid as transcript-level pooling
+        bbox = get_transcript_bbox(
+            transcripts_path=paths["transcript_path"],
+            experiment_path=paths["exp_stem"] / "experiment.xenium",
+            alignment_file_path=paths["alignment_file"],
+        )
+
+        return pool_transcripts_xenium_bbox(
+            cell_df,
+            bbox=bbox,
+            pixel_size_he=st.meta["pixel_size_um_estimated"],
+            key_x="he_x",
+            key_y="he_y",
+            spot_size_um=st.meta["spot_diameter"],
+        )
+    return pool_transcripts_xenium(
+        cell_df,
+        st.meta["pixel_size_um_estimated"],
+        key_x="he_x",
+        key_y="he_y",
+        spot_size_um=st.meta["spot_diameter"],
+    )
+
+
+def _process_roi(row, args, paths, rename_map):
+    """Pool one ROI's labelled cells into spots, apply its exclusion rules and save the result."""
+    save_dir, hest_dir = paths["save_dir"], paths["hest_dir"]
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    st = HESTData.from_paths(
+        adata_path=str(hest_dir / "aligned_adata.h5ad"),
+        img=str(hest_dir / "aligned_fullres_HE.tif"),
+        metrics_path=str(hest_dir / "metrics.json"),
+    )
+
+    adata_labelled = _read_labelled_cells(paths["h5ad_path"])
+
+    update_st_with_filtered_and_labelled(st, adata_labelled, drop_codeword=True)
+
+    px_um = st.meta["pixel_size"]
+    adata_labelled = align_labelled_to_he(adata_labelled, paths["alignment_file"], pixel_size_um=px_um)
+    adata_labelled = standardize_obs_columns(adata_labelled, rename_map=rename_map)
+
+    if args.feature_col not in adata_labelled.obs.columns:
+        raise KeyError(
+            f"'{args.feature_col}' not found in adata_labelled.obs after standardization. "
+            f"Available columns include: {list(adata_labelled.obs.columns[:25])} ..."
+        )
+
+    cell_df = adata_labelled.obs[[args.feature_col, "he_x", "he_y"]].rename(
+        columns={args.feature_col: "feature_name"}
+    )
+
+    adata_cells_pooled = _pool_cells(cell_df, st, paths, args.pool_by_transcript_coord)
+
+    adata_cells_pooled.obs["total_counts"] = np.asarray(adata_cells_pooled.X.sum(axis=1)).ravel()
+    adata_cells_pooled.obs["log1p_total_counts"] = np.log1p(adata_cells_pooled.obs["total_counts"])
+
+    register_downscale_img(adata_cells_pooled, st.wsi, st.meta["pixel_size_um_estimated"])
+
+    xy = adata_cells_pooled.obsm["spatial"]
+    sx, sy = xy[:, 0], xy[:, 1]
+    xmin, xmax, ymin, ymax = 0, st.wsi.width, 0, st.wsi.height
+
+    rule_col = row.get(args.crop_col)
+    rules = _parse_rules(rule_col)
+    logger.info(f"Applying exclusions: {rules}")
+
+    final_keep = apply_spot_exclusions(sx, sy, (xmin, xmax, ymin, ymax), rules)
+    logger.info(f"Spots kept after rules: {final_keep.sum()} / {len(final_keep)}")
+
+    st.adata = adata_cells_pooled[final_keep]
+    stats = refresh_meta_counts(st)
+    logger.info(f"Before/After: {stats}")
+
+    overlay_path = save_all(st, save_dir, pyramidal=True, cell_label_key=args.feature_col)
+
+    logger.info(f"Saved results to {overlay_path}")
+
+
+def main(argv=None) -> None:
+    args = _parse_main_args(argv)
 
     sample_id = args.SampleID
     feature_tag = args.feature_tag or args.feature_col
@@ -374,146 +542,18 @@ def main() -> None:
     rename_map = _build_rename_map(args.annotation_source_col, args.feature_col)
 
     for _, row in sample_rows.iterrows():
-        sample = row["Sample_ID"]
-        roi = row.get(args.roi_col)
-        if pd.notnull(roi):
-            roi = int(float(roi))
-        else:
-            logger.warning(f"Missing ROI for sample={sample}; skipping row")
+        paths = _roi_paths(row, args, feature_tag)
+        if paths is None:
             continue
 
-        slide_str = str(row[args.slide_col])
-        match = re.search(r"\d+", slide_str)
-        slide_num = int(match.group()) if match else None
-        run_name = str(row.get(args.run_col, "")).strip()
+        logger.info(f"Processing sample={paths['sample']}, roi={paths['roi']}, "
+                    f"slide={paths['slide_num']}, run={paths['run_name']}...")
 
-        base_img_dir = Path(row[args.img_dir_col])
-        alignment_name = row.get(args.alignment_col)
-        if pd.isna(alignment_name) or alignment_name is None:
-            logger.warning(f"Missing alignment file for sample={sample}, roi={roi}; skipping")
+        if args.skip_existing and paths["save_dir"].exists() and _already_processed(paths["save_dir"]):
+            logger.warning(f"{paths['sample']} ({paths['roi']}) already processed at {paths['save_dir']}, skipping.")
             continue
 
-        h5ad_value = row.get(args.h5ad_col)
-        if pd.isna(h5ad_value) or h5ad_value is None:
-            logger.warning(f"Missing h5ad path in column '{args.h5ad_col}' for sample={sample}, roi={roi}; skipping")
-            continue
-
-        exp_stem = Path(row[args.input_root_col])
-        h5ad_path = Path(h5ad_value)
-        alignment_file = _resolve_path(base_img_dir, alignment_name)
-        transcript_path = exp_stem / "transcripts.parquet"
-
-        processed_rel = args.processed_pattern.format(run_name=run_name, slide_num=slide_num, roi=roi)
-        hest_dir = Path(args.processed_root) / processed_rel
-
-        output_rel = args.output_pattern.format(
-            run_name=run_name,
-            feature_tag=feature_tag,
-            slide_num=slide_num,
-        )
-        base_out_dir = Path(args.output_root) / output_rel
-        save_dir = base_out_dir / f"ROI{roi}"
-
-        logger.info(f"Processing sample={sample}, roi={roi}, slide={slide_num}, run={run_name}...")
-
-        if args.skip_existing and save_dir.exists():
-            required = [
-                save_dir / "aligned_adata.h5ad",
-                save_dir / "aligned_fullres_HE.tif",
-                save_dir / "metrics.json",
-            ]
-            if all(p.exists() for p in required):
-                logger.warning(f"{sample} ({roi}) already processed at {save_dir}, skipping.")
-                continue
-
-        save_dir.mkdir(parents=True, exist_ok=True)
-
-        st = HESTData.from_paths(
-            adata_path=str(hest_dir / "aligned_adata.h5ad"),
-            img=str(hest_dir / "aligned_fullres_HE.tif"),
-            metrics_path=str(hest_dir / "metrics.json"),
-        )
-
-        adata_labelled = sc.read_h5ad(h5ad_path)
-
-        # Ensure spatial coordinates are present before update/align.
-        if {"cell_centroid_x", "cell_centroid_y"}.issubset(adata_labelled.obs.columns):
-            adata_labelled.obsm["spatial"] = adata_labelled.obs[["cell_centroid_x", "cell_centroid_y"]].to_numpy()
-        elif {"x", "y"}.issubset(adata_labelled.obs.columns):
-            adata_labelled.obs["cell_centroid_x"] = adata_labelled.obs["x"]
-            adata_labelled.obs["cell_centroid_y"] = adata_labelled.obs["y"]
-            adata_labelled.obsm["spatial"] = adata_labelled.obs[["cell_centroid_x", "cell_centroid_y"]].to_numpy()
-        else:
-            raise KeyError(
-                "Could not find centroid columns. Expected either 'cell_centroid_x/y' or 'x/y' in adata.obs."
-            )
-
-        update_st_with_filtered_and_labelled(st, adata_labelled, drop_codeword=True)
-
-        px_um = st.meta["pixel_size"]
-        adata_labelled = align_labelled_to_he(adata_labelled, alignment_file, pixel_size_um=px_um)
-        adata_labelled = standardize_obs_columns(adata_labelled, rename_map=rename_map)
-
-        if args.feature_col not in adata_labelled.obs.columns:
-            raise KeyError(
-                f"'{args.feature_col}' not found in adata_labelled.obs after standardization. "
-                f"Available columns include: {list(adata_labelled.obs.columns[:25])} ..."
-            )
-
-        cell_df = adata_labelled.obs[[args.feature_col, "he_x", "he_y"]].rename(
-            columns={args.feature_col: "feature_name"}
-        )
-
-
-        if args.pool_by_transcript_coord:
-            # Use transcript bbox to force the same grid as transcript-level pooling
-            bbox = get_transcript_bbox(
-                transcripts_path=transcript_path,
-                experiment_path=exp_stem / "experiment.xenium",
-                alignment_file_path=alignment_file,
-            )
-
-            adata_cells_pooled = pool_transcripts_xenium_bbox(
-                cell_df,
-                bbox=bbox,
-                pixel_size_he=st.meta["pixel_size_um_estimated"],
-                key_x="he_x",
-                key_y="he_y",
-                spot_size_um=st.meta["spot_diameter"],
-            )
-        else:
-
-            adata_cells_pooled = pool_transcripts_xenium(
-                cell_df,
-                st.meta["pixel_size_um_estimated"],
-                key_x="he_x",
-                key_y="he_y",
-                spot_size_um=st.meta["spot_diameter"],
-            )
-
-        adata_cells_pooled.obs["total_counts"] = np.asarray(adata_cells_pooled.X.sum(axis=1)).ravel()
-        adata_cells_pooled.obs["log1p_total_counts"] = np.log1p(adata_cells_pooled.obs["total_counts"])
-
-        register_downscale_img(adata_cells_pooled, st.wsi, st.meta["pixel_size_um_estimated"])
-
-        xy = adata_cells_pooled.obsm["spatial"]
-        sx, sy = xy[:, 0], xy[:, 1]
-        xmin, xmax, ymin, ymax = 0, st.wsi.width, 0, st.wsi.height
-
-        rule_col = row.get(args.crop_col)
-        rules = _parse_rules(rule_col)
-        logger.info(f"Applying exclusions: {rules}")
-
-        final_keep = apply_spot_exclusions(sx, sy, (xmin, xmax, ymin, ymax), rules)
-        logger.info(f"Spots kept after rules: {final_keep.sum()} / {len(final_keep)}")
-
-        st.adata = adata_cells_pooled[final_keep]
-        stats = refresh_meta_counts(st)
-        logger.info(f"Before/After: {stats}")
-
-        overlay_path = save_all(st, save_dir, pyramidal=True, cell_label_key=args.feature_col)
-
-        logger.info(f"Saved results to {overlay_path}")
+        _process_roi(row, args, paths, rename_map)
 
 
 if __name__ == "__main__":
