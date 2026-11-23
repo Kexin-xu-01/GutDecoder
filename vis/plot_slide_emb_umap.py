@@ -192,14 +192,10 @@ def compute_harmony_umap(
         Harmony-corrected PCA representation.
     """
 
-    # -----------------------
     # Standardize
-    # -----------------------
     X_scaled = StandardScaler().fit_transform(X)
 
-    # -----------------------
     # PCA
-    # -----------------------
     n_components = min(
         n_pca,
         X_scaled.shape[1],
@@ -213,9 +209,7 @@ def compute_harmony_umap(
 
     logger.info(f"PCA: {X_pca.shape}")
 
-    # -----------------------
     # Harmony
-    # -----------------------
     harmony_meta = pd.DataFrame({
         "batch": pd.Series(batch).astype(str).to_numpy()
     })
@@ -232,9 +226,7 @@ def compute_harmony_umap(
 
     logger.info(f"Harmony: {X_harmony.shape}")
 
-    # -----------------------
     # UMAP
-    # -----------------------
     actual_neighbors = min(
         n_neighbors,
         X_harmony.shape[0] - 1,
@@ -351,9 +343,7 @@ def make_umap_pdf(
     group_by_cols = [c for c in group_by_cols if c in meta.columns]
 
     with PdfPages(out_pdf) as pdf:
-        # -----------------------
         # Overall pages
-        # -----------------------
         global_X = np.stack(meta[feature_col].to_numpy())
         global_emb = compute_umap(global_X)
 
@@ -385,9 +375,7 @@ def make_umap_pdf(
             pdf.savefig(fig)
             plt.close(fig)
 
-        # -----------------------
         # Grouped pages
-        # -----------------------
         for group_col in group_by_cols:
             group_vals = pd.Series(meta[group_col]).astype("string").fillna("NA")
             groups = [g for g in pd.unique(group_vals) if g != "NA"]
@@ -528,9 +516,7 @@ def plot_matched_samples(
 
     color_map = dict(zip(matched_ids, colors))
 
-    # ---------------------------------
     # Everything grey first
-    # ---------------------------------
     ax.scatter(
         embedding[:, 0],
         embedding[:, 1],
@@ -541,9 +527,7 @@ def plot_matched_samples(
         zorder=1,
     )
 
-    # ---------------------------------
     # Matched pairs
-    # ---------------------------------
     for sample_id in matched_ids:
 
         # Xenium = circle
@@ -583,9 +567,7 @@ def plot_matched_samples(
     ax.set_xlabel("UMAP1")
     ax.set_ylabel("UMAP2")
 
-    # ---------------------------------
     # Sample ID legend
-    # ---------------------------------
     if n > 0:
         ncol = (
             1 if n <= 20
@@ -605,9 +587,7 @@ def plot_matched_samples(
 
         ax.add_artist(sample_legend)
 
-    # ---------------------------------
     # Shape legend
-    # ---------------------------------
     shape_handles = [
         plt.Line2D(
             [0], [0],
@@ -707,9 +687,7 @@ def calculate_matched_unmatched_distances(
             f"{group1_label} and {group2_label}."
         )
 
-    # ----------------------------------------
     # Get one vector per ID per group
-    # ----------------------------------------
 
     X1 = []
     X2 = []
@@ -732,9 +710,7 @@ def calculate_matched_unmatched_distances(
     X1 = np.stack(X1)
     X2 = np.stack(X2)
 
-    # ----------------------------------------
     # Pairwise distance matrices
-    # ----------------------------------------
 
     euclidean = cdist(
         X1, X2, metric="euclidean"
@@ -802,9 +778,7 @@ def calculate_matched_unmatched_distances(
 
     per_sample = pd.DataFrame(results)
 
-    # ----------------------------------------
     # Global summary
-    # ----------------------------------------
 
     summary = {
         "embedding_space": embedding_space,
@@ -879,9 +853,7 @@ def make_joint_umap_pdf(
     categorical_cols = categorical_cols or []
     numeric_cols = numeric_cols or []
 
-    # ========================================================
     # Load features
-    # ========================================================
 
     logger.info("Loading Xenium embeddings...")
 
@@ -898,9 +870,7 @@ def make_joint_umap_pdf(
         feature_key=feature_key,
     )
 
-    # ========================================================
     # Load metadata
-    # ========================================================
 
     xenium_metadata = load_metadata(
         metadata_path=Path(xenium_metadata_path),
@@ -912,9 +882,7 @@ def make_joint_umap_pdf(
         sample_id_col=adjacent_id_col,
     )
 
-    # ========================================================
     # Merge metadata
-    # ========================================================
 
     xenium = merge_metadata(
         features=xenium_features,
@@ -928,17 +896,13 @@ def make_joint_umap_pdf(
         metadata_id_col=adjacent_id_col,
     )
 
-    # ========================================================
     # Add source
-    # ========================================================
 
     xenium["source"] = "Xenium"
     adjacent["source"] = "Adjacent"
 
 
-    # ========================================================
     # Create common matched Xenium ID
-    # ========================================================
 
     # Xenium samples identify themselves
     xenium["matched_xenium"] = xenium[xenium_id_col].astype("string")
@@ -947,9 +911,7 @@ def make_joint_umap_pdf(
     adjacent["matched_xenium"] = adjacent[adjacent_xenium_col].astype("string")
 
 
-    # ========================================================
     # Identify paired / unpaired samples
-    # ========================================================
 
     # Xenium samples actually present in this joint analysis
     available_xenium = set(
@@ -982,9 +944,7 @@ def make_joint_umap_pdf(
     )
 
 
-    # ========================================================
     # Combine
-    # ========================================================
 
     joint = pd.concat(
         [
@@ -1005,9 +965,7 @@ def make_joint_umap_pdf(
         .size()
     )
 
-    # ========================================================
     # Make common metadata columns
-    # ========================================================
 
     # If adjacent metadata already contains disease/location
     # inherited from the matched Xenium sample, these columns
@@ -1024,9 +982,7 @@ def make_joint_umap_pdf(
 
     logger.info(f"Joint samples: {len(joint)}")
 
-    # ========================================================
     # Joint UMAP
-    # ========================================================
 
     X = np.stack(
         joint["features"].to_numpy()
@@ -1034,16 +990,12 @@ def make_joint_umap_pdf(
 
     embedding = compute_umap(X)
 
-    # ========================================================
     # Save coordinates in dataframe
-    # ========================================================
 
     joint["UMAP1"] = embedding[:, 0]
     joint["UMAP2"] = embedding[:, 1]
 
-    # ========================================================
     # Columns
-    # ========================================================
 
     cat_cols = [
         c
@@ -1065,9 +1017,7 @@ def make_joint_umap_pdf(
     if missing:
         logger.warning(f"columns not found: {sorted(missing)}")
 
-    # ========================================================
     # PDF
-    # ========================================================
 
     out_pdf = Path(out_pdf)
 
@@ -1078,9 +1028,7 @@ def make_joint_umap_pdf(
 
     with PdfPages(out_pdf) as pdf:
 
-        # ----------------------------------------------------
-        # 1. Xenium vs Adjacent
-        # ----------------------------------------------------
+        # Xenium vs Adjacent
 
         fig, ax = plt.subplots(
             figsize=(7, 5)
@@ -1102,9 +1050,7 @@ def make_joint_umap_pdf(
 
         plt.close(fig)
 
-        # ----------------------------------------------------
-        # 2. Metadata
-        # ----------------------------------------------------
+        # Metadata
 
         for col in cat_cols:
 
@@ -1150,9 +1096,7 @@ def make_joint_umap_pdf(
 
             plt.close(fig)
 
-        # ----------------------------------------------------
-        # 3. Matched Xenium sample
-        # ----------------------------------------------------
+        # Matched Xenium sample
 
         fig, ax = plt.subplots(figsize=(10, 7))
 
@@ -1235,9 +1179,7 @@ def make_joint_group_umap_pdf(
         exist_ok=True,
     )
 
-    # ========================================================
     # Load features
-    # ========================================================
 
     logger.info(f"Loading {group1_label} embeddings...")
 
@@ -1255,9 +1197,7 @@ def make_joint_group_umap_pdf(
         sample_ids=group2_sample_ids,
     )
 
-    # ========================================================
     # Load metadata
-    # ========================================================
 
     group1_metadata = load_metadata(
         metadata_path=Path(group1_metadata_path),
@@ -1269,9 +1209,7 @@ def make_joint_group_umap_pdf(
         sample_id_col=group2_id_col,
     )
 
-    # ========================================================
     # Merge metadata
-    # ========================================================
 
     group1 = merge_metadata(
         features=group1_features,
@@ -1285,9 +1223,7 @@ def make_joint_group_umap_pdf(
         metadata_id_col=group2_id_col,
     )
 
-    # ========================================================
     # Add group labels
-    # ========================================================
 
     group1["source"] = group1_label
     group2["source"] = group2_label
@@ -1295,9 +1231,7 @@ def make_joint_group_umap_pdf(
     logger.info(f"{group1_label}: {len(group1)}")
     logger.info(f"{group2_label}: {len(group2)}")
 
-    # ========================================================
     # Combine
-    # ========================================================
 
     joint = pd.concat(
         [group1, group2],
@@ -1307,9 +1241,7 @@ def make_joint_group_umap_pdf(
 
     logger.info(f"Joint: {len(joint)}")
 
-    # ========================================================
     # Feature matrix
-    # ========================================================
 
     X = np.stack(
         joint["features"].to_numpy()
@@ -1317,9 +1249,7 @@ def make_joint_group_umap_pdf(
 
     logger.info(f"Original embedding shape: {X.shape}")
 
-    # ========================================================
     # Distance analysis helper
-    # ========================================================
 
     distance_results = []
     distance_summaries = []
@@ -1345,9 +1275,7 @@ def make_joint_group_umap_pdf(
         logger.info(f"{space_name} distance summary:")
         print(summary.to_string(index=False))
 
-    # ========================================================
-    # 1. ORIGINAL EMBEDDING SPACE
-    # ========================================================
+    # ORIGINAL EMBEDDING SPACE
 
     logger.info("Calculating original embedding distances...")
 
@@ -1356,9 +1284,7 @@ def make_joint_group_umap_pdf(
         "original",
     )
 
-    # ========================================================
-    # 2. PCA / HARMONY
-    # ========================================================
+    # PCA / HARMONY
 
     if use_harmony:
 
@@ -1367,15 +1293,11 @@ def make_joint_group_umap_pdf(
             f"{group1_label} and {group2_label}"
         )
 
-        # ----------------------------------------------------
         # Standardize
-        # ----------------------------------------------------
 
         X_scaled = StandardScaler().fit_transform(X)
 
-        # ----------------------------------------------------
         # PCA
-        # ----------------------------------------------------
 
         n_pca = min(
             harmony_n_pca,
@@ -1396,9 +1318,7 @@ def make_joint_group_umap_pdf(
 
         logger.info(f"PCA shape: {X_pca.shape}")
 
-        # ====================================================
-        # 3. PRE-HARMONY DISTANCES
-        # ====================================================
+        # PRE-HARMONY DISTANCES
 
         logger.info("Calculating pre-Harmony distances...")
 
@@ -1407,9 +1327,7 @@ def make_joint_group_umap_pdf(
             "pre_harmony",
         )
 
-        # ----------------------------------------------------
         # Harmony
-        # ----------------------------------------------------
 
         harmony_meta = pd.DataFrame({
             "source": (
@@ -1435,9 +1353,7 @@ def make_joint_group_umap_pdf(
             f"{X_harmony.shape}"
         )
 
-        # ====================================================
-        # 4. POST-HARMONY DISTANCES
-        # ====================================================
+        # POST-HARMONY DISTANCES
 
         logger.info("Calculating post-Harmony distances...")
 
@@ -1446,9 +1362,7 @@ def make_joint_group_umap_pdf(
             "post_harmony",
         )
 
-        # ----------------------------------------------------
         # Save Harmony dimensions
-        # ----------------------------------------------------
 
         harmony_df = pd.DataFrame(
             X_harmony,
@@ -1464,9 +1378,7 @@ def make_joint_group_umap_pdf(
             axis=1,
         )
 
-        # ----------------------------------------------------
         # UMAP on Harmony output
-        # ----------------------------------------------------
 
         n_neighbors = min(
             15,
@@ -1489,9 +1401,7 @@ def make_joint_group_umap_pdf(
             random_state=random_state,
         )
 
-    # ========================================================
     # Combine and save distance results
-    # ========================================================
 
     if distance_results:
 
@@ -1505,9 +1415,7 @@ def make_joint_group_umap_pdf(
             ignore_index=True,
         )
 
-        # ----------------------------------------------------
         # Save individual sample distances
-        # ----------------------------------------------------
 
         distance_csv = out_pdf.with_name(
             out_pdf.stem + "_distances.csv"
@@ -1518,9 +1426,7 @@ def make_joint_group_umap_pdf(
             index=False,
         )
 
-        # ----------------------------------------------------
         # Save summary distances
-        # ----------------------------------------------------
 
         summary_csv = out_pdf.with_name(
             out_pdf.stem + "_distance_summary.csv"
@@ -1539,16 +1445,12 @@ def make_joint_group_umap_pdf(
         distances_all = pd.DataFrame()
         summary_all = pd.DataFrame()
 
-    # ========================================================
     # Save UMAP coordinates
-    # ========================================================
 
     joint["UMAP1"] = embedding[:, 0]
     joint["UMAP2"] = embedding[:, 1]
 
-    # ========================================================
     # Validate plotting columns
-    # ========================================================
 
     cat_cols = [
         c
@@ -1570,15 +1472,11 @@ def make_joint_group_umap_pdf(
     if missing_cols:
         logger.warning(f"plotting columns not found: {sorted(missing_cols)}")
 
-    # ========================================================
     # PDF
-    # ========================================================
 
     with PdfPages(out_pdf) as pdf:
 
-        # ====================================================
         # Page 1: Group membership
-        # ====================================================
 
         fig, ax = plt.subplots(
             figsize=(10, 7)
@@ -1648,12 +1546,10 @@ def make_joint_group_umap_pdf(
 
         plt.close(fig)
 
-        # ====================================================
         # Categorical metadata
         #
         # Color = metadata
         # Shape = group
-        # ====================================================
 
         for col in cat_cols:
 
@@ -1699,9 +1595,7 @@ def make_joint_group_umap_pdf(
 
             plt.close(fig)
 
-        # ====================================================
         # Numeric metadata
-        # ====================================================
 
         for col in num_cols:
 
@@ -1728,9 +1622,7 @@ def make_joint_group_umap_pdf(
 
             plt.close(fig)
 
-        # ====================================================
         # Matched samples
-        # ====================================================
 
         if match_col is not None:
 
@@ -1766,9 +1658,7 @@ def make_joint_group_umap_pdf(
 
                 plt.close(fig)
 
-        # ====================================================
         # Matched samples CONNECTED by lines
-        # ====================================================
 
         if match_col is not None and match_col in joint.columns:
 
@@ -1795,9 +1685,7 @@ def make_joint_group_umap_pdf(
 
     logger.info(f"Saved PDF to: {out_pdf}")
 
-    # ========================================================
     # Attach results to returned dataframe
-    # ========================================================
 
     joint.attrs["distances"] = distances_all
     joint.attrs["distance_summary"] = summary_all
@@ -2279,9 +2167,7 @@ def make_joint_three_group_umap_pdf(
         group3_label,
     ]
 
-    # ========================================================
     # Load features
-    # ========================================================
 
     logger.info(f"Loading {group1_label} embeddings...")
 
@@ -2307,9 +2193,7 @@ def make_joint_three_group_umap_pdf(
         sample_ids=group3_sample_ids,
     )
 
-    # ========================================================
     # Metadata
-    # ========================================================
 
     group1_metadata = load_metadata(
         metadata_path=Path(group1_metadata_path),
@@ -2326,9 +2210,7 @@ def make_joint_three_group_umap_pdf(
         sample_id_col=group3_id_col,
     )
 
-    # ========================================================
     # Merge metadata
-    # ========================================================
 
     group1 = merge_metadata(
         features=group1_features,
@@ -2348,9 +2230,7 @@ def make_joint_three_group_umap_pdf(
         metadata_id_col=group3_id_col,
     )
 
-    # ========================================================
     # Source
-    # ========================================================
 
     group1["source"] = group1_label
     group2["source"] = group2_label
@@ -2360,9 +2240,7 @@ def make_joint_three_group_umap_pdf(
     logger.info(f"{group2_label}: {len(group2)}")
     logger.info(f"{group3_label}: {len(group3)}")
 
-    # ========================================================
     # Combine
-    # ========================================================
 
     joint = pd.concat(
         [
@@ -2376,17 +2254,13 @@ def make_joint_three_group_umap_pdf(
 
     logger.info(f"Joint: {len(joint)}")
 
-    # ========================================================
     # Feature matrix
-    # ========================================================
 
     X = np.stack(
         joint["features"].to_numpy()
     )
 
-    # ========================================================
     # UMAP / Harmony UMAP
-    # ========================================================
 
     if use_harmony:
 
@@ -2455,9 +2329,7 @@ def make_joint_three_group_umap_pdf(
     joint["UMAP1"] = embedding[:, 0]
     joint["UMAP2"] = embedding[:, 1]
 
-    # ========================================================
     # Plot columns
-    # ========================================================
 
     cat_cols = [
         c
@@ -2471,9 +2343,7 @@ def make_joint_three_group_umap_pdf(
         if c in joint.columns
     ]
 
-    # ========================================================
     # PDF
-    # ========================================================
 
     out_pdf = Path(out_pdf)
 
@@ -2490,9 +2360,7 @@ def make_joint_three_group_umap_pdf(
 
     with PdfPages(out_pdf) as pdf:
 
-        # ====================================================
         # Page 1 — groups
-        # ====================================================
 
         fig, ax = plt.subplots(
             figsize=(10, 7)
@@ -2552,9 +2420,7 @@ def make_joint_three_group_umap_pdf(
         pdf.savefig(fig)
         plt.close(fig)
 
-        # ====================================================
         # Categorical metadata
-        # ====================================================
 
         for col in cat_cols:
 
@@ -2597,9 +2463,7 @@ def make_joint_three_group_umap_pdf(
             pdf.savefig(fig)
             plt.close(fig)
 
-        # ====================================================
         # Numeric metadata
-        # ====================================================
 
         for col in num_cols:
 

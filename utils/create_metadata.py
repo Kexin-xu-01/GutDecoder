@@ -225,8 +225,6 @@ def build_merged_counts(
             prefixes = list(prefixes)
 
         rename_col = spec.get("rename_col")  # may be None
-
-        # call and concat counts
         df_counts = _concat_counts_for_paths(paths_list, prefixes, rename_col, count_func, save_csv=save_csv, auto_prefix=auto_prefix)
 
         # store for inspection
@@ -348,8 +346,6 @@ def return_qc(
 
     def safe_mean(series):
         return round(float(pd.Series(series).mean()), round_decimals)
-
-    # iterate sample folders
     for sample_dir in sorted(root.iterdir()):
         if not sample_dir.is_dir():
             continue
@@ -370,8 +366,6 @@ def return_qc(
             continue
 
         sample_id = sample_dir.name
-
-        # load adata
         adata = sc.read_h5ad(adata_file)
 
         obs = adata.obs

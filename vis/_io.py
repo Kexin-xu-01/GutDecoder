@@ -29,7 +29,7 @@ from loguru import logger
 from ._helpers import _safe_read_json, _find_col_ci
 
 
-# --- Count training patches ----#
+# Count training patches ----#
 def _dataset_prefixes(dataset: str):
     """
     XeniumPR10   -> ['XeniumPR10']
@@ -104,7 +104,7 @@ def add_num_training_patches_mean(
             return np.nan
         return pd.to_numeric(df[col], errors="coerce").dropna().mean()
 
-    # --- resolve commonly used columns case-insensitively ---
+    # resolve commonly used columns case-insensitively
     col_sample_id_xen = _find_col_ci(xen, ["sample_id"])
 
     # xenium means
@@ -157,7 +157,7 @@ def summarize_runs(root_dir):
         num_genes = None
         dataset_name = None
 
-        # --- find config.json and parse basics ---
+        # find config.json and parse basics
         config_dir = None
         for dirpath, _, filenames in os.walk(run_path):
             if "config.json" in filenames:
@@ -175,7 +175,7 @@ def summarize_runs(root_dir):
                 config_found = True
                 break
 
-                   # --- try to locate and count genes in <gene_list>.json ---
+                   # try to locate and count genes in <gene_list>.json
         def _try_count_genes(path):
             payload = _safe_read_json(path)
             if isinstance(payload, dict) and isinstance(payload.get("genes"), list):
@@ -187,7 +187,7 @@ def summarize_runs(root_dir):
         if gene_list:
             candidates = []
 
-            # 3) under eval/data/<dataset_name>/<gene_list>
+            # under eval/data/<dataset_name>/<gene_list>
             if dataset_name:
                 data_root = DEFAULT_SPLITS_ROOT
                 candidates.append(os.path.join(data_root, str(dataset_name), gene_list))
@@ -213,9 +213,7 @@ def summarize_runs(root_dir):
                     highest_std = best_entry["pearson_std"]
                     best_model = best_entry["encoder_name"]
 
-        # -------------------
         # Discover encoders from enc_results.json files under run_path/<dataset>/
-        # -------------------
         encoders_set = set()
         for dirpath, dirnames, filenames in os.walk(run_path):
             # only consider enc_results.json files (case-sensitive as provided)
@@ -238,7 +236,6 @@ def summarize_runs(root_dir):
         slide_emb_root = config_data.get("slide_emb_root")
         encoder_root_name = Path(slide_emb_root).name if slide_emb_root else None
         encoder_short_name = encoder_root_name.replace("slide_features_", "") if encoder_root_name else None
-
 
 
         summary.append({
@@ -270,7 +267,7 @@ def summarize_runs(root_dir):
         broad_csv=DEFAULT_BROAD_METADATA,
     )
 
-    # --- Sort by dataset and highest mean ---
+    # Sort by dataset and highest mean
     if not df.empty:
         df = df.sort_values(by=["dataset", 'gene_list', "highest_pearson_mean"], ascending=[True, True, False]).reset_index(drop=True)
 
@@ -367,13 +364,13 @@ def annotate_genes_with_curated(df_genes: pd.DataFrame, path_meta = DEFAULT_CURA
 
     m = df_meta.copy()
 
-    # 1) rename the two columns exactly as you showed
+    # rename the two columns exactly as you showed
     m = m.rename(columns={
         "Where?": "cell_type",
         "Where?.1": "condition"
     })
 
-    # 2) build the three mapping frames (one row per gene)
+    # build the three mapping frames (one row per gene)
     # panel (480 list)
     if "480 panel full list" in m.columns:
         df_panel = (m[["480 panel full list"]].dropna().rename(columns={"480 panel full list": "gene"}))
@@ -445,14 +442,14 @@ def annotate_genes_with_curated(df_genes: pd.DataFrame, path_meta = DEFAULT_CURA
     coeliac= _prep_key(df_coeliac, "gene")
     tcr= _prep_key(df_tcr, "gene")
 
-    # 4) left-merge the three annotations
+    # left-merge the three annotations
     out = g.merge(p[["_gk", "panel"]], on="_gk", how="left")
     out = out.merge(ct[["_gk", "cell_type"]], on="_gk", how="left")
     out = out.merge(cond[["_gk", "condition"]], on="_gk", how="left")
     out = out.merge(coeliac[["_gk", "coeliac"]], on="_gk", how="left")
     out = out.merge(tcr[["_gk", "tcr"]], on="_gk", how="left")
 
-    # 5) clean up
+    # clean up
     out = out.drop(columns=["_gk"]).convert_dtypes().fillna(pd.NA)
     return out
 
@@ -583,7 +580,7 @@ def sample_corr_stats_for_run(run: str, samples, runs_root: str = DEFAULT_RUNS_R
     return stats
 
 
-# ----------------------------------------------------------------------------- presentation loaders
+# presentation loaders
 
 DEFAULT_MODEL_META_XLSX = MODEL_META_XLSX
 

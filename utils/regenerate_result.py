@@ -18,9 +18,7 @@ All outputs produced by this script are fully JSON-valid and compatible with
 the original HEST evaluation methodology.
 """
 
-# ---------------------------------------------------------------------
 # Output Files
-# ---------------------------------------------------------------------
 # This script produces the following cleaned and regenerated files:
 #
 #   - results_kfold.json   : cleaned per-model evaluation results
@@ -28,17 +26,13 @@ the original HEST evaluation methodology.
 #   - dataset_results.json : cross-dataset summary with rankings
 #   - dataset_results.csv  : flat table of all datasets and models
 
-# ---------------------------------------------------------------------
 # Notes
-# ---------------------------------------------------------------------
 # - This script is intended to be run AFTER HEST model evaluation.
 # - It is safe to re-run; outputs will be overwritten deterministically.
 # - Results are consistent with the original HEST benchmark definitions:
 #   https://github.com/mahmoodlab/HEST
 
-# ---------------------------------------------------------------------
 # Example entry point
-# ---------------------------------------------------------------------
 # This block defines how to run the script on a specific HEST evaluation
 # run directory. The run directory is expected to contain one subfolder
 # per dataset, each with per-model evaluation outputs.
@@ -51,13 +45,12 @@ the original HEST evaluation methodology.
 #         └── ...
 #
 # For each dataset directory, this script will:
-#   1) Clean per-model results_kfold.json files
-#   2) Regenerate enc_results.json
+# Clean per-model results_kfold.json files
+# Regenerate enc_results.json
 #
 # After processing all datasets, it will:
-#   3) Regenerate dataset_results.json and dataset_results.csv
+# Regenerate dataset_results.json and dataset_results.csv
 #      summarizing performance across all datasets
-# ---------------------------------------------------------------------
 
 # how to run
 # regenerate_all_results(os.path.join(RESULTS_ROOT, "run_25-12-16-17-30-07"))
@@ -111,7 +104,6 @@ def fix_results_kfold(results_path):
         json.dump(data, f, indent=4)
 
     return data
-
 
 
 def is_dataset_dir(p: Path) -> bool:
@@ -172,26 +164,12 @@ def regenerate_enc_results(dataset_dir):
     return dataset, enc_results
 
     
-
 def regenerate_dataset_results(root_dir):
     """Summarize all datasets into dataset_results.json and a wide-format dataset_results.csv.
 
     Columns in the CSV are ordered so the encoder with the highest average pearson_mean
     is placed first (after the 'dataset' column), then the next best, etc.
     """
-    # dataset_results = {"results": []}
-    # encoder_scores = {}
-
-    # # Collect per-dataset results
-    # dataset_rows = []
-
-    # for dataset_dir in Path(root_dir).iterdir():
-    #     if not dataset_dir.is_dir():
-    #         continue
-    #     enc_results_path = dataset_dir / "enc_results.json"
-    #     if not enc_results_path.exists():
-    #         continue
-
     root_dir = Path(root_dir)
     dataset_results = {"results": []}
     encoder_scores = {}
@@ -312,7 +290,5 @@ def regenerate_all_results(run_dir):
 
     # Cross-dataset aggregation
     regenerate_dataset_results(run_dir)
-
-
 
 

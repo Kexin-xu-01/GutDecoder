@@ -53,7 +53,7 @@ def plot_corrs_by_sample(
     if group_by is not None and group_by not in df.columns:
         raise ValueError(f"{group_by} must be a column in df")
 
-    # ---------------- ordering of x-axis ----------------
+    # ordering of x-axis
     if group_by is not None:
         # Order groups by mean corr, then samples within each group
         group_means = df.groupby(group_by)["corr"].mean().sort_values(ascending=False)
@@ -76,7 +76,7 @@ def plot_corrs_by_sample(
 
     df["test_sample"] = pd.Categorical(df["test_sample"], categories=x_order, ordered=True)
 
-    # ---------------- plotting ----------------
+    # plotting
     fig, ax = plt.subplots(figsize=figsize)
 
     if group_by is not None:
@@ -103,7 +103,7 @@ def plot_corrs_by_sample(
         # no legend
         ax.set_xlabel("Test Sample")
 
-    # ---------------- styling ----------------
+    # styling
     plt.xticks(rotation=60, ha="right")
     ax.set_ylabel("Gene Correlation")
     ax.set_title(_format_title("Per-sample correlation", dataset_name, encoder_name))
@@ -172,8 +172,6 @@ def plot_pearson_vs_sample_metadata(
     else:
         runs = []
         color_map = {}
-
-    # loop over metadata columns
     for meta in metadata_cols_preference[:6]:
         meta_col = _find_col_ci(merged, [meta])
         if meta_col is None:

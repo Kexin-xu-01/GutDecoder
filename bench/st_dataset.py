@@ -8,7 +8,6 @@ def log_adata(adata: sc.AnnData, smooth=False) -> sc.AnnData:
     """
     filtered_adata = adata.copy()
     filtered_adata.X = filtered_adata.X.astype(np.float64)
-    #print(adata.obs)
     if smooth:
         adata_df = adata.to_df()
         for index, df_row in adata.obs.iterrows():

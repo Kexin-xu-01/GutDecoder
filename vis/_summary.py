@@ -539,7 +539,7 @@ def plot_dataset_mean_across_runs(
     runs_root = Path(runs_root)
     splits_root = Path(splits_root)
 
-    # 1) Determine the sample set for the provided dataset_or_run
+    # Determine the sample set for the provided dataset_or_run
     samples = []
     sample_col_candidates = ["test_sample", "sample_id", "SampleID"]
 
@@ -570,7 +570,7 @@ def plot_dataset_mean_across_runs(
     if not samples:
         raise ValueError("No samples found for the provided dataset/run.")
 
-    # 2) Candidate runs discovery / normalization
+    # Candidate runs discovery / normalization
     if candidate_runs is None:
         if not auto_discover_runs:
             raise ValueError("candidate_runs is None and auto_discover_runs is False.")
@@ -578,7 +578,7 @@ def plot_dataset_mean_across_runs(
 
     candidate_runs = [str(r).split("/")[-1] for r in candidate_runs]
 
-    # 3) Per run: mean of per-sample mean Pearson, and SD across all gene-level correlations
+    # Per run: mean of per-sample mean Pearson, and SD across all gene-level correlations
     results = []
     for run_name in candidate_runs:
         loaded = load_run_sample_corrs(run_name, samples, str(runs_root), str(splits_root))
@@ -606,7 +606,7 @@ def plot_dataset_mean_across_runs(
     df_stats = pd.DataFrame(results).convert_dtypes()
     df_stats = df_stats.sort_values("mean_of_sample_means", ascending=False).reset_index(drop=True)
 
-    # 4) Plot with sd_on_genes as error bar and annotate n_genes_used on each bar
+    # Plot with sd_on_genes as error bar and annotate n_genes_used on each bar
     fig, ax = plt.subplots(figsize=(max(8, len(df_stats) * 0.9), 6))
     x = np.arange(len(df_stats))
     means = df_stats["mean_of_sample_means"].astype(float).to_numpy()
@@ -638,8 +638,6 @@ def plot_dataset_mean_across_runs(
         ax.legend(handles, datasets_seen, title="Dataset", bbox_to_anchor=(1.02, 1), loc="upper left")
 
     fig.tight_layout()
-
-    # save
     fname = outdir / f"{_safe_filename(str(label_name))}_mean_across_runs.png"
     fig.savefig(fname, dpi=dpi, bbox_inches="tight")
     if show:
@@ -753,17 +751,17 @@ def generate_all_plots(
     outdir = run_dir / "plots"
     outdir.mkdir(parents=True, exist_ok=True)
 
-    # 1) Best model + gene correlations (k-fold aware)
+    # Best model + gene correlations (k-fold aware)
     best, dataset_name, df_genes = extract_best_model_gene_corrs(run, runs_root=runs_root, verbose=False)
     encoder_name = best.get("encoder_name", "Unknown")
 
-    # 2) Splits (+ optional HEST directory metadata inside get_test_splits)
+    # Splits (+ optional HEST directory metadata inside get_test_splits)
     df_splits = get_test_splits(run, runs_root=runs_root, splits_root=splits_root, extra_metadata_csv=extra_metadata_csv)
 
-    # 3) Long per-split df
+    # Long per-split df
     df_long = merge_kfold_gene_corrs_with_test_metadata(df_genes, df_splits)
 
-    # 4) Curated annotations (optional; needed for gene-level grouping by panel/cell_type/condition)
+    # Curated annotations (optional; needed for gene-level grouping by panel/cell_type/condition)
     curated_ok = isinstance(curated_xlsx, str) and Path(curated_xlsx).exists()
     if curated_ok:
         df_genes_annot = annotate_genes_with_curated(df_genes, curated_xlsx)
@@ -774,7 +772,7 @@ def generate_all_plots(
 
     arts: Dict[str, Path] = {}
 
-    # ---------------- Base plots (always) ----------------
+    # Base plots (always)
     fig = compare_models(run, runs_root=runs_root, show=show)
     if fig is not None:
         p = (Path(runs_root) / run / "plots" / "model_comparison.png")
@@ -809,7 +807,7 @@ def generate_all_plots(
     plt.close(fig)
     arts["per_sample"] = p
 
-    # ---------------- Gene-level grouped barplots (only what user requested) ----------------
+    # Gene-level grouped barplots (only what user requested)
     # normalize group_by to a list
     requested_groups: List[str] = []
     if group_by is not None:
@@ -836,7 +834,7 @@ def generate_all_plots(
             arts[f"gene_barplot_by_{gb}"] = p
         # if not curated / or column empty -> skip
 
-    # ---------------- Per-sample grouped (optional, if user also wants these) ----------------
+    # Per-sample grouped (optional, if user also wants these)
     # If you also want to produce per-sample grouped plots based on the same `group_by` items:
     for gb in requested_groups:
         # pick annotated long df if it has the column; else fall back to df_long
@@ -856,7 +854,7 @@ def generate_all_plots(
         plt.close(fig)
         arts[f"per_sample_by_{gb}"] = p
 
-    # ---- Per-sample Pearson vs sample metadata (n_obs / mean_total_counts / ... ) ----
+    # Per-sample Pearson vs sample metadata (n_obs / mean_total_counts / ... )
     arts.update(plot_pearson_vs_sample_metadata(df_long=df_long, df_splits=df_splits, outdir=outdir, show=show))
 
     png_files = sorted(outdir.glob("*.png"))
@@ -870,8 +868,6 @@ def compare_runs_and_plot(run_a, label_a, run_b, label_b):
     # extract
     _, _, df_a = extract_best_model_gene_corrs(run=run_a)
     _, _, df_b = extract_best_model_gene_corrs(run=run_b)
-
-    # get intersection
     genes_a = set(df_a["gene"])
     genes_b = set(df_b["gene"])
     common = sorted(genes_a & genes_b)
@@ -962,7 +958,7 @@ def grid_plot_for_datasets(
     all_stats = []
     plotted_datasets = []  # keep order
 
-    # 1) call the dataset-level routine for each requested dataset
+    # call the dataset-level routine for each requested dataset
     failures = []
     for ds in datasets:
         try:
@@ -989,10 +985,9 @@ def grid_plot_for_datasets(
 
     df_combined = pd.concat(all_stats, ignore_index=True).convert_dtypes()
 
-    # 2) Build multi-page PDF with per-dataset small subplots (per_page datasets per page)
+    # Build multi-page PDF with per-dataset small subplots (per_page datasets per page)
     pdf_path = outdir / "datasets_mean_across_runs_grid.pdf"
     with PdfPages(pdf_path) as pdf:
-        # iterate pages
         for page_start in range(0, len(plotted_datasets), per_page):
             page_ds = plotted_datasets[page_start:page_start + per_page]
             fig, axes = plt.subplots(nrows=nrows, ncols=ncols,
@@ -1066,7 +1061,7 @@ def grid_plot_for_datasets(
     return pdf_path, df_combined
 
 
-# ----------------------------------------------------------------------------- scaling relationships
+# scaling relationships
 
 def _boxes_overlap(box1, box2, padding=2):
     """True when two rendered text boxes (display coordinates) overlap."""
@@ -1177,7 +1172,7 @@ def plot_scaling_relationships(
     return fig
 
 
-# ----------------------------------------------------------------------------- dataset violin
+# dataset violin
 
 def plot_dataset_violin(
     plot_df: pd.DataFrame,

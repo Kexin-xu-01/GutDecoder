@@ -352,7 +352,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # --- Load YAML config if provided ---
+    # Load YAML config if provided
     if args.config:
         with open(args.config, "r") as f:
             cfg = yaml.safe_load(f)

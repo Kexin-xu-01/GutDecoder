@@ -417,9 +417,7 @@ def _fit_split(X_train, X_test, y_train, y_test, args, genes):
     """Fit preprocessing on training rows only, then fit the existing regressor."""
     model_bundle = {}
 
-    # -------------------------
     # Optional PCA
-    # -------------------------
     if args.dimreduce == "PCA":
         from sklearn.decomposition import PCA
 
@@ -443,9 +441,7 @@ def _fit_split(X_train, X_test, y_train, y_test, args, genes):
 
         model_bundle["pca_pipeline"] = pipe
 
-    # -------------------------
     # Regression
-    # -------------------------
     probe_results, linprobe_dump, reg = train_test_reg(
         X_train,
         X_test,
@@ -506,9 +502,7 @@ def predict_single_split(
 
     use_slide_embedding = slide_emb_root is not None
 
-    # -------------------------
     # Resolve split paths
-    # -------------------------
     if not os.path.isfile(train_split):
         train_split = os.path.join(bench_data_root, "splits", train_split)
     if not os.path.isfile(test_split):
@@ -517,15 +511,11 @@ def predict_single_split(
     train_df = pd.read_csv(train_split)
     test_df = pd.read_csv(test_split)
 
-    # -------------------------
     # Tile embedding directory
-    # -------------------------
     embedding_dir = os.path.join(args.embed_dataroot, dataset_name, model_name)
     os.makedirs(embedding_dir, exist_ok=True)
 
-    # -------------------------
     # Embed patches if requested
-    # -------------------------
     logger.info(f"Embedding tiles for {dataset_name} using {model_name} encoder")
 
     # A custom encoder can't be identified by name, so cached embeddings may be stale.
@@ -548,9 +538,7 @@ def predict_single_split(
                 encoder.to(device)
             _extract_sample_embeddings(tile_h5_path, embed_path, encoder, args, device)
 
-    # -------------------------
     # Save config
-    # -------------------------
     os.makedirs(save_dir, exist_ok=True)
 
     config_dict = vars(args).copy()
@@ -562,25 +550,19 @@ def predict_single_split(
     with open(os.path.join(save_dir, "config.json"), "w") as f:
         json.dump(config_dict, f, sort_keys=True, indent=4)
 
-    # -------------------------
     # Load gene list
-    # -------------------------
     gene_list = args.gene_list
     logger.info(f"using gene_list {gene_list}")
 
     with open(os.path.join(bench_data_root, gene_list), "r") as f:
         genes = json.load(f)["genes"]
 
-    # -------------------------
     # Load embeddings and expression
-    # -------------------------
     all_split_assets, test_sample_ids, test_sample_barcodes = _load_split_assets(
         train_df, test_df, args, bench_data_root, embedding_dir, genes, slide_emb_root, fusion,
     )
 
-    # -------------------------
     # Train/test arrays
-    # -------------------------
     X_train = all_split_assets["train"]["embeddings"]
     y_train = all_split_assets["train"]["adata"]
 
@@ -618,9 +600,7 @@ def predict_single_split(
         logger.info(f"Tile-only train shape: {X_train.shape}")
         logger.info(f"Tile-only test shape: {X_test.shape}")
 
-    # -------------------------
     # Save outputs
-    # -------------------------
     probe_summary = {}
     probe_summary.update({"n_train": len(y_train), "n_test": len(y_test)})
     probe_summary.update({key: val for key, val in probe_results.items()})
@@ -787,7 +767,6 @@ def benchmark(encoder: torch.nn.Module, enc_transf: Callable, precision: torch.d
     dataset_perfs, perf_per_enc = benchmark_grid(args, device, encoders, datasets, save_dir=save_dir,  slide_emb_root=slide_emb_root, fusion=fusion, custom_encoder=custom_encoder)
     
     return dataset_perfs, perf_per_enc
-    
     
     
 if __name__ == '__main__':

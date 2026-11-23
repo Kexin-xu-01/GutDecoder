@@ -30,7 +30,7 @@ __all__ = [
 ]
 
 
-# ----------------------------------------------------------------------------- building blocks
+# building blocks
 
 def layer_values(adata, layer: str, gene: str) -> np.ndarray:
     """1-D array of ``adata.layers[layer]`` for ``gene``; KeyError if the gene is absent."""
@@ -81,7 +81,7 @@ def _save_pdf_png(fig, out_pdf, dpi: int, **kwargs) -> None:
     fig.savefig(out_pdf.with_suffix(".png"), dpi=dpi, bbox_inches="tight", **kwargs)
 
 
-# ----------------------------------------------------------------------------- figures
+# figures
 
 def show_pred_target(
     adata,

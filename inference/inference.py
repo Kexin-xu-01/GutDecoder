@@ -17,7 +17,6 @@ from gutdecoder.config import RESULTS_ROOT as _DEFAULT_RESULTS_ROOT
 from loguru import logger
 
 
-
 def load_models_from_directories(base_path):
     """
     Load all trained regression models (one model for each cross-validation split)
@@ -109,9 +108,6 @@ def predict_with_models(X_test, models):
 
     sd_predictions = np.std(predictions, axis=0)
 
-    # Set any negative predictions to 0
-    # average_predictions = np.where(average_predictions < 0, 0.0, average_predictions)
-
     return average_predictions, sd_predictions, predictions, model_names
 
 
@@ -191,10 +187,6 @@ def infer(
         # Make predictions and aggregate results across cross-validation regression models
         average_predictions, sd_predictions, per_model_predictions, model_names = predict_with_models(X_test, models)
 
-        # Convert the predictions to a DataFrame (rounded to 2 decimal places)
-        # prediction = pd.DataFrame(np.round(average_predictions, 2), index=coords, columns=gene_names)
-        # prediction = prediction.reset_index(names="coords")
-
         coords = assets["coords"]  # numpy array shape (N,2)
         logger.debug(f"Coords shape: {coords.shape}")
         assert len(coords) == average_predictions.shape[0], "coords and predictions must have same number of rows"
@@ -220,7 +212,6 @@ def infer(
         x_max = meta['x'].max()
         x_min = meta['x'].min()
 
-        #n = ((x_max - x_min) / (spot_size_um / pixel_size_he))
         n = ((x_max - x_min) / patch_pixel)
         n = math.ceil(n)
 
@@ -235,14 +226,12 @@ def infer(
         adata.obs['array_row'] = np.arange(len(adata.obs)) // n
         adata.obs.index = [str(row).zfill(3) + 'x' + str(col).zfill(3) for row, col in  zip(adata.obs['array_row'], adata.obs['array_col'])]
 
-        # --- Add SD into layers ---
+        # Add SD into layers
         # layers must be same shape as adata.X: (n_obs, n_vars)
         adata.layers['pred_sd'] = sd_predictions
 
-        # Set any negative predictions to 0
-        # average_predictions = np.where(average_predictions < 0, 0.0, average_predictions)
-        # sc.pp.filter_cells(adata, min_counts=1) # this doesn't work with lots of negative prediction
-
+        # Negative predictions are kept: clipping them, or sc.pp.filter_cells(min_counts=1),
+        # would drop many spots.
         # filter out spots where all genes are predicted zero
         nonzero_mask = (np.abs(adata.X).sum(axis=1) > 0)
         adata = adata[nonzero_mask].copy()
@@ -251,13 +240,11 @@ def infer(
 
         adata.var["mean_expression"] = prediction.mean(axis=0)
 
-        # ---- Mean SD per gene (across spots) ----
+        # Mean SD per gene (across spots)
         adata.var["mean_pred_sd_per_gene"] = pred_sd.mean(axis=0)
 
-        # ---- Mean SD per spot (across genes) ----
+        # Mean SD per spot (across genes)
         adata.obs["mean_pred_sd_per_spot"] = pred_sd.mean(axis=1)
-
-        #adata.obs.index = [str(row).zfill(7) + 'x' + str(col).zfill(7) for row, col in  zip(adata.obs['pxl_row_in_fullres'], adata.obs['pxl_col_in_fullres'])]
 
         out_filename = f"{name_data}.h5ad"
         out_path = os.path.join(out_dir, 'adata')

@@ -1,57 +1,13 @@
 """
-Spatial / Patch-Vis PDF utilities — quick usage guide
-----------------------------------------------------
+Image-grid PDFs per run, and one combined PDF across runs.
 
-This file contains two primary operations you will use in sequence:
+Typical use:
+    generate_plot_per_run(XENIUM_DATA_ROOT, datasets=["XeniumPR1"], match="spatial_plots")
+    combine_pdfs(XENIUM_DATA_ROOT, ["XeniumPR1", "XeniumPR2"], "all_spatial_plots.pdf",
+                 pdf_name="spatial_plots.pdf")
 
-1) generate_plot_per_run(...)
-   - Run this **per run / per dataset folder** to create a PDF of images inside that
-     dataset directory.
-   - Example: for a Xenium run folder `XeniumPR1` run:
-         generate_plot_per_run(base_root="/project/gutdecoder/kxu/hest/xenium_data",
-                               datasets=["XeniumPR1"],
-                               match="spatial_plots")         # exact filename spatial_plots.png
-     or
-         generate_plot_per_run(..., match="patch_vis")        # matches *patch_vis*.png
-   - Common options:
-       - match="spatial_plots"    → looks for exactly `spatial_plots.png` and saves `spatial_plots.pdf`
-       - match="patch_vis"        → looks for `*patch_vis*.png` and saves `patch_vis.pdf`
-       - match="*patch_vis*.png"  → arbitrary glob pattern supported
-       - overwrite=True           → regenerate the PDF even if it already exists
-       - metadata_path=...        → path to xenium_directory.xlsx to attach Patient/Slide/Type/Location
-
-   - Output: a PDF saved inside the run folder (e.g., `.../XeniumPR1/spatial_plots.pdf`).
-
-2) combine_pdfs(...)
-   - After you have generated PDFs for multiple runs, use this to combine them into one
-     consolidated PDF (with a title page per run).
-   - Example:
-         combine_pdfs(root_dir="/project/gutdecoder/kxu/hest/xenium_data",
-                      folder_names=["XeniumPR1","XeniumPR2","XeniumR1"],
-                      output_filename="/project/gutdecoder/kxu/hest/all_spatial_plots.pdf",
-                      pdf_name="spatial_plots.pdf")
-   - Notes:
-       - `pdf_name` should match the filenames created by generate_plot_per_run (e.g. "patch_vis.pdf").
-       - The combiner adds a simple title page for each run folder and rescales pages for consistent width.
-       - If no run PDFs are found, no output will be written.
-
-Recommended workflow
---------------------
-1. For each run in your dataset list, call generate_plot_per_run(...) with the desired `match`
-   (spatial_plots or patch_vis). This creates a per-run PDF inside each run folder.
-2. Once all per-run PDFs exist, call combine_pdfs(...) with the list of run folder names you want
-   combined into one master PDF.
-
-Implementation details / caveats
--------------------------------
-- Sample ID parsing: The script extracts canonical run prefixes like `XeniumPR1` or `XeniumR1`
-  from dataset names such as `XeniumPR1_cell_l3` or `XeniumPR1_25_um_0.125_um_px`.
-- File matching:
-    - `match="spatial_plots"` — exact file name `spatial_plots.png` (recommended if you want exact match).
-    - `match="patch_vis"` — a flexible pattern `*patch_vis*.png`.
-    - You can also pass any glob string (e.g., "*patch_vis_v2*.png").
-- The combiner writes output only if at least one run PDF was appended; missing runs will be printed.
-
+`match` is "spatial_plots" (exactly spatial_plots.png), "patch_vis" (*patch_vis*.png) or any glob;
+the per-run PDF is named after it. combine_pdfs adds a title page per run and scales pages to one width.
 """
 
 from pathlib import Path
@@ -173,8 +129,6 @@ def generate_plot_per_run(
         else:
             # sanitize pattern to a filename
             out_filename = f"{re.sub(r'[^0-9A-Za-z]+', '_', match).strip('_')}.pdf"
-
-    # load metadata if available
     if metadata_path is None:
         meta_df = pd.DataFrame()
     else:

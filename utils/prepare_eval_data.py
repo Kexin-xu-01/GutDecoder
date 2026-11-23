@@ -1,4 +1,4 @@
-# --- Standard library ---
+# Standard library
 import os
 import json
 import re
@@ -8,12 +8,12 @@ from pathlib import Path
 from typing import List, Dict, Tuple, Optional, Union
 
 
-# --- Third-party ---
+# Third-party
 import numpy as np
 import pandas as pd
 import scanpy as sc
 
-# --- HEST ---
+# HEST
 from hest import iter_hest
 from hest.utils import get_k_genes
 from gutdecoder.utils.split_plan import create_legacy_splits as create_splits
@@ -23,7 +23,7 @@ from gutdecoder.config import HEST_METADATA_CSV as _DEFAULT_METADATA_CSV
 from loguru import logger
 
 
-# ---------- helpers ----------
+# helpers
 
 
 def _sanitize_tag(s: str, maxlen: int = 8) -> str:
@@ -136,7 +136,6 @@ def _discover_samples_from_roots(
     return samples
 
 
-
 def _transfer(src: Optional[Path], dst: Path, label: str, symlink: bool, missing_list: list):
     if src is None or not Path(src).exists():
         missing_list.append((dst.stem, label, str(src) if src is not None else "<none>"))
@@ -149,7 +148,6 @@ def _transfer(src: Optional[Path], dst: Path, label: str, symlink: bool, missing
         os.symlink(src, dst)
     else:
         shutil.copy(src, dst)
-
 
 
 def _discover_samples_from_eval_dirs(
@@ -313,7 +311,7 @@ def write_var_k_genes_from_paths(
     if exclude_keywords is None:
         exclude_keywords = ["NegControl", "Codeword", "Intergenic_Region", "Control", "BLANK","Intergenic"]
 
-    # ---- Load all adatas
+    # Load all adatas
     adata_list = []
     for p in adata_paths:
         with warnings.catch_warnings():
@@ -321,13 +319,13 @@ def write_var_k_genes_from_paths(
             ad = sc.read_h5ad(str(p))
         adata_list.append(ad)
 
-    # ---- UNION of all genes
+    # UNION of all genes
     gene_union = set()
     for ad in adata_list:
         gene_union |= set(ad.var_names)
     gene_union = sorted(gene_union)
 
-    # ---- ALL common genes (keyword-filtered only)
+    # ALL common genes (keyword-filtered only)
     common_genes = set(adata_list[0].var_names) if adata_list else set()
     for ad in adata_list[1:]:
         common_genes &= set(ad.var_names)
@@ -337,7 +335,7 @@ def write_var_k_genes_from_paths(
 
     all_common_genes = sorted([g for g in common_genes if _keep_keyword(g)])
 
-    # ---- Filtered common genes (expression threshold per sample)
+    # Filtered common genes (expression threshold per sample)
     filtered_sets = []
     for ad in adata_list:
         ad_tmp = ad[:, :].copy()
@@ -351,7 +349,7 @@ def write_var_k_genes_from_paths(
         [g for g in filtered_common if ("BLANK" not in g and "Control" not in g)]
     )
 
-    # ---- Determine actual k when requested as "auto"
+    # Determine actual k when requested as "auto"
     if isinstance(k, str) and k.lower() == "auto":
         # choose min(50, number of filtered common genes)
         k_actual = min(50, max(0, len(filtered_common_genes)))
@@ -364,8 +362,8 @@ def write_var_k_genes_from_paths(
     # override var_out_path filename to reflect actual k
     var_out_path = out_dir / f"var_{k_actual}genes.json"
 
-    # ---- Top-k variable/mean genes (now using k_actual)
-    # --- If no common gene, skip ---
+    # Top-k variable/mean genes (now using k_actual)
+    # If no common gene, skip
     if k_actual <= 0 or len(filtered_common_genes) == 0:
         logger.warning(
             f"No common genes found after filtering. "
@@ -409,7 +407,7 @@ def write_var_k_genes_from_paths(
     return var_k_genes, all_common_genes, filtered_common_genes, k_actual, str(var_out_path)
 
 
-# ---------- main entry ----------
+# main entry
 def create_benchmark_data_multislide(
     save_dir: str | Path,
     K: int | str,
@@ -437,7 +435,7 @@ def create_benchmark_data_multislide(
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1) Build slide roots list and discover samples across them
+    # Build slide roots list and discover samples across them
     base_root = Path(base_root)
     roots = [base_root / sd for sd in slide_subdirs]
     logger.info(f"Using slide roots: {roots}")
@@ -450,9 +448,7 @@ def create_benchmark_data_multislide(
     discovered_ids = sorted(samples.keys())
     logger.info(f"Discovered {len(discovered_ids)} samples: {discovered_ids}")
 
-    # -------------------------------------------------
     # 🔹 APPLY EXCLUSION
-    # -------------------------------------------------
     if exclude_ids:
         exclude_set = set(exclude_ids)
         before = len(discovered_ids)
@@ -472,7 +468,7 @@ def create_benchmark_data_multislide(
     discovered_ids = sorted(discovered_ids)
     logger.info(f"Final sample list ({len(discovered_ids)}): {discovered_ids}")
 
-    # 2) Map samples to patients from metadata_csv
+    # Map samples to patients from metadata_csv
     patient_map, meta_df_csv = _load_patient_map(metadata_csv)
     patients_for_ids, unresolved = _resolve_patient_ids(discovered_ids, patient_map, meta_df_csv)
 
@@ -486,7 +482,7 @@ def create_benchmark_data_multislide(
     if unresolved:
         logger.warning(f"{len(unresolved)} samples used fallback patient ids (no entry in metadata_csv): {unresolved[:20]}")
 
-    # 3) Compute var_k genes → var_{k}genes.json (calls helper that returns k and path)
+    # Compute var_k genes → var_{k}genes.json (calls helper that returns k and path)
     adata_paths = [samples[sid]["adata"] for sid in discovered_ids]
     provisional_var_json = save_dir / ("var_auto_genes.json" if isinstance(gene_k, str) and str(gene_k).lower() == "auto" else f"var_{gene_k}genes.json")
 
@@ -500,7 +496,7 @@ def create_benchmark_data_multislide(
 
     logger.info(f"Wrote {var_out_path} (top-{k_actual}, criteria={gene_criteria})")
 
-    # 4) K-fold splits using HEST's create_splits
+    # K-fold splits using HEST's create_splits
     # handle LOOCV (leave-one-(dataset_title,patient)-out)
     if isinstance(K, str) and str(K).lower() == "loocv":
         K = meta.groupby(["dataset_title", "patient"]).ngroups
@@ -532,7 +528,7 @@ def create_benchmark_data_multislide(
     per_patient.to_csv(splits_dir / "per_patient_metadata.csv", index=False)
     logger.info(f"Wrote per-patient metadata to {splits_dir/'per_patient_metadata.csv'}")
 
-    # 5) Copy/symlink assets
+    # Copy/symlink assets
     (save_dir / "patches").mkdir(exist_ok=True, parents=True)
     (save_dir / "patches" / "vis").mkdir(exist_ok=True, parents=True)
     (save_dir / "adata").mkdir(exist_ok=True, parents=True)

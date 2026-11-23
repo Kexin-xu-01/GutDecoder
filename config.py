@@ -16,21 +16,21 @@ def _path(env_var: str, default: str) -> str:
 
 HEST_ROOT = _path("GUTDECODER_HEST_ROOT", "/project/gutdecoder/kxu/hest")
 
-# --- Prediction / benchmark results ---
+# Prediction / benchmark results
 RESULTS_ROOT = _path("GUTDECODER_RESULTS_ROOT", f"{HEST_ROOT}/eval/ST_pred_results")
 RUNS_YAML = _path("GUTDECODER_RUNS_YAML", f"{HEST_ROOT}/metadata/runs.yaml")
 
-# --- Benchmark data (splits, adata, patches) and patch embeddings ---
+# Benchmark data (splits, adata, patches) and patch embeddings
 DATA_ROOT = _path("GUTDECODER_DATA_ROOT", f"{HEST_ROOT}/eval/data")
 EMBEDDING_ROOT = _path("GUTDECODER_EMBEDDING_ROOT", f"{HEST_ROOT}/eval/ST_data_emb")
 
-# --- Processed Xenium samples ---
+# Processed Xenium samples
 XENIUM_DATA_ROOT = _path("GUTDECODER_XENIUM_DATA_ROOT", f"{HEST_ROOT}/xenium_data")
 
-# --- Summary plot output directory ---
+# Summary plot output directory
 SUMMARY_PLOT_DIR = _path("GUTDECODER_SUMMARY_PLOT_DIR", f"{HEST_ROOT}/eval/summary_plots")
 
-# --- Metadata sheets ---
+# Metadata sheets
 CURATED_XLSX = _path("GUTDECODER_CURATED_XLSX", f"{HEST_ROOT}/metadata/curated_gene_list.xlsx")
 XENIUM_DIRECTORY_XLSX = _path("GUTDECODER_XENIUM_DIRECTORY_XLSX", f"{HEST_ROOT}/metadata/xenium_directory.xlsx")
 MODEL_META_XLSX = _path(

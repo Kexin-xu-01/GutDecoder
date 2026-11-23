@@ -53,9 +53,7 @@ Typical workflow
 """
 
 
-
 from __future__ import annotations
-
 
 
 import os
@@ -71,9 +69,7 @@ from pathlib import Path
 from typing import Union
 
 
-
 import numpy as np
-
 
 
 from loguru import logger
@@ -94,15 +90,10 @@ from ._reference import (
 )
 
 
-
 PathLike = Union[str, Path]
 
 
-
 _SUPPORTED_EXTENSIONS = SLIDE_EXTENSIONS
-
-
-
 
 
 def normalize_slide(
@@ -181,7 +172,6 @@ def normalize_slide(
         return output_path
 
 
-
     if reference is None:
 
         raise ValueError(
@@ -193,7 +183,6 @@ def normalize_slide(
         )
 
 
-
     ref_img = (
 
         load_reference(reference) if isinstance(reference, (str, Path))
@@ -203,11 +192,9 @@ def normalize_slide(
     )
 
 
-
     normaliser = get_normalizer(method, device=device)
 
     normaliser.fit(ref_img)
-
 
 
     with SlideSource(slide_path, target_mpp=target_mpp) as slide:
@@ -237,9 +224,6 @@ def normalize_slide(
     return output_path
 
 
-
-
-
 def _output_name(slide: Path) -> str:
     """Output file name for a slide: its name without the slide extension, plus .ome.tiff."""
     name = slide.name
@@ -257,12 +241,7 @@ def _output_collisions(slides: list[Path]) -> dict[str, list[Path]]:
     return {name: group for name, group in groups.items() if len(group) > 1}
 
 
-# ---------------------------------------------------------------------------
-
 # Worker for parallel batch processing
-
-# ---------------------------------------------------------------------------
-
 
 
 def _normalize_one(args: tuple) -> tuple[Path | None, str | None]:
@@ -307,15 +286,7 @@ def _normalize_one(args: tuple) -> tuple[Path | None, str | None]:
         return None, f"{slide_path}: {exc}\n{traceback.format_exc()}"
 
 
-
-
-
-# ---------------------------------------------------------------------------
-
 # Public batch API
-
-# ---------------------------------------------------------------------------
-
 
 
 def batch_normalize(
@@ -396,11 +367,9 @@ def batch_normalize(
     output_dir.mkdir(parents=True, exist_ok=True)
 
 
-
     if extensions is None:
 
         extensions = list(_SUPPORTED_EXTENSIONS)
-
 
 
     # CUDA contexts cannot be forked into subprocesses — run single-threaded
@@ -420,7 +389,6 @@ def batch_normalize(
         effective_workers = 1
 
 
-
     # Collect slides, handling compound extensions (.ome.tiff)
 
     slides: list[Path] = []
@@ -438,7 +406,6 @@ def batch_normalize(
             slides.append(p)
 
 
-
     if not slides:
 
         logger.info(f"No matching slides found in {input_dir}")
@@ -446,9 +413,7 @@ def batch_normalize(
         return []
 
 
-
     logger.info(f"Found {len(slides)} slides to normalise.")
-
 
 
     if output_dir.resolve() == input_dir.resolve():
@@ -481,7 +446,6 @@ def batch_normalize(
         reference_path = reference
 
 
-
     tasks = [
 
         (
@@ -510,11 +474,9 @@ def batch_normalize(
     ]
 
 
-
     results: list[Path] = []
 
     errors: list[str] = []
-
 
 
     try:
@@ -558,7 +520,6 @@ def batch_normalize(
             os.unlink(_tmp_ref)
 
 
-
     logger.info(f"Normalised {len(results)}/{len(slides)} slides.")
 
     if errors:
@@ -570,11 +531,7 @@ def batch_normalize(
             logger.info(f"  {e}")
 
 
-
     return results
-
-
-
 
 
 def build_reference(
@@ -660,7 +617,6 @@ def build_reference(
     if output_path is None:
 
         raise ValueError("output_path is required.")
-
 
 
     output_path = Path(output_path)

@@ -13,11 +13,7 @@ _DEFAULT_IMAGE_ROOT = os.path.join(EMBEDDING_ROOT, "XeniumPR1", "hoptimus1")
 _DEFAULT_GENE_ROOT = os.path.join(DATA_ROOT, "XeniumPR1", "adata")
 
 
-
-
-# ============================================================
-# 1. LOAD + MATCH SAMPLE
-# ============================================================
+# LOAD + MATCH SAMPLE
 
 def load_and_match_sample(
     sample,
@@ -53,9 +49,7 @@ def load_and_match_sample(
     if not os.path.exists(gene_path):
         raise FileNotFoundError(gene_path)
 
-    # --------------------------------------------------------
     # Image embeddings
-    # --------------------------------------------------------
     with h5py.File(img_path, "r") as f:
         embeddings = f["embeddings"][:]
         coords = f["coords"][:]
@@ -66,9 +60,7 @@ def load_and_match_sample(
         for x in barcodes
     ])
 
-    # --------------------------------------------------------
     # Gene expression
-    # --------------------------------------------------------
     gene = sc.read_h5ad(gene_path)
 
     # Make sure all image barcodes exist in gene object
@@ -84,9 +76,7 @@ def load_and_match_sample(
     # Reorder gene object to EXACT image order
     gene_subset = gene[barcodes].copy()
 
-    # --------------------------------------------------------
     # Check spatial correspondence
-    # --------------------------------------------------------
     gene_coords = np.rint(
         gene_subset.obsm["spatial"]
     ).astype(int)
@@ -97,9 +87,7 @@ def load_and_match_sample(
     logger.info(f"Image embeddings: {embeddings.shape}")
     logger.info(f"Gene data:        {gene_subset.shape}")
 
-    # --------------------------------------------------------
     # Image AnnData
-    # --------------------------------------------------------
     img = sc.AnnData(
         embeddings
     )
@@ -110,9 +98,7 @@ def load_and_match_sample(
     return img, gene_subset
 
 
-# ============================================================
-# 2. CLUSTER IMAGE EMBEDDING
-# ============================================================
+# CLUSTER IMAGE EMBEDDING
 
 def cluster_image_embedding(
     img,
@@ -162,9 +148,7 @@ def cluster_image_embedding(
     return img
 
 
-# ============================================================
-# 3. CLUSTER GENE EXPRESSION
-# ============================================================
+# CLUSTER GENE EXPRESSION
 
 def cluster_gene_expression(
     gene_subset,
@@ -231,9 +215,7 @@ def cluster_gene_expression(
     return gene_clust
 
 
-# ============================================================
-# 4. MATCH CLUSTERS
-# ============================================================
+# MATCH CLUSTERS
 
 def match_clusters_unique_with_fallback(
     image_adata,
@@ -277,9 +259,7 @@ def match_clusters_unique_with_fallback(
     image_clusters = np.unique(image_labels)
     gene_clusters = np.unique(gene_labels)
 
-    # --------------------------------------------------------
     # Count overlap
-    # --------------------------------------------------------
     overlap = pd.DataFrame(
         0,
         index=gene_clusters,
@@ -303,9 +283,7 @@ def match_clusters_unique_with_fallback(
         axis=0,
     )
 
-    # --------------------------------------------------------
     # All possible candidate matches
-    # --------------------------------------------------------
     candidates = []
 
     for gc in gene_clusters:
@@ -330,9 +308,7 @@ def match_clusters_unique_with_fallback(
         ascending=False,
     )
 
-    # --------------------------------------------------------
     # Unique image assignment
-    # --------------------------------------------------------
     assigned_gene = set()
     assigned_image = set()
 
@@ -358,9 +334,7 @@ def match_clusters_unique_with_fallback(
         assigned_gene.add(gc)
         assigned_image.add(ic)
 
-    # --------------------------------------------------------
     # New numeric labels for remaining gene clusters
-    # --------------------------------------------------------
     image_numbers = [
         int(x)
         for x in image_clusters
@@ -383,9 +357,7 @@ def match_clusters_unique_with_fallback(
 
             next_label += 1
 
-    # --------------------------------------------------------
     # Mapping table
-    # --------------------------------------------------------
     mapping_rows = []
 
     for gc in gene_clusters:
@@ -423,9 +395,7 @@ def match_clusters_unique_with_fallback(
     return mapping_df, cluster_mapping
 
 
-# ============================================================
-# 5. MAKE ONE SHARED PALETTE
-# ============================================================
+# MAKE ONE SHARED PALETTE
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -453,9 +423,7 @@ def make_shared_cluster_palette(
         cluster label -> colour
     """
 
-    # --------------------------------------------------------
     # Image cluster categories
-    # --------------------------------------------------------
     gene_subset.obs[image_cluster_key] = (
         gene_subset.obs[image_cluster_key]
         .astype("category")
@@ -468,10 +436,8 @@ def make_shared_cluster_palette(
         ].cat.categories
     ]
 
-    # --------------------------------------------------------
     # Generate the same default categorical palette Scanpy
     # normally uses for categorical observations
-    # --------------------------------------------------------
     image_colors = sc.pl.palettes.default_20[
         :len(image_categories)
     ]
@@ -484,9 +450,7 @@ def make_shared_cluster_palette(
         )
     }
 
-    # --------------------------------------------------------
     # Mapped gene labels
-    # --------------------------------------------------------
     mapped_gene_labels = [
         str(x)
         for x in mapped_gene_labels
@@ -504,9 +468,7 @@ def make_shared_cluster_palette(
         if label not in palette
     ]
 
-    # --------------------------------------------------------
     # Generate additional colours for new gene clusters
-    # --------------------------------------------------------
     # Use a large colour space so new labels are distinct
     extra_cmap = plt.get_cmap(
         "gist_ncar",
@@ -542,9 +504,7 @@ def make_shared_cluster_palette(
 
     return palette
 
-# ============================================================
-# 6. SET PALETTE FOR SCANPY SPATIAL PLOTS
-# ============================================================
+# SET PALETTE FOR SCANPY SPATIAL PLOTS
 
 def set_scanpy_palette(
     adata,
@@ -575,9 +535,7 @@ def set_scanpy_palette(
     ]
 
 
-# ============================================================
-# 7. PLOT SPATIAL CLUSTERS
-# ============================================================
+# PLOT SPATIAL CLUSTERS
 
 def plot_spatial_clusters(
     gene_subset,
@@ -656,9 +614,7 @@ def plot_spatial_clusters(
     return fig, ax
 
 
-# ============================================================
-# 8. PLOT UMAPS
-# ============================================================
+# PLOT UMAPS
 
 def plot_matched_umaps(
     image_adata,
@@ -713,9 +669,7 @@ def plot_matched_umaps(
         for x in gene_mapped_labels
     ]
 
-    # --------------------------------------------------------
     # Plot
-    # --------------------------------------------------------
     fig, ax = plt.subplots(
         1,
         2,
@@ -754,9 +708,7 @@ def plot_matched_umaps(
     ax[1].set_xlabel("UMAP1")
     ax[1].set_ylabel("UMAP2")
 
-    # --------------------------------------------------------
     # Shared legend
-    # --------------------------------------------------------
     all_labels = sorted(
         palette.keys(),
         key=lambda x: int(x),
@@ -802,9 +754,7 @@ def plot_matched_umaps(
     return fig, ax
 
 
-# ============================================================
-# 9. WRAPPER
-# ============================================================
+# WRAPPER
 
 def plot_embedding(
     sample,
@@ -829,27 +779,21 @@ def plot_embedding(
 
     os.makedirs(output_dir, exist_ok=True)
 
-    # ========================================================
-    # 1. Load + barcode-align
-    # ========================================================
+    # Load + barcode-align
     img, gene_subset = load_and_match_sample(
         sample=sample,
         image_root=image_root,
         gene_root=gene_root,
     )
 
-    # ========================================================
-    # 2. Image clustering + UMAP
-    # ========================================================
+    # Image clustering + UMAP
     img = cluster_image_embedding(
         img,
         n_neighbors=n_neighbors,
         resolution=image_resolution,
     )
 
-    # ========================================================
-    # 3. Gene clustering + UMAP
-    # ========================================================
+    # Gene clustering + UMAP
     gene_clust = cluster_gene_expression(
         gene_subset,
         n_hvg=n_hvg,
@@ -865,9 +809,7 @@ def plot_embedding(
             f"Available columns: {gene_clust.obs.columns.tolist()}"
         )
 
-    # ========================================================
-    # 4. Transfer image cluster labels to spatial object
-    # ========================================================
+    # Transfer image cluster labels to spatial object
     gene_subset.obs["image_cluster"] = (
         img.obs["image_cluster"]
         .astype(str)
@@ -881,9 +823,7 @@ def plot_embedding(
         .values
     )
 
-    # ========================================================
-    # 5. Match clusters
-    # ========================================================
+    # Match clusters
     mapping_df, cluster_mapping = (
         match_clusters_unique_with_fallback(
             image_adata=img,
@@ -895,18 +835,14 @@ def plot_embedding(
     )
 
 
-    # ========================================================
-    # 6. Create mapped gene labels
-    # ========================================================
+    # Create mapped gene labels
     gene_subset.obs["gene_cluster_mapped"] = (
         gene_subset.obs["gene_cluster_original"]
         .map(cluster_mapping)
         .astype(str)
     )
 
-    # ========================================================
-    # 7. Make ONE shared palette
-    # ========================================================
+    # Make ONE shared palette
     mapped_gene_labels = (
         gene_subset.obs["gene_cluster_mapped"]
         .astype(str)
@@ -919,9 +855,7 @@ def plot_embedding(
         mapped_gene_labels=mapped_gene_labels,
     )
 
-    # ========================================================
-    # 8. Explicitly set Scanpy palettes
-    # ========================================================
+    # Explicitly set Scanpy palettes
     set_scanpy_palette(
         gene_subset,
         "image_cluster",
@@ -934,9 +868,7 @@ def plot_embedding(
         palette,
     )
 
-    # ========================================================
-    # 9. Spatial plot
-    # ========================================================
+    # Spatial plot
     spatial_path = os.path.join(
         output_dir,
         f"{sample}_spatial_clusters.png",
@@ -954,9 +886,7 @@ def plot_embedding(
         output_path=spatial_path,
     )
 
-    # ========================================================
-    # 10. UMAP plot
-    # ========================================================
+    # UMAP plot
     umap_path = os.path.join(
         output_dir,
         f"{sample}_UMAP_mapped_clusters.png",
@@ -972,9 +902,7 @@ def plot_embedding(
         output_path=umap_path,
     )
 
-    # ========================================================
-    # 11. Save mapping
-    # ========================================================
+    # Save mapping
     mapping_path = os.path.join(
         output_dir,
         f"{sample}_cluster_mapping.csv",
@@ -999,10 +927,7 @@ def plot_embedding(
     }
 
 
-
-# ============================================================
-# 1. GET ALL SAMPLES
-# ============================================================
+# GET ALL SAMPLES
 
 def get_samples(
     image_root,
@@ -1024,9 +949,7 @@ def get_samples(
     return samples
 
 
-# ============================================================
-# 2. PLOT ALL FOUR PANELS FOR ONE SAMPLE
-# ============================================================
+# PLOT ALL FOUR PANELS FOR ONE SAMPLE
 
 def plot_sample_four_panel(
     sample,
@@ -1053,9 +976,7 @@ def plot_sample_four_panel(
     cluster_mapping = result["cluster_mapping"]
     palette = result["palette"]
 
-    # --------------------------------------------------------
     # Make sure image cluster labels are present
-    # --------------------------------------------------------
     image_labels = (
         img.obs["image_cluster"]
         .astype(str)
@@ -1068,9 +989,7 @@ def plot_sample_four_panel(
         .values
     )
 
-    # --------------------------------------------------------
     # Create mapped gene labels HERE
-    # --------------------------------------------------------
     gene_mapped_labels = np.array([
         str(cluster_mapping[x])
         for x in gene_original_labels
@@ -1085,9 +1004,7 @@ def plot_sample_four_panel(
         gene_mapped_labels
     )
 
-    # --------------------------------------------------------
     # Explicitly set Scanpy categories + colours
-    # --------------------------------------------------------
     gene_subset.obs["image_cluster"] = (
         gene_subset.obs["image_cluster"]
         .astype("category")
@@ -1110,18 +1027,14 @@ def plot_sample_four_panel(
         palette,
     )
 
-    # --------------------------------------------------------
     # Create figure
-    # --------------------------------------------------------
     fig, ax = plt.subplots(
         2,
         2,
         figsize=figsize,
     )
 
-    # ========================================================
-    # 1. IMAGE CLUSTERS ON H&E
-    # ========================================================
+    # IMAGE CLUSTERS ON H&E
     sc.pl.spatial(
         gene_subset,
         color="image_cluster",
@@ -1137,9 +1050,7 @@ def plot_sample_four_panel(
         f"{sample} - Image clusters"
     )
 
-    # ========================================================
-    # 2. GENE CLUSTERS MAPPED ON H&E
-    # ========================================================
+    # GENE CLUSTERS MAPPED ON H&E
     sc.pl.spatial(
         gene_subset,
         color="gene_cluster_mapped",
@@ -1155,9 +1066,7 @@ def plot_sample_four_panel(
         f"{sample} - Gene clusters (mapped)"
     )
 
-    # ========================================================
-    # 3. IMAGE UMAP
-    # ========================================================
+    # IMAGE UMAP
     image_colors = [
         palette[str(x)]
         for x in image_labels
@@ -1179,9 +1088,7 @@ def plot_sample_four_panel(
     ax[1, 0].set_xlabel("UMAP1")
     ax[1, 0].set_ylabel("UMAP2")
 
-    # ========================================================
-    # 4. GENE UMAP
-    # ========================================================
+    # GENE UMAP
     gene_colors = [
         palette[str(x)]
         for x in gene_mapped_labels
@@ -1203,9 +1110,7 @@ def plot_sample_four_panel(
     ax[1, 1].set_xlabel("UMAP1")
     ax[1, 1].set_ylabel("UMAP2")
 
-    # --------------------------------------------------------
     # Overall title
-    # --------------------------------------------------------
     fig.suptitle(
         sample,
         fontsize=16,
@@ -1219,9 +1124,7 @@ def plot_sample_four_panel(
     return fig
 
 
-# ============================================================
-# 3. RUN ALL SAMPLES -> ONE PDF
-# ============================================================
+# RUN ALL SAMPLES -> ONE PDF
 
 def plot_embedding_all_samples(
     image_root,
@@ -1253,16 +1156,12 @@ def plot_embedding_all_samples(
 
     os.makedirs(output_dir, exist_ok=True)
 
-    # --------------------------------------------------------
     # Find samples
-    # --------------------------------------------------------
     samples = get_samples(image_root)
 
     logger.info(f"Found {len(samples)} samples.")
 
-    # --------------------------------------------------------
     # Combined PDF
-    # --------------------------------------------------------
     combined_pdf_path = os.path.join(
         output_dir,
         combined_pdf,
@@ -1271,9 +1170,7 @@ def plot_embedding_all_samples(
     all_results = []
     result_dict = {}
 
-    # --------------------------------------------------------
     # Only process samples without an existing PDF
-    # --------------------------------------------------------
     samples_to_run = []
 
     for sample in samples:
@@ -1296,9 +1193,7 @@ def plot_embedding_all_samples(
         f"new samples."
     )
 
-    # --------------------------------------------------------
     # Open combined PDF
-    # --------------------------------------------------------
     failures = []
     with PdfPages(combined_pdf_path) as combined_pdf:
 
@@ -1314,9 +1209,7 @@ def plot_embedding_all_samples(
 
             try:
 
-                # =================================================
                 # Run complete sample pipeline
-                # =================================================
                 result = plot_embedding(
                     sample=sample,
                     output_dir=output_dir,
@@ -1331,18 +1224,14 @@ def plot_embedding_all_samples(
                     spot_size=spot_size,
                 )
 
-                # =================================================
                 # Create four-panel figure
-                # =================================================
                 fig = plot_sample_four_panel(
                     sample=sample,
                     result=result,
                     spot_size=spot_size,
                 )
 
-                # =================================================
                 # Save individual sample PDF
-                # =================================================
                 sample_pdf = os.path.join(
                     output_dir,
                     f"{sample}_clusters.pdf",
@@ -1359,9 +1248,7 @@ def plot_embedding_all_samples(
                     f"  {sample_pdf}"
                 )
 
-                # =================================================
                 # Also add to combined PDF
-                # =================================================
                 combined_pdf.savefig(
                     fig,
                     bbox_inches="tight",
@@ -1369,9 +1256,7 @@ def plot_embedding_all_samples(
 
                 plt.close(fig)
 
-                # =================================================
                 # Store result
-                # =================================================
                 result_dict[sample] = result
 
                 mapping = result[
@@ -1398,9 +1283,7 @@ def plot_embedding_all_samples(
                 plt.close("all")
                 continue
 
-    # --------------------------------------------------------
     # Save mappings for newly processed samples
-    # --------------------------------------------------------
     if all_results:
 
         mapping_all = pd.concat(

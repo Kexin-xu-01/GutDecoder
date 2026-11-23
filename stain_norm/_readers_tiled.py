@@ -34,9 +34,7 @@ class SlideSource:
 
         fmt = _get_format(self.path)
 
-        # ============================================================
-        # 1. OpenSlide formats
-        # ============================================================
+        # OpenSlide formats
         if fmt == 'openslide':
             import openslide
 
@@ -45,9 +43,7 @@ class SlideSource:
 
             native = self.obj.properties.get(openslide.PROPERTY_NAME_MPP_X)
 
-        # ============================================================
-        # 2. TIFF / OME-TIFF
-        # ============================================================
+        # TIFF / OME-TIFF
         elif fmt == 'tiff':
             import tifffile
 
@@ -159,9 +155,7 @@ class SlideSource:
                         self.obj = None
                         raise
 
-        # ============================================================
-        # 3. CZI
-        # ============================================================
+        # CZI
         else:  # czi
             from ._czi import open_czi
 
@@ -187,9 +181,7 @@ class SlideSource:
                 )
 
 
-        # ============================================================
-        # 4. Normalize flat TIFF dimensions
-        # ============================================================
+        # Normalize flat TIFF dimensions
         if self.kind == 'flat':
 
             if self.arr.ndim == 2:
@@ -210,9 +202,7 @@ class SlideSource:
                     f"{self.arr.shape}"
                 )
 
-        # ============================================================
-        # 5. Resolution and output dimensions
-        # ============================================================
+        # Resolution and output dimensions
         self.native_mpp = _mpp_or_guess(native, self.path)
 
         self.scale = max(
@@ -309,8 +299,6 @@ class SlideSource:
 
     def __exit__(self, *args):
         self.close()
-
-
 
 
 def sample_slide(slide, sample_size=1024, grid=5, thumb=256):

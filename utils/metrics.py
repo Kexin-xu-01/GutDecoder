@@ -6,7 +6,7 @@ from scipy.spatial import distance
 from sklearn.metrics import mutual_info_score, roc_auc_score
 
 
-# --- small helpers ---
+# small helpers
 def _safe_pearson(x, y):
     if x.size < 2 or y.size < 2 or np.nanstd(x) == 0 or np.nanstd(y) == 0:
         return np.nan
@@ -89,9 +89,7 @@ def _auc_at_cutoff(pred, actual, cutoff):
     return float(roc_auc_score(label, pred))
 
 
-# ----------------------------
 # per-gene metrics (saved to adata.var)
-# ----------------------------
 def compute_metrics_per_gene(adata, pred_layer="pred", target_layer="target", auc_cutoffs=(0, 1)):
     preds = np.asarray(adata.layers[pred_layer])
     trues = np.asarray(adata.layers[target_layer])
@@ -138,9 +136,7 @@ def compute_metrics_per_gene(adata, pred_layer="pred", target_layer="target", au
     return df
 
 
-# ----------------------------
 # per-spot metrics (saved to adata.obs)
-# ----------------------------
 def compute_metrics_per_spot(adata, pred_layer="pred", target_layer="target", auc_cutoffs=(0, 1, 2, 5, 7), min_genes=2):
     preds = np.asarray(adata.layers[pred_layer])
     trues = np.asarray(adata.layers[target_layer])
@@ -188,9 +184,7 @@ def compute_metrics_per_spot(adata, pred_layer="pred", target_layer="target", au
     return df
 
 
-# ----------------------------
 # convenience wrapper for lists
-# ----------------------------
 def compute_metrics(adata_list,
                           pred_layer="pred",
                           target_layer="target",

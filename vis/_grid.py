@@ -73,7 +73,7 @@ def plot_all_samples_grid_for_dataset(
     runs_root = Path(runs_root)
     splits_root = Path(splits_root)
 
-    # 1) Determine sample list for the provided dataset_or_run
+    # Determine sample list for the provided dataset_or_run
     samples = []
     # If it's a run folder (starts with run_) prefer reading that run's splits
     if str(dataset_or_run).startswith("run_"):
@@ -107,7 +107,7 @@ def plot_all_samples_grid_for_dataset(
     if not samples:
         raise ValueError("No samples found to plot.")
 
-    # 2) Determine candidate runs to check (if not provided)
+    # Determine candidate runs to check (if not provided)
     if candidate_runs is None:
         if not auto_discover_runs:
             raise ValueError("candidate_runs is None and auto_discover_runs is False.")
@@ -116,7 +116,7 @@ def plot_all_samples_grid_for_dataset(
     # allow user to pass absolute run names if they included a path: normalize to names
     candidate_runs = [str(r).split("/")[-1] for r in candidate_runs]
 
-    # 3) Per-sample stats from each run's best model; each run is loaded once
+    # Per-sample stats from each run's best model; each run is loaded once
     frames = [sample_corr_stats_for_run(run_name, samples, str(runs_root), str(splits_root))
               for run_name in candidate_runs]
     frames = [f for f in frames if f is not None and not f.empty]

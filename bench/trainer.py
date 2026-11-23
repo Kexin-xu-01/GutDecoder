@@ -74,9 +74,7 @@ def to_cuml_compatible_array(x, dtype=np.float32):
     return np.ascontiguousarray(arr) if not arr.flags['C_CONTIGUOUS'] else arr
 
 
-# ---------------------------------------------------------------------------
 # Per-method trainers — each returns (preds_all: np.ndarray, reg: estimator)
-# ---------------------------------------------------------------------------
 
 def _train_ridge(X_train, X_test, y_train, alpha, random_state, max_iter):
     if alpha is None:
@@ -195,9 +193,7 @@ _METHODS = {
 }
 
 
-# ---------------------------------------------------------------------------
 # Metrics
-# ---------------------------------------------------------------------------
 
 def _compute_metrics(preds_all, y_test, genes=None):
     """Compute per-gene metrics and return (results dict, dump dict)."""
@@ -250,9 +246,7 @@ def _compute_metrics(preds_all, y_test, genes=None):
     return results, dump
 
 
-# ---------------------------------------------------------------------------
 # Public dispatcher
-# ---------------------------------------------------------------------------
 
 def train_test_reg(X_train, X_test, y_train, y_test,
                    max_iter=1000, random_state=0, genes=None, alpha=None, method='ridge'):

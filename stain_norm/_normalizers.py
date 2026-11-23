@@ -22,9 +22,7 @@ import numpy as np
 from skimage.color import rgb2lab, lab2rgb
 
 
-# ---------------------------------------------------------------------------
 # Reinhard (2001)
-# ---------------------------------------------------------------------------
 
 def _lab_stats(rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """LAB mean and std of tissue pixels, excluding white background."""
@@ -68,9 +66,7 @@ class ReinhardNormalizer:
         return out
 
 
-# ---------------------------------------------------------------------------
 # Macenko (2009) and Vahadane (2016): stain separation in optical density space
-# ---------------------------------------------------------------------------
 
 def _rgb2od(image: np.ndarray) -> np.ndarray:
     return -np.log((image.astype(np.float64) + 1) / 256.0)
@@ -185,9 +181,7 @@ class VahadaneNormalizer(_StainNormalizer):
         return W[[1, 0]] if W[0, 0] < W[1, 0] else W
 
 
-# ---------------------------------------------------------------------------
 # Factory
-# ---------------------------------------------------------------------------
 
 _METHODS: dict[str, type] = {
     "reinhard": ReinhardNormalizer,

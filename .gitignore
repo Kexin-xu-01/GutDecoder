@@ -227,6 +227,9 @@ __marimo__/
 .idea
 .vscode
 
+# local notes
+TODO*.md
+
 # data and model outputs
 *.h5
 *.h5ad

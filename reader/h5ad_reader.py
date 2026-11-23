@@ -417,7 +417,7 @@ def save_all(
     return None
 
 
-# ---------------- rule-based exclusions ----------------
+# rule-based exclusions
 def _points_in_polygon(px, py, poly_x, poly_y):
     """
     Vectorized point-in-polygon test (ray-casting).
@@ -532,7 +532,6 @@ def rule_based_spot_exclusion(
         side = 'right'  -> band near xmax
       For 'frac' units the size is fraction of the full height (for top/bottom) or width (for left/right).
     """
-    # get spot coordinates
     xy = st.adata.obsm["spatial"]
     sx = xy[:, 0].astype(float)
     sy = xy[:, 1].astype(float)
@@ -576,7 +575,7 @@ def rule_based_spot_exclusion(
     return final_keep, fig
 
 
-# ----------------------------------------------------------------------------- feature padding
+# feature padding
 
 def pick_spatial_xy_columns(obs: pd.DataFrame) -> Tuple[str, str]:
     """Return the (x, y) centroid column names of a cell table; KeyError if no known pair exists."""

@@ -144,8 +144,6 @@ def count_patches(root, save_csv=None):
     """
     root = Path(root)
     results = []
-
-    # iterate over sample folders
     for sample_dir in sorted(root.iterdir()):
         if not sample_dir.is_dir():
             continue
@@ -172,7 +170,6 @@ def count_patches(root, save_csv=None):
         logger.info(f"Saved counts to {root/save_csv}")
 
     return df
-
 
 
 def visualise_patch_block(
@@ -202,7 +199,7 @@ def visualise_patch_block(
     h5_file_path = Path(h5_file_path)
     jpeg_path = Path(jpeg_path)
 
-    # ---------- Load minimal H5 metadata (NO full arrays) ----------
+    # Load minimal H5 metadata (NO full arrays)
     with h5py.File(h5_file_path, "r") as f:
         # coords: accept several common keys
         if "coords" in f:
@@ -301,7 +298,7 @@ def visualise_patch_block(
                   "display will be partially empty.")
         logger.info(f"Selected {len(chosen_indices)} patches (fallback used: {used_fallback})")
 
-        # ---------- (1) Patch block grid (stream from HDF5) ----------
+        # (1) Patch block grid (stream from HDF5)
         plt.figure(figsize=(3 * block_size, 3 * block_size))
         k = 0
         for j in range(block_size):
@@ -323,7 +320,7 @@ def visualise_patch_block(
         plt.tight_layout()
         plt.show()
 
-    # ---------- (2) Overlay on downscaled_fullres.jpeg (no TIFF) ----------
+    # (2) Overlay on downscaled_fullres.jpeg (no TIFF)
     jpeg_img = Image.open(jpeg_path).convert("RGB")
     Wj, Hj = jpeg_img.size  # PIL: (width, height)
 
@@ -402,9 +399,7 @@ def visualise_first_n_patches(h5_file_path, wsi_path=None, max_patches=20, highl
     num_patches = patches.shape[0]
     logger.info(f"Loaded {num_patches} patches, showing first {min(max_patches, num_patches)}")
 
-    # -------------------
     # 1️⃣ Show a few patches
-    # -------------------
     n_show = min(max_patches, num_patches)
     ncols = min(5, n_show)
     nrows = (n_show + ncols - 1) // ncols
@@ -418,9 +413,7 @@ def visualise_first_n_patches(h5_file_path, wsi_path=None, max_patches=20, highl
     plt.tight_layout()
     plt.show()
 
-    # -------------------
     # 2️⃣ Show patch locations on WSI with highlights
-    # -------------------
     if wsi_path is not None:
         wsi = Image.open(wsi_path)
         wsi = np.array(wsi)

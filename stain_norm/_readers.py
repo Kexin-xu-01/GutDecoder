@@ -55,9 +55,7 @@ def to_rgb_uint8(a) -> np.ndarray:
     return (a.astype(np.float32) * 255).clip(0, 255).astype(np.uint8)
 
 
-# ---------------------------------------------------------------------------
 # Format-specific readers
-# ---------------------------------------------------------------------------
 
 GUESSED_MPP = 0.5
 
@@ -189,9 +187,7 @@ def _read_czi(path: Path, target_mpp: float) -> tuple[np.ndarray, float]:
     return to_rgb_uint8(arr), mpp_x
 
 
-# ---------------------------------------------------------------------------
 # Public API
-# ---------------------------------------------------------------------------
 
 def read_whole_slide(
     path: PathLike, target_mpp: float = 0.5

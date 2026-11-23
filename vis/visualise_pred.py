@@ -311,7 +311,6 @@ def read_patch_meta_from_h5(h5_path, barcode_ds='barcode', coords_ds='coords', v
     return df
 
 
-
 def _count_patches_in_tile_h5(tile_h5_path: str, barcode_ds: str = 'barcode') -> int:
     """Return number of barcode entries (patches) in a tile h5 file."""
     if not os.path.isfile(tile_h5_path):
@@ -359,7 +358,7 @@ def add_formatted_inference_to_adata(
                     return str(keys[0])
         return None
 
-    # ---------------- sanitiser (in-place) ----------------
+    # sanitiser (in-place)
     def _sanitize_anndata_for_h5ad_inplace(adata, verbose_local=False):
         """
         Convert pandas string extension dtypes and categorical categories in adata.obs and
@@ -382,7 +381,7 @@ def add_formatted_inference_to_adata(
                 df.index = df.index.astype(object)
         return adata
 
-    # ---------------- build sample lookup ----------------
+    # build sample lookup
     sample_to_adata_idx = {}
     for i, ad in enumerate(adata_list):
         inferred = infer_sample_name_from_adata(ad)
@@ -398,7 +397,7 @@ def add_formatted_inference_to_adata(
     summary = {}
     used_adata_indices = set()
 
-    # ---------------- main loop ----------------
+    # main loop
     for sample_key, entry in formatted_inference.items():
         preds_df = entry.get('preds')
         targets_df = entry.get('targets')
@@ -450,14 +449,9 @@ def add_formatted_inference_to_adata(
                 summary[sample_key] = {'matched': False, 'reason': 'no matching adata found'}
                 continue
 
-        # sanitize the matched AnnData in-place before doing anything else
         ad = adata_list[ad_idx]
         used_adata_indices.add(ad_idx)
-        if verbose:
-            logger.info(f"ensuring adata_list[{ad_idx}] is h5ad-safe")
-        #_sanitize_anndata_for_h5ad_inplace(ad, verbose_local=verbose)
 
-        # canonical indexes and genes (after sanitization)
         ad_obs_names = list(map(str, ad.obs_names))
         ad_var_names = list(map(str, ad.var_names))
 
@@ -485,7 +479,7 @@ def add_formatted_inference_to_adata(
         logger.info(f"adata obs: {len(ad_obs_names)}")
         logger.info(f"matched barcodes: {len(matched_barcodes)}")
 
-        # --- collapse duplicates ---
+        # collapse duplicates
         if preds_df.index.has_duplicates:
             if verbose:
                 logger.info(f"collapsing duplicate barcodes for {sample_key}")
@@ -676,7 +670,6 @@ def save_adata_from_list(adata_list, RUN_ROOT, RUN, existing_pred_samples=None, 
     return saved_paths
 
 
-
 def _safe_sample_name(adata, idx):
     # prefer obs sample_id, then obs sample, then uns sample_id, then fallback
     if 'sample_id' in adata.obs.columns:
@@ -688,8 +681,6 @@ def _safe_sample_name(adata, idx):
     # sanitize for filesystem
     s = "".join(c if c.isalnum() or c in ('-', '_') else "_" for c in s)
     return s
-
-
 
 
 def save_spatial_pred_target_pdfs_for_adata_list(
@@ -737,7 +728,7 @@ def save_spatial_pred_target_pdfs_for_adata_list(
 
         out_pdf = os.path.join(outdir, f"{safe_name}.pdf")
 
-        # ---- skip if PDF already exists ----
+        # skip if PDF already exists
         if os.path.isfile(out_pdf):
             if verbose:
                 logger.info(f"{sample_name}: PDF already exists at {out_pdf}")
@@ -876,8 +867,6 @@ def save_spatial_pred_target_pdfs_for_adata_list(
                         for rr in range(nrow, total_rows):
                             for cc in range(3):
                                 axes[rr, cc].axis('off')
-
-                    # save this page
                     pp.savefig(fig, dpi=dpi, bbox_inches='tight')
                     plt.close(fig)
 
@@ -1048,7 +1037,7 @@ def add_inference_to_adata_and_plot(
     Returns a dict with summary, saved files, plot results.
     """
 
-    # --------------- 1) extract best model + load inference ----------------
+    # extract best model + load inference
     if verbose: logger.info("extract best model corrs")
     best_model, dataset, df_corr = extract_best_model_gene_corrs(RUN)
 
@@ -1068,7 +1057,7 @@ def add_inference_to_adata_and_plot(
     if verbose: logger.info("remap split keys -> sample names using test splits")
     df_test_splits = get_test_splits(RUN)
 
-    # --------------- determine already-saved pred h5ads and skip them ---------------
+    # determine already-saved pred h5ads and skip them
     pred_save_dir = os.path.join(RUN_ROOT, 'ST_pred_results', RUN, 'pred')
     existing_pred_samples = set()
     if os.path.isdir(pred_save_dir):
@@ -1098,7 +1087,7 @@ def add_inference_to_adata_and_plot(
         sample_names.append(sample)
 
 
-    # --------------- 3) attach patch barcodes to formatted_inference automatically -------------
+    # attach patch barcodes to formatted_inference automatically
     # extra sampple matching for broad splits (leave-one-patient-out CV)
     if verbose: logger.info("expand split keys into per-sample formatted_inference entries (handles LOO CV)")
 
@@ -1144,7 +1133,7 @@ def add_inference_to_adata_and_plot(
         if verbose:
             logger.info("force_overwrite=True -> keeping formatted_inference entries for samples that already have pred h5ads (will overwrite)")
 
-    # --------------- 4) add formatted_inference to adata layers ----------------
+    # add formatted_inference to adata layers
     if verbose: logger.info("writing preds/targets into adata.layers (with sanitisation)")
     summary = add_formatted_inference_to_adata(
         adata_list,
@@ -1156,7 +1145,7 @@ def add_inference_to_adata_and_plot(
         verbose=verbose
     )
 
-    # --- Remove spots where all target genes are NaN ---
+    # Remove spots where all target genes are NaN
     logger.info('Remove spots with all NaN values')
     adata_list = [
         remove_nan_spots(adata, target_layer=target_layer_name, inplace=False)
@@ -1171,13 +1160,11 @@ def add_inference_to_adata_and_plot(
     ]
 
 
-    # --------------- 5) save the adata list to RUN folder ----------------
-    # if verbose: print("[step] saving adata_list to disk")
-    # saved_paths = save_adata_from_list(adata_list, RUN_ROOT, RUN)
+    # save the adata list to RUN folder
     if verbose: logger.info("saving adata_list to disk")
     saved_paths = save_adata_from_list(adata_list, RUN_ROOT, RUN, existing_pred_samples=existing_pred_samples, force_overwrite=force_overwrite)
 
-    # --------------- 6) optionally plot gene lists ----------------
+    # optionally plot gene lists
     plot_results = {}
     if gene_lists_to_plot:
         # gene_lists_to_plot can be:
