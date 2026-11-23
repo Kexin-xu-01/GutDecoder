@@ -239,3 +239,7 @@ TODO*.md
 *.svs
 *.czi
 *.zarr/
+
+# kept locally, not in git
+notebooks/
+metadata/
