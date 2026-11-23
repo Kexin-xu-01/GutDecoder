@@ -24,6 +24,7 @@ import numpy as np
 import h5py
 import scanpy as sc
 from scipy.spatial import cKDTree
+from loguru import logger
 
 
 def backfill_barcodes(h5_path: str, adata_path: str, max_dist: float = 50.0):
@@ -41,7 +42,7 @@ def backfill_barcodes(h5_path: str, adata_path: str, max_dist: float = 50.0):
 
     with h5py.File(h5_path, "r") as f:
         if "barcodes" in f:
-            print(f"[INFO] {h5_path} already has 'barcodes' — skipping.")
+            logger.info(f"{h5_path} already has 'barcodes' — skipping.")
             return
         if "coords" not in f:
             raise ValueError(f"No 'coords' key in {h5_path}")
@@ -53,7 +54,7 @@ def backfill_barcodes(h5_path: str, adata_path: str, max_dist: float = 50.0):
 
     n_far = (dists > max_dist).sum()
     if n_far > 0:
-        print(f"[WARN] {n_far}/{len(dists)} tiles have nearest-spot distance > {max_dist}px "
+        logger.warning(f"{n_far}/{len(dists)} tiles have nearest-spot distance > {max_dist}px "
               f"(max={dists.max():.1f}). Check coordinate alignment.")
 
     matched_barcodes = adata_barcodes[idxs]
@@ -62,7 +63,7 @@ def backfill_barcodes(h5_path: str, adata_path: str, max_dist: float = 50.0):
     with h5py.File(h5_path, "a") as f:
         f.create_dataset("barcodes", data=bc_bytes)
 
-    print(f"[OK] Written {len(bc_bytes)} barcodes to {h5_path} "
+    logger.info(f"Written {len(bc_bytes)} barcodes to {h5_path} "
           f"(median dist={np.median(dists):.2f}px)")
 
 

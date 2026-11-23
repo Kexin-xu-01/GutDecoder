@@ -25,7 +25,6 @@ from gutdecoder.bench.fusion import fuse_embeddings, read_slide_embedding
 from gutdecoder.bench.cpath_model_zoo.inference_models import (
     CustomInferenceEncoder, InferenceEncoder, inf_encoder_factory)
 
-torch.multiprocessing.set_sharing_strategy('file_system')
 
 from hest.bench.st_dataset import H5PatchDataset
 from torch.utils.data import DataLoader
@@ -424,7 +423,7 @@ def _fit_split(X_train, X_test, y_train, y_test, args, genes):
     if args.dimreduce == "PCA":
         from sklearn.decomposition import PCA
 
-        print("perform PCA dim reduction")
+        logger.info("perform PCA dim reduction")
 
         pipe = Pipeline(
             [
@@ -567,7 +566,7 @@ def predict_single_split(
     # Load gene list
     # -------------------------
     gene_list = args.gene_list
-    print(f"using gene_list {gene_list}")
+    logger.info(f"using gene_list {gene_list}")
 
     with open(os.path.join(bench_data_root, gene_list), "r") as f:
         genes = json.load(f)["genes"]
@@ -610,14 +609,14 @@ def predict_single_split(
     model_path = os.path.join(save_dir, "model.pkl")
     joblib.dump(model_bundle, model_path)
 
-    print(f"Model saved in '{model_path}'")
+    logger.info(f"Model saved in '{model_path}'")
 
     if use_slide_embedding:
-        print(f"Fused train shape: {X_train.shape}")
-        print(f"Fused test shape: {X_test.shape}")
+        logger.info(f"Fused train shape: {X_train.shape}")
+        logger.info(f"Fused test shape: {X_test.shape}")
     else:
-        print(f"Tile-only train shape: {X_train.shape}")
-        print(f"Tile-only test shape: {X_test.shape}")
+        logger.info(f"Tile-only train shape: {X_train.shape}")
+        logger.info(f"Tile-only test shape: {X_test.shape}")
 
     # -------------------------
     # Save outputs
@@ -743,6 +742,8 @@ def benchmark(encoder: torch.nn.Module, enc_transf: Callable, precision: torch.d
 
     args = _resolve_args(cli_args, kwargs)
     set_seed(args.seed)
+    # Many DataLoader workers passing tensors can exhaust file descriptors with the default strategy.
+    torch.multiprocessing.set_sharing_strategy('file_system')
 
     logger.info(f'Saving models to {args.weights_root}...')
     snapshot_download(repo_id="MahmoodLab/hest-bench", repo_type='dataset', local_dir=args.weights_root, allow_patterns=['fm_v1/*'])

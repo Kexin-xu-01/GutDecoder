@@ -11,6 +11,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from ._helpers import _sample_cmap, _format_title
+from loguru import logger
 
 
 def plot_gene_correlation_barplot(df, dataset_name, encoder_name,
@@ -194,7 +195,7 @@ def plot_mean_std_ranked(
         p.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(p.with_suffix(".pdf"), bbox_inches="tight", dpi=300)
         fig.savefig(p.with_suffix(".png"), bbox_inches="tight", dpi=300)
-        print(f"Saved: {p.with_suffix('.pdf')} and {p.with_suffix('.png')}")
+        logger.info(f"Saved: {p.with_suffix('.pdf')} and {p.with_suffix('.png')}")
 
     plt.show()
     return fig, ax

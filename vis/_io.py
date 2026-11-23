@@ -316,7 +316,7 @@ def extract_best_model_gene_corrs(run: str,
     encoder_name = best_model_info.get("encoder_name", "Unknown")
 
     if verbose:
-        print(f"[extract] dataset={dataset_name} encoder={encoder_name} "
+        logger.info(f"dataset={dataset_name} encoder={encoder_name} "
               f"pearson_mean={best_model_info.get('pearson_mean')} "
               f"std={best_model_info.get('pearson_std')}")
 

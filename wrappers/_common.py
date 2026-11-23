@@ -5,6 +5,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from hest import HESTData
 from PIL import Image
+from loguru import logger
 
 
 def load_hest_sample(sample_dir: Path):
@@ -90,7 +91,7 @@ def show_images(
         labels.extend([sample_id] * len(found_for_sample))
 
     if not images:
-        print("[WARN] No images found across all samples.")
+        logger.warning("No images found across all samples.")
         return
 
     if max_images is not None:
@@ -122,7 +123,7 @@ def show_images(
         except OSError as e:  # unreadable or not an image; show the gap in the grid
             ax.axis("off")
             ax.set_title(f"Failed: {img_path.name}", fontsize=8)
-            print(f"[ERROR] Could not open {img_path}: {e}")
+            logger.error(f"Could not open {img_path}: {e}")
 
     for ax in axes[len(images):]:
         ax.axis("off")
@@ -135,6 +136,6 @@ def show_images(
         save_dir.mkdir(parents=True, exist_ok=True)
         save_path = save_dir / save_name
         fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
-        print(f"Saved figure to {save_path}")
+        logger.info(f"Saved figure to {save_path}")
 
     plt.close(fig)

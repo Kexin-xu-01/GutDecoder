@@ -25,6 +25,7 @@ from gutdecoder.config import (
 
 from ._helpers import _find_col_ci, _sample_cmap, _assemble_color_map, _safe_filename, _format_title
 from ._io import get_test_splits, extract_best_model_gene_corrs, merge_kfold_gene_corrs_with_test_metadata, sample_corr_stats_for_run
+from loguru import logger
 
 
 def plot_corrs_by_sample(
@@ -176,7 +177,7 @@ def plot_pearson_vs_sample_metadata(
     for meta in metadata_cols_preference[:6]:
         meta_col = _find_col_ci(merged, [meta])
         if meta_col is None:
-            print(f"[plot] metadata column '{meta}' not found - skipping.")
+            logger.info(f"metadata column '{meta}' not found - skipping.")
             continue
 
         df_plot = merged[[sample_col, "mean_pearson", meta_col] + ([run_col] if run_col else [])]

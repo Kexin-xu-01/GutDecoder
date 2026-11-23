@@ -58,13 +58,6 @@ from gutdecoder.reader.h5ad_reader import *  # noqa: F401,F403
 from gutdecoder.reader.rules import parse_crop_rules
 from gutdecoder.config import XENIUM_DATA_ROOT, XENIUM_DIRECTORY_XLSX
 
-# Optional dependencies
-try:
-    import cucim  # noqa: F401
-    logger.info("cuCIM available — GPU image ops enabled")
-except ImportError:
-    logger.info("cuCIM not available — falling back to CPU ops")
-
 
 EXCEL_PATH_DEFAULT = XENIUM_DIRECTORY_XLSX
 
@@ -375,7 +368,7 @@ def main() -> None:
     metadata = pd.read_excel(args.excel_path)
     sample_rows = metadata.loc[metadata["Sample_ID"] == sample_id]
     if sample_rows.empty:
-        print(f"❌ No entry found for SampleID: {sample_id}")
+        logger.error(f"No entry found for SampleID: {sample_id}")
         return
 
     rename_map = _build_rename_map(args.annotation_source_col, args.feature_col)
@@ -386,7 +379,7 @@ def main() -> None:
         if pd.notnull(roi):
             roi = int(float(roi))
         else:
-            print(f"⚠️ Missing ROI for sample={sample}; skipping row")
+            logger.warning(f"Missing ROI for sample={sample}; skipping row")
             continue
 
         slide_str = str(row[args.slide_col])
@@ -397,12 +390,12 @@ def main() -> None:
         base_img_dir = Path(row[args.img_dir_col])
         alignment_name = row.get(args.alignment_col)
         if pd.isna(alignment_name) or alignment_name is None:
-            print(f"⚠️ Missing alignment file for sample={sample}, roi={roi}; skipping")
+            logger.warning(f"Missing alignment file for sample={sample}, roi={roi}; skipping")
             continue
 
         h5ad_value = row.get(args.h5ad_col)
         if pd.isna(h5ad_value) or h5ad_value is None:
-            print(f"⚠️ Missing h5ad path in column '{args.h5ad_col}' for sample={sample}, roi={roi}; skipping")
+            logger.warning(f"Missing h5ad path in column '{args.h5ad_col}' for sample={sample}, roi={roi}; skipping")
             continue
 
         exp_stem = Path(row[args.input_root_col])
@@ -421,7 +414,7 @@ def main() -> None:
         base_out_dir = Path(args.output_root) / output_rel
         save_dir = base_out_dir / f"ROI{roi}"
 
-        print(f"Processing sample={sample}, roi={roi}, slide={slide_num}, run={run_name}...")
+        logger.info(f"Processing sample={sample}, roi={roi}, slide={slide_num}, run={run_name}...")
 
         if args.skip_existing and save_dir.exists():
             required = [
@@ -430,7 +423,7 @@ def main() -> None:
                 save_dir / "metrics.json",
             ]
             if all(p.exists() for p in required):
-                print(f"⚠️ {sample} ({roi}) already processed at {save_dir}, skipping.")
+                logger.warning(f"{sample} ({roi}) already processed at {save_dir}, skipping.")
                 continue
 
         save_dir.mkdir(parents=True, exist_ok=True)
@@ -509,20 +502,18 @@ def main() -> None:
 
         rule_col = row.get(args.crop_col)
         rules = _parse_rules(rule_col)
-        print("Applying exclusions:")
-        for r in rules:
-            print(" ", r)
+        logger.info(f"Applying exclusions: {rules}")
 
         final_keep = apply_spot_exclusions(sx, sy, (xmin, xmax, ymin, ymax), rules)
-        print(f"Spots kept after rules: {final_keep.sum()} / {len(final_keep)}")
+        logger.info(f"Spots kept after rules: {final_keep.sum()} / {len(final_keep)}")
 
         st.adata = adata_cells_pooled[final_keep]
         stats = refresh_meta_counts(st)
-        print("Before/After:", stats)
+        logger.info(f"Before/After: {stats}")
 
         overlay_path = save_all(st, save_dir, pyramidal=True, cell_label_key=args.feature_col)
 
-        print("✔ Saved results to", overlay_path)
+        logger.info(f"Saved results to {overlay_path}")
 
 
 if __name__ == "__main__":

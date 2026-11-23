@@ -409,9 +409,9 @@ def batch_normalize(
 
     if method.lower() in _GPU_METHODS and n_workers > 1:
 
-        print(
+        logger.info(
 
-            f"[INFO] GPU method '{method}' — setting n_workers=1 "
+            f"GPU method '{method}' — setting n_workers=1 "
 
             "(CUDA contexts cannot be forked across processes)."
 
@@ -441,13 +441,13 @@ def batch_normalize(
 
     if not slides:
 
-        print(f"[INFO] No matching slides found in {input_dir}")
+        logger.info(f"No matching slides found in {input_dir}")
 
         return []
 
 
 
-    print(f"[INFO] Found {len(slides)} slides to normalise.")
+    logger.info(f"Found {len(slides)} slides to normalise.")
 
 
 
@@ -559,15 +559,15 @@ def batch_normalize(
 
 
 
-    print(f"[INFO] Normalised {len(results)}/{len(slides)} slides.")
+    logger.info(f"Normalised {len(results)}/{len(slides)} slides.")
 
     if errors:
 
-        print(f"[WARN] {len(errors)} slide(s) failed:")
+        logger.warning(f"{len(errors)} slide(s) failed:")
 
         for e in errors:
 
-            print(f"  {e}")
+            logger.info(f"  {e}")
 
 
 

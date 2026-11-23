@@ -68,7 +68,7 @@ def plot_summary_bar(best_df: pd.DataFrame,
     - Each bar labeled with num_genes, offset to avoid overlapping error bar
     """
     if best_df.empty:
-        print("[plot_summary_bar] Empty DataFrame.")
+        logger.info("[plot_summary_bar] Empty DataFrame.")
         return None
 
     df = best_df.copy()
@@ -88,7 +88,7 @@ def plot_summary_bar(best_df: pd.DataFrame,
     combined_colors = cmap_tab20 + cmap_tab20b + cmap_tab20c
 
     if n_datasets > len(combined_colors):
-        print(f"[plot_summary_bar] Warning: {n_datasets} datasets but only "
+        logger.info(f"[plot_summary_bar] Warning: {n_datasets} datasets but only "
               f"{len(combined_colors)} distinct tab colors available. "
               f"Colors will repeat.")
 
@@ -341,7 +341,7 @@ def plot_summary_genes_vs_mean(best_df: pd.DataFrame,
     Scatter: x = highest_pearson_mean, y = num_genes, colored by dataset.
     """
     if best_df is None or best_df.empty:
-        print("[plot_summary_genes_vs_mean] Empty DataFrame.")
+        logger.info("[plot_summary_genes_vs_mean] Empty DataFrame.")
         return None
 
     df = best_df.copy()
@@ -355,7 +355,7 @@ def plot_summary_genes_vs_mean(best_df: pd.DataFrame,
     df["highest_pearson_mean"] = pd.to_numeric(df["highest_pearson_mean"], errors="coerce")
     df = df.dropna(subset=["num_genes", "highest_pearson_mean"])
     if df.empty:
-        print("[plot_summary_genes_vs_mean] No valid rows.")
+        logger.info("[plot_summary_genes_vs_mean] No valid rows.")
         return None
 
     datasets = sorted(df["dataset"].dropna().unique().tolist())
@@ -411,7 +411,7 @@ def plot_summary_patches_vs_mean(best_df: pd.DataFrame,
       size legend shows num_genes examples
     """
     if best_df is None or best_df.empty:
-        print("[plot_summary_patches_vs_mean] Empty DataFrame.")
+        logger.info("[plot_summary_patches_vs_mean] Empty DataFrame.")
         return None
 
     need = {"dataset", "gene_list", "highest_pearson_mean", "num_training_patches_mean", "num_genes"}
@@ -428,7 +428,7 @@ def plot_summary_patches_vs_mean(best_df: pd.DataFrame,
 
     df = df.dropna(subset=["highest_pearson_mean", "num_training_patches_mean", "num_genes"])
     if df.empty:
-        print("[plot_summary_patches_vs_mean] No valid rows.")
+        logger.info("[plot_summary_patches_vs_mean] No valid rows.")
         return None
 
     datasets = sorted(df["dataset"].unique().tolist())
@@ -847,7 +847,7 @@ def generate_all_plots(
         else:
             continue
 
-        print('plot sample-level group by', gb)
+        logger.info(f'plot sample-level group by {gb}')
 
         fig = plot_corrs_by_sample(dplot, dataset_name, encoder_name, group_by=gb)
         p = outdir / f"per_sample_by_{gb}.png"
@@ -1171,7 +1171,7 @@ def plot_scaling_relationships(
     if save_path is not None:
         Path(save_path).parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(save_path, bbox_inches="tight", dpi=300)
-        print(f"Saved: {save_path}")
+        logger.info(f"Saved: {save_path}")
     if show:
         plt.show()
     return fig

@@ -433,7 +433,7 @@ class _HOptimusInferenceEncoder(InferenceEncoder):
             else _download_hf_timm_weights(self.HF_REPO)
         )
 
-        print(f"Loading H-optimus checkpoint: {ckpt}")
+        logger.info(f"Loading H-optimus checkpoint: {ckpt}")
 
         if str(ckpt).endswith(".safetensors"):
             from safetensors.torch import load_file

@@ -68,6 +68,7 @@ import json
 import numpy as np
 import pandas as pd
 from pathlib import Path
+from loguru import logger
 
 def safe_mean(values):
     arr = np.array(values, dtype=float)
@@ -130,7 +131,7 @@ def regenerate_enc_results(dataset_dir):
 
     # single-place check via helper
     if not is_dataset_dir(dataset_dir):
-        print(f"[skip] not a dataset dir: {dataset_dir}")
+        logger.info(f"not a dataset dir: {dataset_dir}")
         return None
     
     enc_results = {"results": []}
@@ -167,7 +168,7 @@ def regenerate_enc_results(dataset_dir):
     with open(out_path, "w") as f:
         json.dump(enc_results, f, indent=4)
 
-    print(f"[+] Wrote {out_path}")
+    logger.info(f"[+] Wrote {out_path}")
     return dataset, enc_results
 
     
@@ -204,10 +205,10 @@ def regenerate_dataset_results(root_dir):
         enc_results_path = dataset_dir / "enc_results.json"
         if not enc_results_path.exists():
             # try to generate it if missing (will also respect is_dataset_dir)
-            print(f"[warn] enc_results.json missing for {dataset_dir.name}; attempting to generate")
+            logger.warning(f"enc_results.json missing for {dataset_dir.name}; attempting to generate")
             regenerate_enc_results(dataset_dir)
             if not enc_results_path.exists():
-                print(f"[skip] still missing enc_results.json for {dataset_dir.name}; skipping")
+                logger.info(f"still missing enc_results.json for {dataset_dir.name}; skipping")
                 continue
 
         with open(enc_results_path, "r") as f:
@@ -257,7 +258,7 @@ def regenerate_dataset_results(root_dir):
     json_path = Path(root_dir) / "dataset_results.json"
     with open(json_path, "w") as f:
         json.dump(dataset_results, f, indent=4)
-    print(f"[+] Wrote {json_path}")
+    logger.info(f"[+] Wrote {json_path}")
 
     # save wide-format CSV
     df = pd.DataFrame(dataset_rows)
@@ -282,7 +283,7 @@ def regenerate_dataset_results(root_dir):
 
     csv_path = Path(root_dir) / "dataset_results.csv"
     df.to_csv(csv_path, index=False, float_format="%.17f")
-    print(f"[+] Wrote {csv_path}")
+    logger.info(f"[+] Wrote {csv_path}")
 
 
 def regenerate_all_results(run_dir):

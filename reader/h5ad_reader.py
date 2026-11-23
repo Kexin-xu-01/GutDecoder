@@ -14,23 +14,11 @@ from gutdecoder.reader.rules import Box, exclusion_regions
 import matplotlib.pyplot as plt
 from hest import XeniumReader 
 import dask
+# HEST builds legacy dask dataframes; this must be set before dask.dataframe is first imported,
+# so it cannot move into a function.
 dask.config.set({'dataframe.query-planning': False})
 
-#import cucim
-#from cucim import CuImage
-
 from hest.utils import read_xenium_alignment, align_xenium_df  
-
-# keep original function
-_orig_calc_qc = sc.pp.calculate_qc_metrics
-
-try:
-    # replace with a no-op
-    sc.pp.calculate_qc_metrics = lambda *args, **kwargs: None
-
-finally:
-    # restore original function
-    sc.pp.calculate_qc_metrics = _orig_calc_qc
 
 
 def coord_range(spatial: np.ndarray) -> Tuple[float, float, float, float]:
@@ -87,9 +75,6 @@ def load_xenium_dataset(
         - .wsi.width / .wsi.height
         - .meta (dict with 'pixel_size' at least)
     """
-    if XeniumReader is None:
-        raise ImportError("XeniumReader not found; ensure 'hest' is installed and import path is correct.")
-
     exp_stem = Path(exp_stem)
     st = XeniumReader().read(
         img_path=str(img_path),
@@ -574,7 +559,7 @@ def rule_based_spot_exclusion(
     if verbose:
         kept = int(np.count_nonzero(final_keep))
         total = len(final_keep)
-        print(f"Spots kept after rules: {kept} / {total}")
+        logger.info(f"Spots kept after rules: {kept} / {total}")
 
     fig = None
     if plot:

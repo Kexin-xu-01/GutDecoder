@@ -18,6 +18,7 @@ from gutdecoder.utils.patch.qc_patch import apply_qc_patch
 apply_qc_patch(fallback=None)
 
 from gutdecoder.wrappers._common import load_hest_sample, show_images  # noqa: F401  (re-exported for notebooks)
+from loguru import logger
 
 
 def segment_hest_tissue(hest_root: Path, ids=None, method="deep",target_pxl_size=1):
@@ -37,7 +38,7 @@ def segment_hest_tissue(hest_root: Path, ids=None, method="deep",target_pxl_size
     # auto-detect sample folders if not provided
     if ids is None:
         ids = [p.name for p in broad_dir.iterdir() if p.is_dir()]
-        print(f"[INFO] Auto-detected {len(ids)} samples from {broad_dir}: {ids}")
+        logger.info(f"Auto-detected {len(ids)} samples from {broad_dir}: {ids}")
 
     if not ids:
         raise ValueError(f"No sample folders found for segmentation in {broad_dir}")
@@ -51,7 +52,7 @@ def segment_hest_tissue(hest_root: Path, ids=None, method="deep",target_pxl_size
         try:
             # load the HEST object (using aligned_adata.h5ad + associated files)
             st = load_hest_sample(sample_dir)  
-            print('hest sample loaded')
+            logger.info('hest sample loaded')
 
             with warnings.catch_warnings():
                 warnings.filterwarnings(
@@ -61,13 +62,13 @@ def segment_hest_tissue(hest_root: Path, ids=None, method="deep",target_pxl_size
                 )
 
                 st.segment_tissue(method=method,target_pxl_size=target_pxl_size)
-                print('tissue segmentation completed')
+                logger.info('tissue segmentation completed')
                 st.save_tissue_contours(tissue_dir, sample_id)
-                print('tissue contour saved')
+                logger.info('tissue contour saved')
                 st.save_tissue_vis(tissue_dir, sample_id)
-                print('tissue visualisation saved')
+                logger.info('tissue visualisation saved')
 
-            print(f"[INFO] Segmentation complete for {sample_id} → {tissue_dir}")
+            logger.info(f"Segmentation complete for {sample_id} → {tissue_dir}")
         except Exception as e:
             failures.append(f"{sample_id}: {type(e).__name__}: {e}")
 

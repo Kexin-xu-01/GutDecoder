@@ -93,9 +93,9 @@ def load_and_match_sample(
 
     image_coords = np.rint(coords).astype(int)
 
-    print(f"Sample: {sample}")
-    print(f"Image embeddings: {embeddings.shape}")
-    print(f"Gene data:        {gene_subset.shape}")
+    logger.info(f"Sample: {sample}")
+    logger.info(f"Image embeddings: {embeddings.shape}")
+    logger.info(f"Gene data:        {gene_subset.shape}")
 
     # --------------------------------------------------------
     # Image AnnData
@@ -154,7 +154,7 @@ def cluster_image_embedding(
         key_added="image_cluster",
     )
 
-    print(
+    logger.info(
         f"Image clusters: "
         f"{img.obs['image_cluster'].nunique()}"
     )
@@ -223,7 +223,7 @@ def cluster_gene_expression(
         key_added="gene_cluster",
     )
 
-    print(
+    logger.info(
         f"Gene clusters: "
         f"{gene_clust.obs['gene_cluster'].nunique()}"
     )
@@ -430,6 +430,7 @@ def match_clusters_unique_with_fallback(
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import to_hex
+from loguru import logger
 
 
 def make_shared_cluster_palette(
@@ -984,9 +985,9 @@ def plot_embedding(
         index=False,
     )
 
-    print("\nSaved:")
-    print(f"  Spatial: {spatial_path}")
-    print(f"  UMAP:    {umap_path}")
+    logger.info("Saved:")
+    logger.info(f"  Spatial: {spatial_path}")
+    logger.info(f"  UMAP:    {umap_path}")
 
     return {
         "img": img,
@@ -1257,7 +1258,7 @@ def plot_embedding_all_samples(
     # --------------------------------------------------------
     samples = get_samples(image_root)
 
-    print(f"Found {len(samples)} samples.")
+    logger.info(f"Found {len(samples)} samples.")
 
     # --------------------------------------------------------
     # Combined PDF
@@ -1283,15 +1284,15 @@ def plot_embedding_all_samples(
         )
 
         if os.path.exists(sample_pdf):
-            print(
+            logger.info(
                 f"Skipping {sample} "
                 f"(already exists)"
             )
         else:
             samples_to_run.append(sample)
 
-    print(
-        f"\nProcessing {len(samples_to_run)} "
+    logger.info(
+        f"Processing {len(samples_to_run)} "
         f"new samples."
     )
 
@@ -1306,8 +1307,8 @@ def plot_embedding_all_samples(
             start=1,
         ):
 
-            print(
-                f"\n[{i}/{len(samples_to_run)}] "
+            logger.info(
+                f"[{i}/{len(samples_to_run)}] "
                 f"{sample}"
             )
 
@@ -1353,7 +1354,7 @@ def plot_embedding_all_samples(
                         bbox_inches="tight",
                     )
 
-                print(
+                logger.info(
                     f"Saved sample PDF:\n"
                     f"  {sample_pdf}"
                 )
@@ -1387,7 +1388,7 @@ def plot_embedding_all_samples(
                     mapping
                 )
 
-                print(
+                logger.info(
                     f"Completed {sample}"
                 )
 
@@ -1417,13 +1418,13 @@ def plot_embedding_all_samples(
             index=False,
         )
 
-        print(
-            f"\nCluster mappings saved to:\n"
+        logger.info(
+            f"Cluster mappings saved to:\n"
             f"  {mapping_csv}"
         )
 
-    print(
-        f"\nCombined PDF saved to:\n"
+    logger.info(
+        f"Combined PDF saved to:\n"
         f"  {combined_pdf_path}"
     )
 

@@ -11,6 +11,7 @@ import pyvips
 from PIL import Image, ImageDraw
 
 from gutdecoder.reader.rules import Box, exclusion_regions, parse_crop_rules
+from loguru import logger
 
 
 def build_exclusion_mask_pil(width, height, rules, mpp=None):
@@ -99,19 +100,19 @@ def mask_tif(
         out_path = out_dir / tif_path.name
 
         if out_path.exists() and out_path.stat().st_size > 0:
-            print(f"[SKIP] already exists: {out_path.name}")
+            logger.info(f"already exists: {out_path.name}")
             continue
 
         crop_str = crop_map.get(sample_id, None)
 
         if crop_str is None or pd.isna(crop_str) or str(crop_str).strip() == "":
-            print(f"[COPY] no crop rule: {tif_path.name}")
+            logger.info(f"no crop rule: {tif_path.name}")
             import shutil
             shutil.copy2(tif_path, out_path)
             continue
 
         rules = parse_crop_rules(crop_str)
-        print(f"[WRITE] {tif_path.name} -> {out_path.name}")
+        logger.info(f"{tif_path.name} -> {out_path.name}")
         mask_tif_openslide_readable(tif_path, out_path, rules, mpp=mpp)
 
-    print(f"Done. Output folder: {out_dir}")
+    logger.info(f"Done. Output folder: {out_dir}")

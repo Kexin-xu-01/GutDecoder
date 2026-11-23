@@ -9,6 +9,7 @@ import math
 import numpy as np
 
 from ._readers import _get_format, _mpp_from_tifffile, _mpp_or_guess, to_rgb_uint8
+from loguru import logger
 
 
 class SlideSource:
@@ -93,14 +94,14 @@ class SlideSource:
 
                 self.kind = 'wsi'
 
-                print(
-                    f"[INFO] TIFF opened using tiffslide: "
+                logger.info(
+                    f"TIFF opened using tiffslide: "
                     f"{self.path.name}"
                 )
 
             except Exception as e:
-                print(
-                    f"[INFO] tiffslide unavailable for "
+                logger.info(
+                    f"tiffslide unavailable for "
                     f"{self.path.name}: {e}"
                 )
 
@@ -120,16 +121,16 @@ class SlideSource:
                         series=0,
                     )
 
-                    print(
-                        "[INFO] Direct TIFF memory mapping successful."
+                    logger.info(
+                        "Direct TIFF memory mapping successful."
                     )
 
                 except (ValueError, TypeError, RuntimeError):
-                    print(
-                        "[INFO] TIFF not directly memory-mappable."
+                    logger.info(
+                        "TIFF not directly memory-mappable."
                     )
-                    print(
-                        "[INFO] Decoding into temporary "
+                    logger.info(
+                        "Decoding into temporary "
                         "disk-backed array..."
                     )
 
@@ -261,8 +262,8 @@ class SlideSource:
                 self.native_mpp * self.scale
             )
 
-        print(
-            f"[INFO] Slide: {self.path.name}\n"
+        logger.info(
+            f"Slide: {self.path.name}\n"
             f"       Reader: {self.kind}\n"
             f"       Native MPP: {self.native_mpp:.6f}\n"
             f"       Target MPP: {target_mpp:.6f}\n"
@@ -362,7 +363,7 @@ def write_tiled_ome_tiff(slide, output_path, transform, memory_limit_gb=8,
         raise ValueError('Memory budget too small for the selected overlap')
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    print(f'[INFO] Largest patch {side}x{side}, inner core {core}x{core}; mpp={slide.mpp}')
+    logger.info(f'Largest patch {side}x{side}, inner core {core}x{core}; mpp={slide.mpp}')
     with tempfile.TemporaryDirectory(prefix='stain_canvas_', dir=output_path.parent) as tmp:
         canvas = zarr.open(str(Path(tmp) / 'canvas.zarr'), mode='w',
                            shape=(slide.height, slide.width, 3),

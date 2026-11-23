@@ -4,9 +4,7 @@ to make it safe for datasets with few features.
 """
 
 import scanpy as sc
-import logging
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 def apply_qc_patch(
@@ -63,17 +61,10 @@ def apply_qc_patch(
             if not percent_top_filtered:
                 if fallback is None:
                     kwargs["percent_top"] = None
-                    logger.info(
-                        "QC patch: n_vars=%d too small; disabling percent_top.", 
-                        n_vars,
-                    )
+                    logger.info(f"QC patch: n_vars={n_vars} too small; disabling percent_top.")
                 else:
                     kwargs["percent_top"] = [min(fallback, n_vars)]
-                    logger.info(
-                        "QC patch: n_vars=%d too small; forcing percent_top=%s.",
-                        n_vars,
-                        kwargs["percent_top"],
-                    )
+                    logger.info(f"QC patch: n_vars={n_vars} too small; forcing percent_top={kwargs['percent_top']}.")
             else:
                 kwargs["percent_top"] = percent_top_filtered
 

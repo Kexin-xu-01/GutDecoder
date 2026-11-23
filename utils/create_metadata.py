@@ -45,6 +45,7 @@ from IPython.display import display
 import numpy as np
 import h5py
 import warnings
+from loguru import logger
 
 
 def _maybe_prefix(sample_id: str, prefix: Optional[str]) -> str:
@@ -157,7 +158,7 @@ def _concat_counts_for_paths(
         p = Path(p)
         if not p.exists():
             # skip and warn
-            print(f"[warning] path not found, skipping: {p}")
+            logger.warning(f"path not found, skipping: {p}")
             continue
         df = _load_and_format_count(p, prefix=pref, rename_col=rename_col, count_func=count_func, save_csv=save_csv, auto_prefix=auto_prefix)
         dfs.append(df)
@@ -234,13 +235,13 @@ def build_merged_counts(
 
         if df_counts.empty:
             if verbose:
-                print(f"[info] no data for metric '{key}' (paths: {paths_list}) -- skipping merge")
+                logger.info(f"no data for metric '{key}' (paths: {paths_list}) -- skipping merge")
             continue
 
         # merge into merged DataFrame
         merged = pd.merge(merged, df_counts, on="sample_id", how="left")
         if verbose:
-            print(f"[info] merged metric '{key}' ({len(df_counts)} rows) into metadata; merged shape now {merged.shape}")
+            logger.info(f"merged metric '{key}' ({len(df_counts)} rows) into metadata; merged shape now {merged.shape}")
 
     return {"merged": merged, "per_metric": per_metric}
 
@@ -267,10 +268,10 @@ def _read_barcodes_from_patch_h5(h5_path: Path) -> List[str]:
 
         barcode_key = next((k for k in keys if "barcode" in k.lower()), None)
         if barcode_key is None:
-            warnings.warn(f"[WARN] No barcode dataset in {h5_path} (keys: {keys})")
+            warnings.warn(f"No barcode dataset in {h5_path} (keys: {keys})")
             return []
         if not isinstance(f[barcode_key], h5py.Dataset):
-            warnings.warn(f"[WARN] '{barcode_key}' in {h5_path} is a group, not a barcode dataset")
+            warnings.warn(f"'{barcode_key}' in {h5_path} is a group, not a barcode dataset")
             return []
         arr = f[barcode_key][()]
 
@@ -303,7 +304,7 @@ def _collect_patch_barcodes_from_dir(patches_dir: Path) -> List[str]:
             barcodes = _read_barcodes_from_patch_h5(p)
         except OSError as e:
             # h5py raises OSError for truncated or unreadable files; skip that file only.
-            warnings.warn(f"[WARN] Could not open {p}, skipping its barcodes: {e}")
+            warnings.warn(f"Could not open {p}, skipping its barcodes: {e}")
             continue
         for b in barcodes:
             if b is None:
@@ -442,7 +443,7 @@ def return_qc(
     if save_csv:
         out = Path(save_csv) if Path(save_csv).is_absolute() else (root / save_csv)
         df.to_csv(out, index=False)
-        print(f"[INFO] Saved summary to {out}")
+        logger.info(f"Saved summary to {out}")
 
     return df
 
@@ -497,9 +498,7 @@ def add_qc_from_all_runs(
                 run_dirs.append(d)
 
     if verbose:
-        print(f"Found {len(run_dirs)} valid runs across Xenium + Visium:")
-        for r in sorted(run_dirs):
-            print("  -", r)
+        logger.info(f"Found {len(run_dirs)} valid runs across Xenium + Visium: {sorted(str(r) for r in run_dirs)}")
 
     if qc_func is None:
         qc_func = return_qc
@@ -534,7 +533,7 @@ def add_qc_from_all_runs(
                 continue
 
             if verbose:
-                print(f"\n[QC] {run_name} - {slide_name}")
+                logger.info(f"{run_name} - {slide_name}")
 
             try:
                 if save_csv_name:
@@ -547,7 +546,7 @@ def add_qc_from_all_runs(
 
             if df_qc is None or df_qc.empty:
                 if verbose:
-                    print("  No QC rows found.")
+                    logger.info("  No QC rows found.")
                 continue
 
             if "sample_id" not in df_qc.columns:
@@ -590,5 +589,5 @@ def add_qc_from_all_runs(
 
     meta = meta.sort_values("sample_id").reset_index(drop=True)
 
-    print("\nQC integration complete.")
+    logger.info("QC integration complete.")
     return {"metadata": meta, "processed_runs": processed_runs}

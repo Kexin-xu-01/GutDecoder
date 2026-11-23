@@ -20,6 +20,7 @@ from gutdecoder.utils.patch.qc_patch import apply_qc_patch
 apply_qc_patch(fallback=None)
 
 from gutdecoder.wrappers._common import load_hest_sample, show_images  # noqa: F401  (re-exported for notebooks)
+from loguru import logger
 
 
 def patch_hest_samples(
@@ -49,7 +50,7 @@ def patch_hest_samples(
     if ids is None:
         ids = sorted([p.name for p in root.iterdir() if p.is_dir()])
         if verbose:
-            print(f"[INFO] Auto-detected {len(ids)} sample folders: {ids}")
+            logger.info(f"Auto-detected {len(ids)} sample folders: {ids}")
 
     if not ids:
         raise ValueError("No sample folders found to patch under the specified root.")
@@ -64,7 +65,7 @@ def patch_hest_samples(
         patch_path = sample_dir / "patches" / f"{sample_id}.h5"
         if patch_is_complete(patch_path, settings):
             if verbose:
-                print(f"[INFO] Skipping {sample_id}: validated existing patch file {patch_path}")
+                logger.info(f"Skipping {sample_id}: validated existing patch file {patch_path}")
             continue
 
         try:
@@ -85,7 +86,7 @@ def patch_hest_samples(
             tissue_seg_dir = sample_dir / "tissue_seg"
             has_tissue_seg = tissue_seg_dir.exists() and tissue_seg_dir.is_dir()
             if verbose:
-                print(f"[INFO] {sample_id}: tissue_seg present = {has_tissue_seg}")
+                logger.info(f"{sample_id}: tissue_seg present = {has_tissue_seg}")
 
             dump_kwargs = dict(
                 patch_save_dir=str(sample_patches_dir),
@@ -119,8 +120,8 @@ def patch_hest_samples(
                 )
 
             if verbose:
-                print(f"[INFO] Patches saved for {sample_id}: {patch_save_path}")
-                print(f"[INFO] Patch visualization saved: {vis_save_path}")
+                logger.info(f"Patches saved for {sample_id}: {patch_save_path}")
+                logger.info(f"Patch visualization saved: {vis_save_path}")
 
         except Exception as e:
             failures.append(f"{sample_id}: {type(e).__name__}: {e}")
@@ -164,11 +165,11 @@ def count_patches(root, save_csv=None):
     total_patches = df["num_patches"].sum()
 
     print(df)
-    print(f"\nTotal patches across all samples: {total_patches}")
+    logger.info(f"Total patches across all samples: {total_patches}")
 
     if save_csv:
         df.to_csv(root / save_csv, index=False)
-        print(f"[INFO] Saved counts to {root/save_csv}")
+        logger.info(f"Saved counts to {root/save_csv}")
 
     return df
 
@@ -296,9 +297,9 @@ def visualise_patch_block(
             raise ValueError(f"Could not select any patches (found {coords.shape[0]} total). "
                              "Check that coords are present and non-empty.")
         if chosen_indices.size < desired_n:
-            print(f"[WARN] only {chosen_indices.size}/{desired_n} patches available for display; "
+            logger.warning(f"only {chosen_indices.size}/{desired_n} patches available for display; "
                   "display will be partially empty.")
-        print(f"Selected {len(chosen_indices)} patches (fallback used: {used_fallback})")
+        logger.info(f"Selected {len(chosen_indices)} patches (fallback used: {used_fallback})")
 
         # ---------- (1) Patch block grid (stream from HDF5) ----------
         plt.figure(figsize=(3 * block_size, 3 * block_size))
@@ -334,7 +335,7 @@ def visualise_patch_block(
         xmax = int(coords[:, 0].max() + patch_w)
         ymax = int(coords[:, 1].max() + patch_h)
         Wf, Hf = xmax, ymax
-        print("[INFO] fullres_size not provided; inferred from coords as "
+        logger.info("fullres_size not provided; inferred from coords as "
               f"(H_full={Hf}, W_full={Wf}). Pass fullres_size=(H,W) for exact scaling.")
 
     # Scale factors: FULL-RES → JPEG
@@ -399,7 +400,7 @@ def visualise_first_n_patches(h5_file_path, wsi_path=None, max_patches=20, highl
         barcodes = f["barcode"][:]    # barcodes (optional)
 
     num_patches = patches.shape[0]
-    print(f"Loaded {num_patches} patches, showing first {min(max_patches, num_patches)}")
+    logger.info(f"Loaded {num_patches} patches, showing first {min(max_patches, num_patches)}")
 
     # -------------------
     # 1️⃣ Show a few patches
@@ -440,4 +441,4 @@ def visualise_first_n_patches(h5_file_path, wsi_path=None, max_patches=20, highl
         plt.legend()
         plt.show()
     else:
-        print("[INFO] wsi_path not provided, skipping WSI location overlay.")
+        logger.info("wsi_path not provided, skipping WSI location overlay.")

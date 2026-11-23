@@ -58,7 +58,7 @@ def load_features(
             for sample_id in sample_ids
         ]
 
-    print(f"Found/requested {len(h5_files)} H5 files")
+    logger.info(f"Found/requested {len(h5_files)} H5 files")
 
     records = []
 
@@ -74,7 +74,7 @@ def load_features(
     feat_df = pd.DataFrame(records)
     feat_df["sample_id"] = feat_df["sample_id"].astype("string")
 
-    print(f"Loaded features for {len(feat_df)} samples")
+    logger.info(f"Loaded features for {len(feat_df)} samples")
 
     return feat_df
 
@@ -211,7 +211,7 @@ def compute_harmony_umap(
         random_state=random_state,
     ).fit_transform(X_scaled)
 
-    print("PCA:", X_pca.shape)
+    logger.info(f"PCA: {X_pca.shape}")
 
     # -----------------------
     # Harmony
@@ -230,7 +230,7 @@ def compute_harmony_umap(
     # harmonypy returns dimensions x samples
     X_harmony = harmony.Z_corr.T
 
-    print("Harmony:", X_harmony.shape)
+    logger.info(f"Harmony: {X_harmony.shape}")
 
     # -----------------------
     # UMAP
@@ -395,7 +395,7 @@ def make_umap_pdf(
             for g in sorted(groups, key=lambda x: str(x)):
                 sub = meta[group_vals == g].copy()
                 if len(sub) < 2:
-                    print(f"Skipping {group_col}={g}: too few samples ({len(sub)})")
+                    logger.info(f"Skipping {group_col}={g}: too few samples ({len(sub)})")
                     continue
 
                 if recompute_group_umap:
@@ -431,7 +431,7 @@ def make_umap_pdf(
                     pdf.savefig(fig)
                     plt.close(fig)
 
-    print(f"Saved PDF to: {out_pdf}")
+    logger.info(f"Saved PDF to: {out_pdf}")
 
 
 def make_default_pdf_name(dataset_name: str, out_dir: Path) -> Path:
@@ -459,15 +459,15 @@ def run_slide_encoder_umap(
 
     out_pdf = plot_folder / f"umap_{slide_encoder}.pdf"
 
-    print(f"\n{'=' * 60}")
-    print(f"Slide encoder: {slide_encoder}")
-    print(f"Features:      {h5_root}")
-    print(f"Output:        {out_pdf}")
+    logger.info(f"{'=' * 60}")
+    logger.info(f"Slide encoder: {slide_encoder}")
+    logger.info(f"Features:      {h5_root}")
+    logger.info(f"Output:        {out_pdf}")
 
     if sample_ids is not None:
-        print(f"Selected samples: {len(sample_ids)}")
+        logger.info(f"Selected samples: {len(sample_ids)}")
 
-    print(f"{'=' * 60}")
+    logger.info(f"{'=' * 60}")
 
     # Load all embeddings or only selected samples
     features = load_features(
@@ -640,6 +640,7 @@ from scipy.spatial.distance import cosine
 import numpy as np
 import pandas as pd
 from scipy.spatial.distance import cdist
+from loguru import logger
 
 
 def calculate_matched_unmatched_distances(
@@ -882,7 +883,7 @@ def make_joint_umap_pdf(
     # Load features
     # ========================================================
 
-    print("\nLoading Xenium embeddings...")
+    logger.info("Loading Xenium embeddings...")
 
     xenium_features = load_features(
         h5_root=Path(xenium_h5_root),
@@ -890,7 +891,7 @@ def make_joint_umap_pdf(
         sample_ids=xenium_sample_ids,
     )
 
-    print("\nLoading adjacent NEC embeddings...")
+    logger.info("Loading adjacent NEC embeddings...")
 
     adjacent_features = load_features(
         h5_root=Path(adjacent_h5_root),
@@ -994,11 +995,11 @@ def make_joint_umap_pdf(
         sort=False,
     )
 
-    print(f"Xenium samples:   {len(xenium)}")
-    print(f"Adjacent samples: {len(adjacent)}")
-    print(f"Joint samples:    {len(joint)}")
+    logger.info(f"Xenium samples:   {len(xenium)}")
+    logger.info(f"Adjacent samples: {len(adjacent)}")
+    logger.info(f"Joint samples:    {len(joint)}")
 
-    print("\nPair status:")
+    logger.info("Pair status:")
     print(
         joint.groupby(["source", "pair_status"])
         .size()
@@ -1021,7 +1022,7 @@ def make_joint_umap_pdf(
         sort=False,
     )
 
-    print(f"Joint samples: {len(joint)}")
+    logger.info(f"Joint samples: {len(joint)}")
 
     # ========================================================
     # Joint UMAP
@@ -1062,10 +1063,7 @@ def make_joint_umap_pdf(
     ) - set(joint.columns)
 
     if missing:
-        print(
-            "Warning: columns not found:",
-            sorted(missing),
-        )
+        logger.warning(f"columns not found: {sorted(missing)}")
 
     # ========================================================
     # PDF
@@ -1169,7 +1167,7 @@ def make_joint_umap_pdf(
         pdf.savefig(fig, bbox_inches="tight")
         plt.close(fig)
 
-    print(f"Saved joint UMAP to: {out_pdf}")
+    logger.info(f"Saved joint UMAP to: {out_pdf}")
 
     return joint
 
@@ -1241,7 +1239,7 @@ def make_joint_group_umap_pdf(
     # Load features
     # ========================================================
 
-    print(f"\nLoading {group1_label} embeddings...")
+    logger.info(f"Loading {group1_label} embeddings...")
 
     group1_features = load_features(
         h5_root=Path(group1_h5_root),
@@ -1249,7 +1247,7 @@ def make_joint_group_umap_pdf(
         sample_ids=group1_sample_ids,
     )
 
-    print(f"\nLoading {group2_label} embeddings...")
+    logger.info(f"Loading {group2_label} embeddings...")
 
     group2_features = load_features(
         h5_root=Path(group2_h5_root),
@@ -1294,8 +1292,8 @@ def make_joint_group_umap_pdf(
     group1["source"] = group1_label
     group2["source"] = group2_label
 
-    print(f"{group1_label}: {len(group1)}")
-    print(f"{group2_label}: {len(group2)}")
+    logger.info(f"{group1_label}: {len(group1)}")
+    logger.info(f"{group2_label}: {len(group2)}")
 
     # ========================================================
     # Combine
@@ -1307,7 +1305,7 @@ def make_joint_group_umap_pdf(
         sort=False,
     )
 
-    print(f"Joint: {len(joint)}")
+    logger.info(f"Joint: {len(joint)}")
 
     # ========================================================
     # Feature matrix
@@ -1317,7 +1315,7 @@ def make_joint_group_umap_pdf(
         joint["features"].to_numpy()
     )
 
-    print(f"Original embedding shape: {X.shape}")
+    logger.info(f"Original embedding shape: {X.shape}")
 
     # ========================================================
     # Distance analysis helper
@@ -1344,14 +1342,14 @@ def make_joint_group_umap_pdf(
         distance_results.append(per_sample)
         distance_summaries.append(summary)
 
-        print(f"\n{space_name} distance summary:")
+        logger.info(f"{space_name} distance summary:")
         print(summary.to_string(index=False))
 
     # ========================================================
     # 1. ORIGINAL EMBEDDING SPACE
     # ========================================================
 
-    print("\nCalculating original embedding distances...")
+    logger.info("Calculating original embedding distances...")
 
     add_distance_analysis(
         X,
@@ -1364,8 +1362,8 @@ def make_joint_group_umap_pdf(
 
     if use_harmony:
 
-        print(
-            f"\nRunning Harmony integration across "
+        logger.info(
+            f"Running Harmony integration across "
             f"{group1_label} and {group2_label}"
         )
 
@@ -1396,13 +1394,13 @@ def make_joint_group_umap_pdf(
             random_state=random_state,
         ).fit_transform(X_scaled)
 
-        print(f"PCA shape: {X_pca.shape}")
+        logger.info(f"PCA shape: {X_pca.shape}")
 
         # ====================================================
         # 3. PRE-HARMONY DISTANCES
         # ====================================================
 
-        print("\nCalculating pre-Harmony distances...")
+        logger.info("Calculating pre-Harmony distances...")
 
         add_distance_analysis(
             X_pca,
@@ -1432,7 +1430,7 @@ def make_joint_group_umap_pdf(
         # harmonypy output: dimensions x samples
         X_harmony = harmony_result.Z_corr.T
 
-        print(
+        logger.info(
             f"Harmony corrected shape: "
             f"{X_harmony.shape}"
         )
@@ -1441,7 +1439,7 @@ def make_joint_group_umap_pdf(
         # 4. POST-HARMONY DISTANCES
         # ====================================================
 
-        print("\nCalculating post-Harmony distances...")
+        logger.info("Calculating post-Harmony distances...")
 
         add_distance_analysis(
             X_harmony,
@@ -1484,7 +1482,7 @@ def make_joint_group_umap_pdf(
 
     else:
 
-        print("\nRunning standard PCA + UMAP")
+        logger.info("Running standard PCA + UMAP")
 
         embedding = compute_umap(
             X,
@@ -1533,8 +1531,8 @@ def make_joint_group_umap_pdf(
             index=False,
         )
 
-        print(f"\nSaved distances: {distance_csv}")
-        print(f"Saved summary: {summary_csv}")
+        logger.info(f"Saved distances: {distance_csv}")
+        logger.info(f"Saved summary: {summary_csv}")
 
     else:
 
@@ -1570,10 +1568,7 @@ def make_joint_group_umap_pdf(
     ) - set(joint.columns)
 
     if missing_cols:
-        print(
-            "Warning: plotting columns not found:",
-            sorted(missing_cols),
-        )
+        logger.warning(f"plotting columns not found: {sorted(missing_cols)}")
 
     # ========================================================
     # PDF
@@ -1741,7 +1736,7 @@ def make_joint_group_umap_pdf(
 
             if match_col not in joint.columns:
 
-                print(
+                logger.info(
                     f"Skipping matched plot: "
                     f"{match_col!r} not found"
                 )
@@ -1798,7 +1793,7 @@ def make_joint_group_umap_pdf(
 
             plt.close(fig)
 
-    print(f"Saved PDF to: {out_pdf}")
+    logger.info(f"Saved PDF to: {out_pdf}")
 
     # ========================================================
     # Attach results to returned dataframe
@@ -2288,7 +2283,7 @@ def make_joint_three_group_umap_pdf(
     # Load features
     # ========================================================
 
-    print(f"\nLoading {group1_label} embeddings...")
+    logger.info(f"Loading {group1_label} embeddings...")
 
     group1_features = load_features(
         h5_root=Path(group1_h5_root),
@@ -2296,7 +2291,7 @@ def make_joint_three_group_umap_pdf(
         sample_ids=group1_sample_ids,
     )
 
-    print(f"\nLoading {group2_label} embeddings...")
+    logger.info(f"Loading {group2_label} embeddings...")
 
     group2_features = load_features(
         h5_root=Path(group2_h5_root),
@@ -2304,7 +2299,7 @@ def make_joint_three_group_umap_pdf(
         sample_ids=group2_sample_ids,
     )
 
-    print(f"\nLoading {group3_label} embeddings...")
+    logger.info(f"Loading {group3_label} embeddings...")
 
     group3_features = load_features(
         h5_root=Path(group3_h5_root),
@@ -2361,9 +2356,9 @@ def make_joint_three_group_umap_pdf(
     group2["source"] = group2_label
     group3["source"] = group3_label
 
-    print(f"{group1_label}: {len(group1)}")
-    print(f"{group2_label}: {len(group2)}")
-    print(f"{group3_label}: {len(group3)}")
+    logger.info(f"{group1_label}: {len(group1)}")
+    logger.info(f"{group2_label}: {len(group2)}")
+    logger.info(f"{group3_label}: {len(group3)}")
 
     # ========================================================
     # Combine
@@ -2379,7 +2374,7 @@ def make_joint_three_group_umap_pdf(
         sort=False,
     )
 
-    print(f"Joint: {len(joint)}")
+    logger.info(f"Joint: {len(joint)}")
 
     # ========================================================
     # Feature matrix
@@ -2395,10 +2390,7 @@ def make_joint_three_group_umap_pdf(
 
     if use_harmony:
 
-        print(
-            "\nRunning Harmony integration across: "
-            + ", ".join(group_labels)
-        )
+        logger.info(f"Running Harmony integration across: {', '.join(group_labels)}")
 
         X_scaled = StandardScaler().fit_transform(X)
 
@@ -2418,7 +2410,7 @@ def make_joint_three_group_umap_pdf(
             random_state=random_state,
         ).fit_transform(X_scaled)
 
-        print(f"PCA shape: {X_pca.shape}")
+        logger.info(f"PCA shape: {X_pca.shape}")
 
         harmony_meta = pd.DataFrame({
             "source": (
@@ -2438,7 +2430,7 @@ def make_joint_three_group_umap_pdf(
 
         X_harmony = harmony_result.Z_corr.T
 
-        print(
+        logger.info(
             f"Harmony corrected shape: "
             f"{X_harmony.shape}"
         )
@@ -2628,7 +2620,7 @@ def make_joint_three_group_umap_pdf(
             pdf.savefig(fig)
             plt.close(fig)
 
-    print(
+    logger.info(
         f"Saved PDF to: {out_pdf}"
     )
 
@@ -2712,6 +2704,6 @@ def plot_pca_elbow(
         out_path = Path(out_path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(out_path, bbox_inches="tight", dpi=dpi)
-        print(f"Saved elbow plot to {out_path}")
+        logger.info(f"Saved elbow plot to {out_path}")
 
     return pca, fig, ax1

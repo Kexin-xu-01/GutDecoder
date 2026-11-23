@@ -21,6 +21,7 @@ from typing import Union
 import numpy as np
 
 from ._readers import SLIDE_EXTENSIONS, read_whole_slide, to_rgb_uint8, write_ome_tiff
+from loguru import logger
 
 PathLike = Union[str, Path]
 SlideSrc = Union[PathLike, list[PathLike]]  # directory, single file, or list of files
@@ -91,8 +92,8 @@ def select_reference(
     if not slide_paths:
         raise ValueError("No slides found.")
 
-    print(
-        f"[INFO] Computing R/B ratios for {len(slide_paths)} slides "
+    logger.info(
+        f"Computing R/B ratios for {len(slide_paths)} slides "
         f"at {ratio_mpp} µm/px …"
     )
 
@@ -104,14 +105,14 @@ def select_reference(
         thumb, _ = read_whole_slide(p, target_mpp=ratio_mpp)
         ratio = _rb_ratio(thumb)
         distance = abs(ratio - 1.0)
-        print(f"  [{i+1}/{len(slide_paths)}] {p.name}  R/B = {ratio:.4f}")
+        logger.info(f"  [{i+1}/{len(slide_paths)}] {p.name}  R/B = {ratio:.4f}")
         if distance < best_distance:
             best_distance = distance
             best_ratio = ratio
             best_path = p
 
-    print(
-        f"[INFO] Selected reference: {best_path.name}  "  # type: ignore[union-attr]
+    logger.info(
+        f"Selected reference: {best_path.name}  "  # type: ignore[union-attr]
         f"(R/B = {best_ratio:.4f}, |ratio-1| = {best_distance:.4f})"
     )
     return best_path, best_ratio  # type: ignore[return-value]
@@ -148,14 +149,14 @@ def build_reference(
 
     if len(slides) == 1:
         selected_path = slides[0]
-        print(f"[INFO] Single slide provided — using directly: {selected_path.name}")
+        logger.info(f"Single slide provided — using directly: {selected_path.name}")
     else:
         selected_path, _ = select_reference(slides, ratio_mpp=ratio_mpp)
 
-    print(f"[INFO] Reading reference slide at {target_mpp} µm/px …")
+    logger.info(f"Reading reference slide at {target_mpp} µm/px …")
     img, mpp = read_whole_slide(selected_path, target_mpp=target_mpp)
     write_ome_tiff(img, output_path, mpp=mpp)
-    print(f"[INFO] Reference saved to {output_path}")
+    logger.info(f"Reference saved to {output_path}")
     return img
 
 

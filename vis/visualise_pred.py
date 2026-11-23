@@ -19,6 +19,7 @@ from scipy.sparse import issparse
 from gutdecoder.vis.plot import extract_best_model_gene_corrs, get_test_splits
 from gutdecoder.utils.metrics import compute_metrics
 from gutdecoder.config import RESULTS_ROOT as RUN_ROOT, DATA_ROOT
+from loguru import logger
 
 
 def load_best_model_inference(run, root_dir=RUN_ROOT):
@@ -59,10 +60,10 @@ def load_best_model_inference(run, root_dir=RUN_ROOT):
     best_model = max(all_models, key=lambda x: x["pearson_mean"])
     best_model_name = best_model["encoder_name"]
 
-    print(f"Best model for dataset {dataset_name}:")
-    print(f"encoder_name: {best_model_name}")
-    print(f"pearson_mean: {best_model['pearson_mean']}")
-    print(f"pearson_std: {best_model['pearson_std']}")
+    logger.info(f"Best model for dataset {dataset_name}:")
+    logger.info(f"encoder_name: {best_model_name}")
+    logger.info(f"pearson_mean: {best_model['pearson_mean']}")
+    logger.info(f"pearson_std: {best_model['pearson_std']}")
 
     best_model_info = {
         "encoder_name": best_model_name,
@@ -78,7 +79,7 @@ def load_best_model_inference(run, root_dir=RUN_ROOT):
             with open(config_path, 'r') as cf:
                 config = json.load(cf)
                 gene_list_name = config.get("gene_list", "")
-                print(f"Genes predicted from list: {gene_list_name}")
+                logger.info(f"Genes predicted from list: {gene_list_name}")
             break
 
     # Step 3: Path to best model folder
@@ -95,9 +96,9 @@ def load_best_model_inference(run, root_dir=RUN_ROOT):
             if os.path.isfile(inference_file):
                 with open(inference_file, "rb") as f:
                     inference_dumps[split_name] = pickle.load(f)
-                print(f"Loaded inference_dump.pkl from {split_name}")
+                logger.info(f"Loaded inference_dump.pkl from {split_name}")
             else:
-                print(f"No inference_dump.pkl found in {split_name}")
+                logger.info(f"No inference_dump.pkl found in {split_name}")
 
     return best_model_info, dataset_name, inference_dumps, gene_list_name
 
@@ -121,7 +122,7 @@ def load_gene_list(dataset_name, gene_list_name, eval_data_dir=DATA_ROOT):
     with open(dataset_json_path, "r") as f:
         data = json.load(f)['genes']
 
-    print(f"Loaded {gene_list_name} for dataset '{dataset_name}'")
+    logger.info(f"Loaded {gene_list_name} for dataset '{dataset_name}'")
     return data
 
 # def format_inference_with_genes(inference_dumps, gene_list):
@@ -292,7 +293,7 @@ def _clean_barcode_raw(x):
 
 def read_patch_meta_from_h5(h5_path, barcode_ds='barcode', coords_ds='coords', verbose=True):
     """Read barcodes + coords from one patches.h5 file and return a cleaned DataFrame."""
-    print(f"[DEBUG] Opening H5 file: {h5_path}")
+    logger.debug(f"Opening H5 file: {h5_path}")
     with h5py.File(h5_path, "r") as f:
         raw_barcodes = f[barcode_ds][:]
         coords = f[coords_ds][:]
@@ -306,7 +307,7 @@ def read_patch_meta_from_h5(h5_path, barcode_ds='barcode', coords_ds='coords', v
         "coord_y": coords[:, 1].astype(int),
     })
     if verbose:
-        print(f"[read] {os.path.basename(h5_path)}: {len(df)} barcodes")
+        logger.info(f"{os.path.basename(h5_path)}: {len(df)} barcodes")
     return df
 
 
@@ -403,7 +404,7 @@ def add_formatted_inference_to_adata(
         targets_df = entry.get('targets')
         if preds_df is None or targets_df is None:
             if verbose:
-                print(f"[WARN] sample {sample_key} missing 'preds' or 'targets' -> skipping")
+                logger.warning(f"sample {sample_key} missing 'preds' or 'targets' -> skipping")
             summary[sample_key] = {'matched': False, 'reason': 'missing preds/targets'}
             continue
 
@@ -442,10 +443,10 @@ def add_formatted_inference_to_adata(
             if best_idx is not None and best_inter > 0:
                 ad_idx = best_idx
                 if verbose:
-                    print(f"[INFO] fuzzy matched sample_key '{sample_key}' -> adata index {ad_idx} by barcode intersection ({best_inter} matches)")
+                    logger.info(f"fuzzy matched sample_key '{sample_key}' -> adata index {ad_idx} by barcode intersection ({best_inter} matches)")
             else:
                 if verbose:
-                    print(f"[WARN] Could not find matching AnnData for sample_key '{sample_key}'. Skipping.")
+                    logger.warning(f"Could not find matching AnnData for sample_key '{sample_key}'. Skipping.")
                 summary[sample_key] = {'matched': False, 'reason': 'no matching adata found'}
                 continue
 
@@ -453,7 +454,7 @@ def add_formatted_inference_to_adata(
         ad = adata_list[ad_idx]
         used_adata_indices.add(ad_idx)
         if verbose:
-            print(f"[sanitize] ensuring adata_list[{ad_idx}] is h5ad-safe")
+            logger.info(f"ensuring adata_list[{ad_idx}] is h5ad-safe")
         #_sanitize_anndata_for_h5ad_inplace(ad, verbose_local=verbose)
 
         # canonical indexes and genes (after sanitization)
@@ -470,7 +471,7 @@ def add_formatted_inference_to_adata(
         n_common_genes = len(common_genes)
         if n_common_genes == 0:
             if verbose:
-                print(f"[WARN] No common gene names between formatted_inference['{sample_key}'] and adata[{ad_idx}]. Skipping sample.")
+                logger.warning(f"No common gene names between formatted_inference['{sample_key}'] and adata[{ad_idx}]. Skipping sample.")
             summary[sample_key] = {'matched': False, 'reason': 'no common genes'}
             continue
 
@@ -478,23 +479,23 @@ def add_formatted_inference_to_adata(
         preds_on_ad = pd.DataFrame(fill_missing_with, index=ad_obs_names, columns=ad_var_names, dtype=float)
         targets_on_ad = pd.DataFrame(fill_missing_with, index=ad_obs_names, columns=ad_var_names, dtype=float)
 
-        print(f"\n[DEBUG] sample: {sample_key}")
-        print(f"preds_df rows: {len(preds_df)}")
-        print(f"unique preds_df barcodes: {preds_df.index.nunique()}")
-        print(f"adata obs: {len(ad_obs_names)}")
-        print(f"matched barcodes: {len(matched_barcodes)}")
+        logger.debug(f"sample: {sample_key}")
+        logger.info(f"preds_df rows: {len(preds_df)}")
+        logger.info(f"unique preds_df barcodes: {preds_df.index.nunique()}")
+        logger.info(f"adata obs: {len(ad_obs_names)}")
+        logger.info(f"matched barcodes: {len(matched_barcodes)}")
 
         # --- collapse duplicates ---
         if preds_df.index.has_duplicates:
             if verbose:
-                print(f"[FIX] collapsing duplicate barcodes for {sample_key}")
-                print(f"  before: {len(preds_df)} rows, {preds_df.index.nunique()} unique")
+                logger.info(f"collapsing duplicate barcodes for {sample_key}")
+                logger.info(f"  before: {len(preds_df)} rows, {preds_df.index.nunique()} unique")
 
             preds_df = preds_df.groupby(preds_df.index).mean()
             targets_df = targets_df.groupby(targets_df.index).mean()
 
             if verbose:
-                print(f"  after: {len(preds_df)} rows")
+                logger.info(f"  after: {len(preds_df)} rows")
 
         # recompute matched barcodes AFTER dedup
         matched_barcodes = sorted(list(set(preds_df.index).intersection(ad_obs_names)))
@@ -527,7 +528,7 @@ def add_formatted_inference_to_adata(
                         f"no barcode column in obs, and {preds_df.shape[0]} predictions vs {ad.n_obs} spots. "
                         "Pairing them by position would attach predictions to the wrong spots."
                     )
-                print(f"[WARN] '{sample_key}': no shared barcodes; assigning {ad.n_obs} predictions to spots by row order")
+                logger.warning(f"'{sample_key}': no shared barcodes; assigning {ad.n_obs} predictions to spots by row order")
                 preds_on_ad.loc[ad_obs_names, common_genes] = preds_df.loc[:, common_genes].values
                 targets_on_ad.loc[ad_obs_names, common_genes] = targets_df.loc[:, common_genes].values
                 n_matched_barcodes = ad.n_obs
@@ -549,12 +550,12 @@ def add_formatted_inference_to_adata(
             ad.layers[pred_layer_name] = pred_arr
         else:
             if verbose:
-                print(f"[INFO] skipping overwrite of existing layer {pred_layer_name} in adata[{ad_idx}]")
+                logger.info(f"skipping overwrite of existing layer {pred_layer_name} in adata[{ad_idx}]")
         if overwrite_layers or target_layer_name not in ad.layers:
             ad.layers[target_layer_name] = target_arr
         else:
             if verbose:
-                print(f"[INFO] skipping overwrite of existing layer {target_layer_name} in adata[{ad_idx}]")
+                logger.info(f"skipping overwrite of existing layer {target_layer_name} in adata[{ad_idx}]")
 
         # fill summary
         summary[sample_key] = {
@@ -572,13 +573,13 @@ def add_formatted_inference_to_adata(
         }
 
         if verbose:
-            print(f"[OK] sample '{sample_key}' -> adata[{ad_idx}] | matched_barcodes={n_matched_barcodes}/{n_total_barcodes} | "
+            logger.info(f"sample '{sample_key}' -> adata[{ad_idx}] | matched_barcodes={n_matched_barcodes}/{n_total_barcodes} | "
                   f"common_genes={n_common_genes} | method={method} | spots_with_pred={n_spots_with_pred}/{n_spots} ({frac_spots_with_pred:.2%})")
 
     # report unused adatas
     unused = [i for i in range(len(adata_list)) if i not in used_adata_indices]
     if verbose:
-        print("Done. Samples processed:", len(summary), "Unused adata indices:", unused)
+        logger.info(f"Done. Samples processed: {len(summary)}; unused adata indices: {unused}")
 
     return summary
 
@@ -606,7 +607,7 @@ def remove_nan_spots(adata, target_layer="target", inplace=False):
     all_nan_mask = np.all(~np.isfinite(X), axis=1)
 
     n_remove = int(all_nan_mask.sum())
-    print(f"Removing {n_remove} spots with all-NaN target values")
+    logger.info(f"Removing {n_remove} spots with all-NaN target values")
 
     if inplace:
         adata._inplace_subset_obs(~all_nan_mask)
@@ -627,7 +628,7 @@ def remove_control_probes(adata, exclude_keywords=None, inplace=False):
     mask = ~var_names.str.contains("|".join(exclude_keywords), case=False, regex=True)
 
     n_removed = (~mask).sum()
-    print(f"Removing {n_removed} control probes")
+    logger.info(f"Removing {n_removed} control probes")
 
     if inplace:
         adata._inplace_subset_var(mask)
@@ -663,15 +664,15 @@ def save_adata_from_list(adata_list, RUN_ROOT, RUN, existing_pred_samples=None, 
 
         # Skip or overwrite depending on force_overwrite
         if existing_pred_samples and safe_name in existing_pred_samples and not force_overwrite:
-            print(f"[SKIP SAVE] {safe_name} already exists in pred folder -> not overwriting")
+            logger.info(f"{safe_name} already exists in pred folder -> not overwriting")
             continue
 
         action = "Overwrote" if os.path.exists(out_path) else "Saved"
         ad.write(out_path)
         saved_paths.append(out_path)
-        print(f"[OK] {action} {safe_name} → {out_path}")
+        logger.info(f"{action} {safe_name} → {out_path}")
 
-    print(f"Saved {len(saved_paths)} AnnData objects under {save_dir}")
+    logger.info(f"Saved {len(saved_paths)} AnnData objects under {save_dir}")
     return saved_paths
 
 
@@ -739,7 +740,7 @@ def save_spatial_pred_target_pdfs_for_adata_list(
         # ---- skip if PDF already exists ----
         if os.path.isfile(out_pdf):
             if verbose:
-                print(f"[SKIP PDF] {sample_name}: PDF already exists at {out_pdf}")
+                logger.info(f"{sample_name}: PDF already exists at {out_pdf}")
             results[sample_name] = {
                 "pdf_path": out_pdf,
                 "summary": None,
@@ -750,12 +751,12 @@ def save_spatial_pred_target_pdfs_for_adata_list(
         # quick checks: pred/target layers exist?
         if pred_layer not in getattr(ad, "layers", {}):
             if verbose:
-                print(f"[SKIP] adata_list[{i}] ({sample_name}): pred layer '{pred_layer}' not present.")
+                logger.info(f"adata_list[{i}] ({sample_name}): pred layer '{pred_layer}' not present.")
             results[sample_name] = {"pdf_path": None, "summary": None, "reason": f"missing layer {pred_layer}"}
             continue
         if target_layer not in getattr(ad, "layers", {}):
             if verbose:
-                print(f"[SKIP] adata_list[{i}] ({sample_name}): target layer '{target_layer}' not present.")
+                logger.info(f"adata_list[{i}] ({sample_name}): target layer '{target_layer}' not present.")
             results[sample_name] = {"pdf_path": None, "summary": None, "reason": f"missing layer {target_layer}"}
             continue
 
@@ -764,7 +765,7 @@ def save_spatial_pred_target_pdfs_for_adata_list(
         summary = []
 
         if verbose:
-            print(f"[START] Writing PDF for adata_list[{i}] ({sample_name}) -> {out_pdf} (genes: {n_genes})")
+            logger.info(f"Writing PDF for adata_list[{i}] ({sample_name}) -> {out_pdf} (genes: {n_genes})")
 
         try:
             with PdfPages(out_pdf) as pp:
@@ -881,7 +882,7 @@ def save_spatial_pred_target_pdfs_for_adata_list(
                     plt.close(fig)
 
             if verbose:
-                print(f"[OK] Wrote PDF: {out_pdf}")
+                logger.info(f"Wrote PDF: {out_pdf}")
 
             results[sample_name] = {"pdf_path": out_pdf, "summary": summary, "reason": None}
 
@@ -892,7 +893,7 @@ def save_spatial_pred_target_pdfs_for_adata_list(
             failures.append(f"{sample_name}: {type(e).__name__}: {e}")
 
     if verbose:
-        print(f"[DONE] saved PDFs to {outdir}")
+        logger.info(f"saved PDFs to {outdir}")
     if failures:
         raise RuntimeError(f"PDF creation failed for {len(failures)} sample(s):\n" + "\n".join(failures))
     return results
@@ -924,7 +925,7 @@ def format_inference_with_genes(inference_dumps, gene_list):
             entry["test_sample_barcodes"] = [list(map(str, b)) for b in dump["test_sample_barcodes"]]            
 
         formatted_inference[split_name] = entry                                                                  
-        print(f"{split_name}: preds shape {entry['preds'].shape}, targets shape {entry['targets'].shape}")
+        logger.info(f"{split_name}: preds shape {entry['preds'].shape}, targets shape {entry['targets'].shape}")
                                                                                                                 
     return formatted_inference         
 
@@ -968,7 +969,7 @@ def expand_split_keys_to_samples(formatted_inference: Dict[str, Dict],
             )                                                                                                    
 
         if verbose:                                                                                              
-            print(f"[info] splitting {key} ({total_rows} rows) into {len(sample_ids)} samples")
+            logger.info(f"splitting {key} ({total_rows} rows) into {len(sample_ids)} samples")
                                                                                                                 
         idx = 0
         for sid, barcodes in zip(sample_ids, sample_barcodes):                                                   
@@ -980,11 +981,11 @@ def expand_split_keys_to_samples(formatted_inference: Dict[str, Dict],
             sub_targets.index = bc_str
             out[sid] = {'preds': sub_preds, 'targets': sub_targets}                                              
             if verbose:                                                                                          
-                print(f"  -> {sid}: rows {idx}:{end} ({len(barcodes)})")
+                logger.info(f"  -> {sid}: rows {idx}:{end} ({len(barcodes)})")
             idx = end                                                                                            
                 
     if verbose:                                                                                                  
-        print(f"[done] expanded splits: produced {len(out)} sample entries")
+        logger.info(f"expanded splits: produced {len(out)} sample entries")
     return out  
 
 def attach_barcodes_to_formatted_inference_auto(formatted_inference, verbose=True):
@@ -1001,7 +1002,7 @@ def attach_barcodes_to_formatted_inference_auto(formatted_inference, verbose=Tru
         preds_df = entry.get('preds')
         if preds_df is None:                                                                                     
             if verbose:
-                print(f"[skip] {sample_key}: no preds")                                                          
+                logger.info(f"{sample_key}: no preds")                                                          
             continue
         barcodes = list(map(str, preds_df.index))
         patch_meta_map[sample_key] = pd.DataFrame({
@@ -1010,9 +1011,9 @@ def attach_barcodes_to_formatted_inference_auto(formatted_inference, verbose=Tru
             'coord_y': np.nan,
         })
         if verbose:
-            print(f"[ok] {sample_key}: {len(barcodes)} barcodes")
+            logger.info(f"{sample_key}: {len(barcodes)} barcodes")
     if verbose:
-        print(f"[done] processed {len(patch_meta_map)} samples")
+        logger.info(f"processed {len(patch_meta_map)} samples")
     return patch_meta_map 
 
 # wrapper
@@ -1048,23 +1049,23 @@ def add_inference_to_adata_and_plot(
     """
 
     # --------------- 1) extract best model + load inference ----------------
-    if verbose: print("[step] extract best model corrs")
+    if verbose: logger.info("extract best model corrs")
     best_model, dataset, df_corr = extract_best_model_gene_corrs(RUN)
 
-    if verbose: print("[step] load best model inference and metadata")
+    if verbose: logger.info("load best model inference and metadata")
     best_model_info, dataset_name_from_inference, inference_dumps, gene_list_name = load_best_model_inference(RUN)
 
     # If dataset_name specified as arg, prefer that; else use loaded dataset_name
     dataset_name = dataset_name or dataset_name_from_inference
-    if verbose: print(f"[info] using dataset_name = {dataset_name}")
+    if verbose: logger.info(f"using dataset_name = {dataset_name}")
 
-    if verbose: print("[step] load gene list used to format inference")
+    if verbose: logger.info("load gene list used to format inference")
     gene_list = load_gene_list(dataset_name, gene_list_name)
 
-    if verbose: print("[step] format inference with gene list")
+    if verbose: logger.info("format inference with gene list")
     formatted_inference = format_inference_with_genes(inference_dumps, gene_list)
 
-    if verbose: print("[step] remap split keys -> sample names using test splits")
+    if verbose: logger.info("remap split keys -> sample names using test splits")
     df_test_splits = get_test_splits(RUN)
 
     # --------------- determine already-saved pred h5ads and skip them ---------------
@@ -1075,13 +1076,13 @@ def add_inference_to_adata_and_plot(
             if f.endswith('.h5ad'):
                 existing_pred_samples.add(os.path.splitext(f)[0])
     if verbose:
-        print(f"[info] existing pred h5ads in {pred_save_dir}: {sorted(list(existing_pred_samples))}")
+        logger.info(f"existing pred h5ads in {pred_save_dir}: {sorted(list(existing_pred_samples))}")
         if force_overwrite:
-            print("[info] force_overwrite=True -> existing pred h5ads WILL be overwritten and samples WILL be processed")
+            logger.info("force_overwrite=True -> existing pred h5ads WILL be overwritten and samples WILL be processed")
 
     # # --------------- 2) load adata_list for dataset ----------------
     data_dir = os.path.join(base_data_dir, dataset_name, 'adata')
-    if verbose: print(f"[step] loading adata files from {data_dir}")
+    if verbose: logger.info(f"loading adata files from {data_dir}")
     adata_list = []
     sample_names = []
     for fname in os.listdir(data_dir):
@@ -1089,7 +1090,7 @@ def add_inference_to_adata_and_plot(
             continue
         sample = os.path.splitext(fname)[0]
         fpath = os.path.join(data_dir, fname)
-        if verbose: print(f"  loading {fpath}")
+        if verbose: logger.info(f"  loading {fpath}")
         adata = sc.read_h5ad(fpath)
         # store sample name in .obs for later saving and matching
         adata.obs['sample_id'] = sample
@@ -1099,13 +1100,13 @@ def add_inference_to_adata_and_plot(
 
     # --------------- 3) attach patch barcodes to formatted_inference automatically -------------
     # extra sampple matching for broad splits (leave-one-patient-out CV)
-    if verbose: print("[step] expand split keys into per-sample formatted_inference entries (handles LOO CV)")
+    if verbose: logger.info("expand split keys into per-sample formatted_inference entries (handles LOO CV)")
 
     formatted_inference = expand_split_keys_to_samples(formatted_inference, verbose=verbose)
 
 
     if verbose:
-        print("[step] attach barcodes to formatted_inference using patches directory")
+        logger.info("attach barcodes to formatted_inference using patches directory")
 
     # skip samples whose pred h5ad already exists (unless force_overwrite)
     if existing_pred_samples and not force_overwrite:
@@ -1119,8 +1120,8 @@ def add_inference_to_adata_and_plot(
                 filtered_formatted_inference[k] = v
 
         if verbose and skipped_barcode_attach:
-            print(
-                f"[SKIP BARCODE ATTACH] skipping {len(skipped_barcode_attach)} samples "
+            logger.info(
+                f"skipping {len(skipped_barcode_attach)} samples "
                 f"because pred h5ad already exists: {skipped_barcode_attach}"
             )
     else:
@@ -1138,13 +1139,13 @@ def add_inference_to_adata_and_plot(
                 removed.append(k)
                 formatted_inference.pop(k, None)
         if verbose and removed:
-            print(f"[SKIP INFERENCE] removed {len(removed)} formatted_inference entries because pred h5ad already exists: {removed}")
+            logger.info(f"removed {len(removed)} formatted_inference entries because pred h5ad already exists: {removed}")
     elif existing_pred_samples and force_overwrite:
         if verbose:
-            print("[info] force_overwrite=True -> keeping formatted_inference entries for samples that already have pred h5ads (will overwrite)")
+            logger.info("force_overwrite=True -> keeping formatted_inference entries for samples that already have pred h5ads (will overwrite)")
 
     # --------------- 4) add formatted_inference to adata layers ----------------
-    if verbose: print("[step] writing preds/targets into adata.layers (with sanitisation)")
+    if verbose: logger.info("writing preds/targets into adata.layers (with sanitisation)")
     summary = add_formatted_inference_to_adata(
         adata_list,
         formatted_inference,
@@ -1156,14 +1157,14 @@ def add_inference_to_adata_and_plot(
     )
 
     # --- Remove spots where all target genes are NaN ---
-    print('Remove spots with all NaN values')
+    logger.info('Remove spots with all NaN values')
     adata_list = [
         remove_nan_spots(adata, target_layer=target_layer_name, inplace=False)
         for adata in adata_list
     ]
 
     # remove control probes
-    print('Remove control probes')
+    logger.info('Remove control probes')
     adata_list = [
     remove_control_probes(adata)
     for adata in adata_list
@@ -1173,7 +1174,7 @@ def add_inference_to_adata_and_plot(
     # --------------- 5) save the adata list to RUN folder ----------------
     # if verbose: print("[step] saving adata_list to disk")
     # saved_paths = save_adata_from_list(adata_list, RUN_ROOT, RUN)
-    if verbose: print("[step] saving adata_list to disk")
+    if verbose: logger.info("saving adata_list to disk")
     saved_paths = save_adata_from_list(adata_list, RUN_ROOT, RUN, existing_pred_samples=existing_pred_samples, force_overwrite=force_overwrite)
 
     # --------------- 6) optionally plot gene lists ----------------
@@ -1211,7 +1212,7 @@ def add_inference_to_adata_and_plot(
             else:
                 raise ValueError("Unsupported gene_lists_to_plot format")
 
-            if verbose: print(f"[plot] creating pdfs for gene list '{list_name}' with {len(genes_to_plot)} genes")
+            if verbose: logger.info(f"creating pdfs for gene list '{list_name}' with {len(genes_to_plot)} genes")
             out = save_spatial_pred_target_pdfs_for_adata_list(
                 adata_list,
                 genes_to_plot,
@@ -1242,5 +1243,5 @@ def add_inference_to_adata_and_plot(
         'plot_results': plot_results
     }
 
-    if verbose: print("[DONE] pipeline finished")
+    if verbose: logger.info("pipeline finished")
     return result

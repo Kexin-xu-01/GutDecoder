@@ -71,6 +71,7 @@ import textwrap
 import re
 
 from gutdecoder.config import XENIUM_DIRECTORY_XLSX
+from loguru import logger
 
 
 def make_title_page_bytes(title: str, width_pt: float, height_pt: float, font_size: int = 36) -> bytes:
@@ -101,7 +102,7 @@ def resolve_folders(root: Path, names: list) -> list:
             if p.exists() and p.is_dir():
                 folders.append(p)
             else:
-                print(f"Warning: folder not found or not a directory, skipping: {p}")
+                logger.warning(f"folder not found or not a directory, skipping: {p}")
     else:
         raise ValueError("You must specify folders, or use ALL or PATTERN.")
     return folders
@@ -243,33 +244,33 @@ def generate_plot_per_run(
         ds_dir = base_root / ds
         if not ds_dir.exists():
             if verbose:
-                print(f"{ds_dir} not found, skipping.")
+                logger.info(f"{ds_dir} not found, skipping.")
             continue
 
         out_pdf = ds_dir / out_filename
         if out_pdf.exists() and not overwrite:
             if verbose:
-                print(f"⏭{out_pdf} already exists (overwrite=False), skipping {ds}.")
+                logger.info(f"⏭{out_pdf} already exists (overwrite=False), skipping {ds}.")
             continue
         if out_pdf.exists() and overwrite and verbose:
-            print(f"Overwriting existing {out_pdf}")
+            logger.info(f"Overwriting existing {out_pdf}")
 
         found = _find_files(ds_dir)
         if not found:
             if verbose:
-                print(f"No matching images found in {ds_dir} for match='{match}'")
+                logger.info(f"No matching images found in {ds_dir} for match='{match}'")
             continue
 
         if max_show:
             found = found[:max_show]
 
         if verbose:
-            print(f"{ds}: visualising {len(found)} plots")
+            logger.info(f"{ds}: visualising {len(found)} plots")
 
         rows = math.ceil(len(found) / cols)
         if rows == 0:
             if verbose:
-                print(f"⚠️ No images found for {ds}.")
+                logger.warning(f"No images found for {ds}.")
             continue
 
         fig, axes = plt.subplots(rows, cols, figsize=(cols * 4, rows * 4))
@@ -286,7 +287,7 @@ def generate_plot_per_run(
             try:
                 img = Image.open(path).convert("RGB")
             except OSError as e:  # unreadable image: leave a labelled gap in the grid
-                print(f"[ERROR] Could not open {path}: {e}")
+                logger.error(f"Could not open {path}: {e}")
                 ax.text(0.5, 0.5, f"Unreadable\n{path.name}", ha="center", va="center", fontsize=8)
                 continue
             img.thumbnail(thumb_size)
@@ -373,10 +374,10 @@ def generate_plot_per_run(
         plt.savefig(out_pdf, bbox_inches="tight")
         plt.close(fig)
         if verbose:
-            print(f"✔ Saved grid to {out_pdf}\n")
+            logger.info(f"Saved grid to {out_pdf}\n")
 
     if verbose:
-        print("Done generating all image grids.")
+        logger.info("Done generating all image grids.")
 
 
 
@@ -402,7 +403,7 @@ def combine_pdfs(
     """
     root = Path(root_dir)
     folders = resolve_folders(root, folder_names)
-    print(f"Found {len(folders)} folders to check.")
+    logger.info(f"Found {len(folders)} folders to check.")
 
     writer = PdfWriter()
     appended_any = False
@@ -412,13 +413,13 @@ def combine_pdfs(
         ok = combine_folder_pdf(f, writer, pdf_name=pdf_name, title_font_size=title_font_size)
         if ok:
             appended_any = True
-            print(f"Appended: {f}/{pdf_name} (title page: '{f.name}')")
+            logger.info(f"Appended: {f}/{pdf_name} (title page: '{f.name}')")
         else:
             missing.append(f)
-            print(f"Missing or empty: {f}/{pdf_name} — skipped")
+            logger.info(f"Missing or empty: {f}/{pdf_name} — skipped")
 
     if not appended_any:
-        print("No PDFs were appended. Exiting without writing output.")
+        logger.info("No PDFs were appended. Exiting without writing output.")
         return
 
     # Save output PDF
@@ -428,9 +429,7 @@ def combine_pdfs(
     with open(out_path, "wb") as of:
         writer.write(of)
 
-    print(f"Combined PDF written to: {out_path.resolve()}")
+    logger.info(f"Combined PDF written to: {out_path.resolve()}")
 
     if missing:
-        print(f"\nFolders skipped (no {pdf_name} found):")
-        for m in missing:
-            print("  -", m)
+        logger.info(f"Folders skipped (no {pdf_name} found): {missing}")

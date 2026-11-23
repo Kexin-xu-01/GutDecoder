@@ -10,8 +10,6 @@ import torch.nn as nn
 from sklearn.preprocessing import StandardScaler
 from loguru import logger
 
-os.environ["TQDM_DISABLE"] = "1"
-
 try:
     import cupy as cp
 except ImportError:

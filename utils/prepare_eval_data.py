@@ -549,7 +549,7 @@ def create_benchmark_data_multislide(
         for sid, lbl, path in missing:
             logger.warning(f"  {sid} [{lbl}] → {path}")
 
-    logger.info(f"✅ Benchmark dataset created at {save_dir}")
+    logger.info(f"Benchmark dataset created at {save_dir}")
     return meta
 
 

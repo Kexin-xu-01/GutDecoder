@@ -26,6 +26,7 @@ from ._io import (
     get_test_splits,
     sample_corr_stats_for_run,
 )
+from loguru import logger
 
 
 def plot_all_samples_grid_for_dataset(
@@ -198,6 +199,6 @@ def plot_all_samples_grid_for_dataset(
             pdf.savefig(fig)
             plt.close(fig)
 
-    print(f"Saved multi-page grid to: {pdf_path}")
+    logger.info(f"Saved multi-page grid to: {pdf_path}")
 
     return pdf_path, df_combined
